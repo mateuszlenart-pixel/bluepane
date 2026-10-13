@@ -5,8 +5,12 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::Arc;
 use std::thread::JoinHandle;
 
+use bluepane_archive::{
+    self as archive, ArchiveError, CreateOptions, Format, Level, Listing, Selection, VerifyReport,
+};
 use bluepane_ops::{self as ops, Conflict, OpError, Outcome, Progress, Resolution};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,6 +21,14 @@ pub enum JobKind {
     Duplicate,
     /// Moves to the trash.
     Delete,
+    /// Reads the table of contents of an archive so a panel can browse it.
+    OpenArchive,
+    /// Extracts (part of) an archive.
+    Extract,
+    /// Creates an archive.
+    Pack,
+    /// Reads a whole archive to check it is intact.
+    VerifyArchive,
 }
 
 impl JobKind {
@@ -27,6 +39,10 @@ impl JobKind {
             JobKind::Move => "Przenoszenie",
             JobKind::Duplicate => "Tworzenie kopii",
             JobKind::Delete => "Usuwanie do kosza",
+            JobKind::OpenArchive => "Wczytywanie archiwum",
+            JobKind::Extract => "Rozpakowywanie",
+            JobKind::Pack => "Pakowanie",
+            JobKind::VerifyArchive => "Sprawdzanie archiwum",
         }
     }
 
@@ -37,16 +53,58 @@ impl JobKind {
             JobKind::Move => "Przeniesiono",
             JobKind::Duplicate => "Utworzono kopie",
             JobKind::Delete => "Do kosza",
+            JobKind::OpenArchive => "Otwarto archiwum",
+            JobKind::Extract => "Rozpakowano",
+            JobKind::Pack => "Spakowano",
+            JobKind::VerifyArchive => "Sprawdzono",
         }
     }
 }
 
-/// What a job should do. `dest` is the target directory for copy and move.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// How to build an archive.
+#[derive(Debug, Clone)]
+pub struct PackOptions {
+    pub format: Format,
+    pub level: Level,
+    pub split: Option<u64>,
+    /// File name of the archive (with its extension), created in the job's `dest`.
+    pub output_name: String,
+}
+
+/// The extra settings of the archive jobs.
+#[derive(Debug, Clone, Default)]
+pub struct ArchiveJob {
+    /// Extract: the items to extract (inside the archive); empty means all.
+    pub entries: Vec<String>,
+    /// Extract: the archive directory the extracted names are relative to.
+    pub strip: String,
+    pub password: Option<String>,
+    /// The archive's table of contents, when already known (gives the progress a total).
+    pub listing: Option<Arc<Listing>>,
+    pub pack: Option<PackOptions>,
+    /// Open: the side (0 or 1) that asked.
+    pub side: usize,
+}
+
+/// What a job should do. `dest` is the target directory for copy, move, extract and pack;
+/// for the archive jobs `sources` holds the archive (or, for packing, the files to pack).
+#[derive(Debug, Clone)]
 pub struct JobSpec {
     pub kind: JobKind,
     pub sources: Vec<PathBuf>,
     pub dest: Option<PathBuf>,
+    pub archive: Option<ArchiveJob>,
+}
+
+impl JobSpec {
+    pub fn new(kind: JobKind, sources: Vec<PathBuf>, dest: Option<PathBuf>) -> JobSpec {
+        JobSpec {
+            kind,
+            sources,
+            dest,
+            archive: None,
+        }
+    }
 }
 
 /// The user's answer to a conflict. `resolution: None` cancels the whole job.
@@ -57,8 +115,15 @@ pub struct Answer {
     pub for_all: bool,
 }
 
+/// Why an archive job needs the user's help with a password.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordProblem {
+    Needed,
+    Wrong,
+}
+
 /// How a finished job went.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone)]
 pub struct Report {
     /// Top-level items fully processed.
     pub done: usize,
@@ -67,6 +132,18 @@ pub struct Report {
     /// One message per top-level item that failed.
     pub failed: Vec<String>,
     pub cancelled: bool,
+    /// Archive jobs: a password is missing or wrong.
+    pub password: Option<PasswordProblem>,
+    /// Open: the table of contents that was read.
+    pub listing: Option<Arc<Listing>>,
+    /// Extract / pack: links and the like that were left out.
+    pub left_out: u64,
+    /// Verify: what the check found.
+    pub verify: Option<VerifyReport>,
+    /// Pack: the files that make up the new archive.
+    pub created: Vec<PathBuf>,
+    /// Extract / pack: files written.
+    pub files: u64,
 }
 
 #[derive(Debug)]
@@ -172,6 +249,14 @@ impl ops::Host for WorkerHost {
     fn copy_symlink(&self, src: &Path, dst: &Path) -> io::Result<()> {
         bluepane_vfs::copy_symlink(src, dst)
     }
+
+    fn set_mode(&self, path: &Path, mode: u32) {
+        let _ = bluepane_vfs::set_mode(path, mode);
+    }
+
+    fn file_mode(&self, path: &Path) -> Option<u32> {
+        bluepane_vfs::file_mode(path)
+    }
 }
 
 fn file_name(path: &Path) -> String {
@@ -181,7 +266,94 @@ fn file_name(path: &Path) -> String {
     )
 }
 
+/// The archive jobs: open, extract, pack and verify.
+fn run_archive(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
+    let mut report = Report::default();
+    let job = spec.archive.clone().unwrap_or_default();
+    let mut host = WorkerHost {
+        tx: tx.clone(),
+        progress: progress.clone(),
+        sticky: None,
+    };
+    let source = spec.sources.first().cloned().unwrap_or_default();
+    let name = file_name(&source);
+    let no_dest = || ArchiveError::Op("brak katalogu docelowego".into());
+    let result: Result<(), ArchiveError> = match spec.kind {
+        JobKind::OpenArchive => archive::list(&source, progress).map(|listing| {
+            report.listing = Some(Arc::new(listing));
+        }),
+        JobKind::Extract => (|| {
+            let dest = spec.dest.as_deref().ok_or_else(no_dest)?;
+            if let Some(listing) = &job.listing {
+                let (bytes, files) = listing.measure(&job.entries);
+                progress.set_total(bytes, files);
+            }
+            let selection = Selection {
+                strip: &job.strip,
+                entries: &job.entries,
+            };
+            let done = archive::extract(
+                &source,
+                &selection,
+                dest,
+                job.password.as_deref(),
+                progress,
+                &mut host,
+            )?;
+            report.files = done.outcome.files;
+            report.skipped += done.outcome.skipped;
+            report.left_out = done.special_skipped;
+            Ok(())
+        })(),
+        JobKind::Pack => (|| {
+            let dest = spec.dest.as_deref().ok_or_else(no_dest)?;
+            let pack = job
+                .pack
+                .as_ref()
+                .ok_or_else(|| ArchiveError::Op("brak ustawień pakowania".into()))?;
+            let options = CreateOptions {
+                format: pack.format,
+                level: pack.level,
+                password: job.password.clone(),
+                split: pack.split,
+            };
+            let created = archive::create(
+                &spec.sources,
+                &dest.join(&pack.output_name),
+                &options,
+                progress,
+                &mut host,
+            )?;
+            report.files = created.files;
+            report.left_out = created.left_out;
+            report.created = created.volumes;
+            report.skipped += u64::from(created.skipped);
+            Ok(())
+        })(),
+        JobKind::VerifyArchive => {
+            archive::verify(&source, job.password.as_deref(), progress).map(|checked| {
+                report.verify = Some(checked);
+            })
+        }
+        _ => Err(ArchiveError::Op("to nie jest zadanie archiwum".into())),
+    };
+    match result {
+        Ok(()) => report.done = 1,
+        Err(ArchiveError::Cancelled) => report.cancelled = true,
+        Err(ArchiveError::NeedsPassword) => report.password = Some(PasswordProblem::Needed),
+        Err(ArchiveError::WrongPassword) => report.password = Some(PasswordProblem::Wrong),
+        Err(error) => report.failed.push(format!("{name}: {error}")),
+    }
+    report
+}
+
 fn run(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
+    if matches!(
+        spec.kind,
+        JobKind::OpenArchive | JobKind::Extract | JobKind::Pack | JobKind::VerifyArchive
+    ) {
+        return run_archive(spec, progress, tx);
+    }
     let mut report = Report::default();
     // Long Windows paths need the `\\?\` form; everything the user sees keeps the plain one.
     let sources: Vec<PathBuf> = spec
@@ -222,6 +394,7 @@ fn run(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
                 result
             }
             (_, None) => Err(OpError::InvalidName("brak katalogu docelowego".into())),
+            (_, Some(_)) => unreachable!("archive jobs are handled by run_archive"),
         };
         match result {
             Ok(outcome) => {
@@ -291,6 +464,7 @@ mod tests {
                 .map(|n| tmp.path().join("src").join(n))
                 .collect(),
             dest: Some(tmp.path().join("dst")),
+            archive: None,
         }
     }
 
@@ -350,6 +524,7 @@ mod tests {
             kind: JobKind::Duplicate,
             sources: vec![tmp.path().join("src/a.txt")],
             dest: None,
+            archive: None,
         };
         let (report, _) = finish(dup, None, false);
         assert_eq!(report.done, 1);
@@ -359,6 +534,7 @@ mod tests {
             kind: JobKind::Move,
             sources: vec![tmp.path().join("src/b.txt")],
             dest: Some(tmp.path().join("dst")),
+            archive: None,
         };
         let (report, _) = finish(mv, None, false);
         assert_eq!(report.done, 1);

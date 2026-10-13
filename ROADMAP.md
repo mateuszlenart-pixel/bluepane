@@ -12,7 +12,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 3 | Zaznaczanie | ✅ | katalog z 100 tys. plików nie zacina się (cel) |
 | 4 | Operacje F5–F8 | ✅ | operacje w tle z postępem, dialog konfliktów, testy na katalogach tymczasowych |
 | 5 | Podgląd i edycja | ✅ | duży plik otwiera się bez wczytywania całości do pamięci |
-| 6 | Archiwa | ⬜ | Enter wchodzi do archiwum, kopiowanie działa w obie strony |
+| 6 | Archiwa | ✅ | Enter wchodzi do archiwum, kopiowanie działa w obie strony |
 | 7 | Zaawansowane | ⬜ | synchronizacja pokazuje zmiany przed wykonaniem |
 | 8 | Sieć i wtyczki | ⬜ | SFTP działa jak katalog lokalny |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
@@ -58,6 +58,16 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [ ] Wbudowany edytor tekstu. Świadomie poza etapem: `egui::TextEdit` wczytuje cały tekst do pamięci i nie nadaje się do plików wielogigabajtowych. Do decyzji: edytor tylko dla małych plików albo wyłącznie zewnętrzny.
 - [ ] Szukanie bez rozróżniania wielkości liter działa dla ASCII; inne kodowania niż UTF-8 (np. CP1250) pokazują się z znakami zastępczymi
 - [ ] Do sprawdzenia ręcznie na Windows: F4 przez `explorer`, wyszukiwanie w dużych plikach
+
+### Etap 6: archiwa
+- [x] Enter wchodzi do archiwum (ZIP, TAR, TAR.GZ, także wieloczęściowe `.001`), przeglądanie jak katalogu (tylko do odczytu), F5 rozpakowuje zaznaczenie
+- [x] Tworzenie archiwów (`pack`, okno Alt+F5): format, poziom kompresji, hasło, podział na części; przełączniki w stylu 7-Zip
+- [x] Hasła: odczyt ZipCrypto i AES, zapis AES-256 (ZIP); pytanie o hasło z ponawianiem, hasło zapamiętane dla archiwum
+- [x] Podział na części (`nazwa.zip.001`, ...) i odczyt wieloczęściowych; `testarchive`; konflikty jak przy kopiowaniu
+- [x] Bezpieczeństwo: odrzucanie ścieżek wychodzących poza cel (zip-slip), pomijanie dowiązań i urządzeń, bez bitów setuid
+- [x] Zgodność sprawdzona z prawdziwymi narzędziami: 7-Zip (zwykły ZIP, AES-256, wolumeny), Info-ZIP (ZipCrypto), GNU tar
+- [ ] Nie ma: dodawania/usuwania plików w istniejącym archiwum, podglądu (F3) pliku wewnątrz archiwum, 7z/RAR, kompresji w ZIP innej niż deflate przy odczycie (LZMA/BZip2 dają czytelny błąd „nieobsługiwane”), szyfrowania nazw plików (ZIP tego nie potrafi)
+- [ ] Do sprawdzenia ręcznie na Windows (testy kompilują się i przechodzą w CI, ale GUI i nazwy niedozwolone w Windows nie były oglądane)
 
 ### Etap 8: FTP/SFTP
 Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**:

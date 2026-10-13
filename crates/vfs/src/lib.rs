@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub use platform::{
-    config_dir, copy_symlink, extended_path, home_dir, make_writable, open_external, volumes,
+    config_dir, copy_symlink, extended_path, file_mode, home_dir, make_writable, open_external,
+    set_mode, volumes,
 };
 
 /// What a directory entry is, from the user's point of view.
@@ -132,6 +133,20 @@ mod tests {
         let copy = tmp.path().join("copy");
         copy_symlink(&link, &copy).unwrap();
         assert_eq!(std::fs::read_link(&copy).unwrap(), Path::new("target.txt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn modes_round_trip_and_special_bits_are_stripped() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("f");
+        std::fs::write(&file, "x").unwrap();
+        set_mode(&file, 0o754).unwrap();
+        assert_eq!(file_mode(&file), Some(0o754));
+        // setuid / setgid / sticky are dropped.
+        set_mode(&file, 0o6755).unwrap();
+        assert_eq!(file_mode(&file), Some(0o755));
+        assert_eq!(file_mode(&tmp.path().join("missing")), None);
     }
 
     #[test]

@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use bluepane_engine::{
-    format_modified, human_size, name_parts, Command, InputKind, Panel, Pending, Session, SortKey,
-    TabAction, ViewMode,
+    format_modified, human_size, name_parts, ArchiveFormat, Command, CompressionLevel, InputKind,
+    Panel, Pending, Session, SortKey, TabAction, ViewMode,
 };
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
@@ -22,6 +22,8 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("F6", "Przenieś", "move"),
     ("F7", "Nowy katalog", "mkdir"),
     ("F8", "Do kosza", "delete"),
+    ("Alt+F5", "Pakuj", "pack"),
+    ("Alt+F9", "Rozpakuj", "unpack"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -31,6 +33,8 @@ pub struct BluepaneUi {
     focus_command_line: bool,
     /// "Apply to all" checkbox of the conflict dialog.
     apply_to_all: bool,
+    /// The pack dialog already put the cursor in its name field.
+    pack_focused: bool,
     /// Editable text of each panel's path bar (resynced from the panel while not focused).
     path_text: [String; 2],
 }
@@ -42,6 +46,7 @@ impl BluepaneUi {
             command_line: String::new(),
             focus_command_line: false,
             apply_to_all: false,
+            pack_focused: false,
             path_text: [String::new(), String::new()],
         }
     }
@@ -78,9 +83,13 @@ impl BluepaneUi {
                 });
             }
         });
+        if !matches!(self.session.pending, Some(Pending::Pack(_))) {
+            self.pack_focused = false;
+        }
         match &self.session.pending {
             Some(Pending::Input { .. }) => self.input_dialog(&ctx),
             Some(Pending::Conflict(_)) => self.conflict_dialog(&ctx),
+            Some(Pending::Pack(_)) => self.pack_dialog(&ctx),
             _ => {}
         }
     }
@@ -95,7 +104,9 @@ impl BluepaneUi {
             InputKind::Mkdir => "Nowy katalog",
             InputKind::Rename(_) => "Zmień nazwę",
             InputKind::ViewerFind => "Szukaj w pliku",
+            InputKind::ArchivePassword => "Hasło archiwum",
         };
+        let secret = matches!(kind, InputKind::ArchivePassword);
         let (status, is_error) = (&session.status, session.status_is_error);
         let mut accepted = None;
         egui::Window::new(title)
@@ -109,7 +120,11 @@ impl BluepaneUi {
                     ui.visuals().weak_text_color()
                 };
                 ui.label(RichText::new(status).color(color));
-                let response = ui.add(egui::TextEdit::singleline(text).desired_width(340.0));
+                let response = ui.add(
+                    egui::TextEdit::singleline(text)
+                        .password(secret)
+                        .desired_width(340.0),
+                );
                 if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     accepted = Some(true);
                 }
@@ -128,6 +143,141 @@ impl BluepaneUi {
                 }
             });
         match accepted {
+            Some(true) => self.dispatch("confirm"),
+            Some(false) => self.dispatch("cancel"),
+            None => {}
+        }
+    }
+
+    /// The settings of `pack` (Alt+F5): name, format, compression, password, volume size.
+    fn pack_dialog(&mut self, ctx: &egui::Context) {
+        let focus_name = !self.pack_focused;
+        self.pack_focused = true;
+        let Some(Pending::Pack(form)) = &mut self.session.pending else {
+            return;
+        };
+        let mut action = None;
+        let enter = |response: &egui::Response, ui: &egui::Ui| {
+            response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
+        };
+        egui::Window::new("Pakowanie")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label(format!(
+                    "Elementów: {}   Katalog docelowy: {}",
+                    form.item_count(),
+                    form.destination().display()
+                ));
+                ui.add_space(4.0);
+                egui::Grid::new("pack-grid")
+                    .num_columns(2)
+                    .spacing([10.0, 6.0])
+                    .show(ui, |ui| {
+                        ui.label("Archiwum:");
+                        ui.vertical(|ui| {
+                            let response = ui.add(
+                                egui::TextEdit::singleline(&mut form.name).desired_width(300.0),
+                            );
+                            if focus_name {
+                                response.request_focus();
+                            }
+                            if enter(&response, ui) {
+                                action = Some(true);
+                            }
+                            ui.label(
+                                RichText::new(format!("Powstanie plik: {}", form.output_name()))
+                                    .weak(),
+                            );
+                        });
+                        ui.end_row();
+
+                        ui.label("Format:");
+                        ui.horizontal(|ui| {
+                            for (format, label) in [
+                                (ArchiveFormat::Zip, "ZIP"),
+                                (ArchiveFormat::Tar, "TAR"),
+                                (ArchiveFormat::TarGz, "TAR.GZ"),
+                            ] {
+                                ui.selectable_value(&mut form.format, format, label);
+                            }
+                        });
+                        ui.end_row();
+
+                        ui.label("Kompresja:");
+                        egui::ComboBox::from_id_salt("pack-level")
+                            .selected_text(level_label(form.level))
+                            .show_ui(ui, |ui| {
+                                for level in [
+                                    CompressionLevel::Store,
+                                    CompressionLevel::Fast,
+                                    CompressionLevel::Normal,
+                                    CompressionLevel::Maximum,
+                                ] {
+                                    ui.selectable_value(&mut form.level, level, level_label(level));
+                                }
+                            });
+                        ui.end_row();
+
+                        let encryptable = form.format.supports_password();
+                        ui.label("Hasło:");
+                        let first = ui.add_enabled(
+                            encryptable,
+                            egui::TextEdit::singleline(&mut form.password)
+                                .password(true)
+                                .desired_width(300.0),
+                        );
+                        if enter(&first, ui) {
+                            action = Some(true);
+                        }
+                        ui.end_row();
+                        ui.label("Powtórz hasło:");
+                        let again = ui.add_enabled(
+                            encryptable,
+                            egui::TextEdit::singleline(&mut form.password_again)
+                                .password(true)
+                                .desired_width(300.0),
+                        );
+                        if enter(&again, ui) {
+                            action = Some(true);
+                        }
+                        ui.end_row();
+                        if !encryptable {
+                            ui.label("");
+                            ui.label(RichText::new("TAR nie obsługuje haseł (użyj ZIP)").weak());
+                            ui.end_row();
+                        }
+
+                        ui.label("Podziel na części:");
+                        let split = ui.add(
+                            egui::TextEdit::singleline(&mut form.split)
+                                .hint_text("np. 100m, 700m, 4g (puste = jeden plik)")
+                                .desired_width(300.0),
+                        );
+                        if enter(&split, ui) {
+                            action = Some(true);
+                        }
+                        ui.end_row();
+                    });
+                if let Some(error) = &form.error {
+                    ui.add_space(4.0);
+                    ui.colored_label(Color32::LIGHT_RED, error);
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Pakuj (Enter)").clicked() {
+                        action = Some(true);
+                    }
+                    if ui.button("Anuluj (Esc)").clicked() {
+                        action = Some(false);
+                    }
+                });
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    action = Some(false);
+                }
+            });
+        match action {
             Some(true) => self.dispatch("confirm"),
             Some(false) => self.dispatch("cancel"),
             None => {}
@@ -526,7 +676,7 @@ impl BluepaneUi {
         let path_id = egui::Id::new(("path-bar", index));
         let editing = ui.ctx().memory(|m| m.has_focus(path_id));
         if !editing {
-            self.path_text[index] = self.session.panels[index].cwd.display().to_string();
+            self.path_text[index] = self.session.panels[index].location().display().to_string();
         }
 
         ui.horizontal(|ui| {
@@ -736,7 +886,8 @@ impl BluepaneUi {
             self.session.panels[index].cursor = row;
         }
         if entered.is_some() {
-            self.session.panels[index].enter();
+            // Through the engine: Enter on an archive file opens it instead of doing nothing.
+            let _ = self.session.execute(Command::Enter);
         }
         if let Some(key) = sort_by {
             self.session.active = index;
@@ -773,6 +924,15 @@ impl Columns {
             size: cut(size_left.max(row.left()), date_left.max(row.left())),
             date: cut(date_left.max(row.left()), row.right()),
         }
+    }
+}
+
+fn level_label(level: CompressionLevel) -> &'static str {
+    match level {
+        CompressionLevel::Store => "Bez kompresji",
+        CompressionLevel::Fast => "Szybka",
+        CompressionLevel::Normal => "Normalna",
+        CompressionLevel::Maximum => "Maksymalna",
     }
 }
 

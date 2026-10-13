@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use bluepane_archive::{Format, Level};
 use bluepane_ops::Resolution;
 
 use crate::{EngineError, SortKey};
@@ -70,6 +71,30 @@ pub enum TabAction {
     Goto(usize),
 }
 
+/// Settings given to `pack` on the command line (7-Zip style switches).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PackArgs {
+    /// Archive name; empty means "choose a default from the selection".
+    pub name: String,
+    /// `-tzip`, `-ttar`, `-ttgz`; by default taken from the name's extension, else ZIP.
+    pub format: Option<Format>,
+    /// `-mx=0` (store) to `-mx=9` (maximum).
+    pub level: Option<Level>,
+    /// `-p<password>`: ZIP only (AES-256).
+    pub password: Option<String>,
+    /// `-v<size>`: cut into volumes of this many bytes, e.g. `-v100m`.
+    pub split: Option<u64>,
+}
+
+/// Settings given to `unpack`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UnpackArgs {
+    /// `-p<password>`
+    pub password: Option<String>,
+    /// `-s`: extract into a subfolder named after the archive.
+    pub subfolder: bool,
+}
+
 /// One user action.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -122,6 +147,13 @@ pub enum Command {
     Mkdir(Option<String>),
     /// Open, close or switch tabs of the active panel.
     Tab(TabAction),
+    /// Pack the selection into an archive in the other panel's directory (Alt+F5). Without
+    /// arguments a dialog asks for the settings.
+    Pack(Option<PackArgs>),
+    /// Extract an archive into the other panel's directory (Alt+F9).
+    Unpack(UnpackArgs),
+    /// Check that an archive is intact; the optional text is its password.
+    TestArchive(Option<String>),
     /// Open the file under the cursor in the built-in viewer (F3).
     View,
     /// Open the file under the cursor in an external editor (F4).
@@ -186,6 +218,9 @@ impl Command {
             "edit" => Ok(Command::Edit),
             "viewer" => parse_viewer(rest).map(Command::Viewer),
             "tab" => parse_tab(rest).map(Command::Tab),
+            "pack" => parse_pack(rest),
+            "unpack" => parse_unpack(rest).map(Command::Unpack),
+            "testarchive" => parse_unpack(rest).map(|a| Command::TestArchive(a.password)),
             "select" => need_arg("nazwa").map(Command::Select),
             "cd" => need_arg("ścieżka").map(|p| Command::Cd(PathBuf::from(p))),
             other => parse_resolution(other)
@@ -193,6 +228,114 @@ impl Command {
                 .ok_or_else(|| EngineError(format!("nieznana komenda: {other}"))),
         }
     }
+}
+
+/// A size such as `100`, `64k`, `700m`, `1.5g` (powers of 1024; a trailing `b` is optional).
+pub fn parse_size(text: &str) -> Result<u64, EngineError> {
+    let bad = || {
+        EngineError(format!(
+            "niepoprawny rozmiar: {text:?} (np. 100m, 700m, 4g)"
+        ))
+    };
+    let lower = text.trim().to_ascii_lowercase();
+    let lower = lower.strip_suffix('b').unwrap_or(&lower);
+    let (number, unit) = match lower.chars().last() {
+        Some('k') => (&lower[..lower.len() - 1], 1024.0),
+        Some('m') => (&lower[..lower.len() - 1], 1024.0 * 1024.0),
+        Some('g') => (&lower[..lower.len() - 1], 1024.0 * 1024.0 * 1024.0),
+        Some('t') => (&lower[..lower.len() - 1], 1024.0 * 1024.0 * 1024.0 * 1024.0),
+        _ => (lower, 1.0),
+    };
+    let value: f64 = number.trim().parse().map_err(|_| bad())?;
+    let bytes = value * unit;
+    if !bytes.is_finite() || bytes < 1.0 || bytes >= u64::MAX as f64 {
+        return Err(bad());
+    }
+    Ok(bytes as u64)
+}
+
+/// Words and `-x` switches of a command line argument list.
+fn split_switches(args: &str) -> (Vec<&str>, Vec<&str>) {
+    let mut words = Vec::new();
+    let mut switches = Vec::new();
+    for token in args.split_whitespace() {
+        if token.starts_with('-') && token.len() > 1 {
+            switches.push(token);
+        } else {
+            words.push(token);
+        }
+    }
+    (words, switches)
+}
+
+fn parse_format(text: &str) -> Option<Format> {
+    match text.to_ascii_lowercase().as_str() {
+        "zip" => Some(Format::Zip),
+        "tar" => Some(Format::Tar),
+        "tgz" | "tar.gz" | "targz" | "gz" => Some(Format::TarGz),
+        _ => None,
+    }
+}
+
+fn parse_level(text: &str) -> Option<Level> {
+    match text.parse::<u8>().ok()? {
+        0 => Some(Level::Store),
+        1..=3 => Some(Level::Fast),
+        4..=6 => Some(Level::Normal),
+        7..=9 => Some(Level::Maximum),
+        _ => None,
+    }
+}
+
+fn parse_pack(args: &str) -> Result<Command, EngineError> {
+    if args.trim().is_empty() {
+        return Ok(Command::Pack(None));
+    }
+    let usage = |what: &str| {
+        EngineError(format!(
+            "pack: {what} (użycie: pack [nazwa] [-tzip|-ttar|-ttgz] [-mx=0..9] [-p<hasło>] [-v<rozmiar>])"
+        ))
+    };
+    let (words, switches) = split_switches(args);
+    let mut pack = PackArgs {
+        name: words.join(" "),
+        ..PackArgs::default()
+    };
+    for switch in switches {
+        if let Some(password) = switch.strip_prefix("-p") {
+            pack.password = Some(password.to_string());
+        } else if let Some(size) = switch.strip_prefix("-v") {
+            pack.split = Some(parse_size(size)?);
+        } else if let Some(name) = switch.strip_prefix("-t") {
+            pack.format = Some(parse_format(name).ok_or_else(|| usage("nieznany format"))?);
+        } else if let Some(level) = switch.strip_prefix("-mx") {
+            let level = level.strip_prefix('=').unwrap_or(level);
+            pack.level = Some(parse_level(level).ok_or_else(|| usage("poziom to liczba 0-9"))?);
+        } else {
+            return Err(usage(&format!("nieznany przełącznik {switch}")));
+        }
+    }
+    Ok(Command::Pack(Some(pack)))
+}
+
+fn parse_unpack(args: &str) -> Result<UnpackArgs, EngineError> {
+    let (words, switches) = split_switches(args);
+    if !words.is_empty() {
+        return Err(EngineError(
+            "użycie: unpack [-s] [-p<hasło>] (archiwum wskazuje kursor lub otwarty panel)".into(),
+        ));
+    }
+    let mut unpack = UnpackArgs::default();
+    for switch in switches {
+        if let Some(password) = switch.strip_prefix("-p") {
+            unpack.password = Some(password.to_string());
+        } else if switch == "-s" {
+            unpack.subfolder = true;
+        } else {
+            return Err(EngineError(format!("nieznany przełącznik {switch}")));
+        }
+    }
+    Ok(unpack)
 }
 
 fn parse_tab(args: &str) -> Result<TabAction, EngineError> {
@@ -439,6 +582,84 @@ mod tests {
         ] {
             assert!(tab(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn sizes_accept_units_and_decimals() {
+        assert_eq!(parse_size("100"), Ok(100));
+        assert_eq!(parse_size("64k"), Ok(64 * 1024));
+        assert_eq!(parse_size("64KB"), Ok(64 * 1024));
+        assert_eq!(parse_size("700m"), Ok(700 * 1024 * 1024));
+        assert_eq!(parse_size("1.5g"), Ok(1_610_612_736));
+        assert_eq!(parse_size(" 2G "), Ok(2 * 1024 * 1024 * 1024));
+        assert_eq!(parse_size("10b"), Ok(10));
+        for bad in ["", "k", "abc", "0", "-5", "1x", "0.0001", "1e30000"] {
+            assert!(parse_size(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn parses_pack_with_seven_zip_style_switches() {
+        assert_eq!(Command::parse("pack"), Ok(Command::Pack(None)));
+        assert_eq!(
+            Command::parse("pack photos.zip"),
+            Ok(Command::Pack(Some(PackArgs {
+                name: "photos.zip".into(),
+                ..PackArgs::default()
+            })))
+        );
+        assert_eq!(
+            Command::parse("pack my files.tgz -mx=9 -psekret -v100m"),
+            Ok(Command::Pack(Some(PackArgs {
+                name: "my files.tgz".into(),
+                format: None,
+                level: Some(Level::Maximum),
+                password: Some("sekret".into()),
+                split: Some(100 * 1024 * 1024),
+            })))
+        );
+        assert_eq!(
+            Command::parse("pack -ttar -mx0"),
+            Ok(Command::Pack(Some(PackArgs {
+                format: Some(Format::Tar),
+                level: Some(Level::Store),
+                ..PackArgs::default()
+            })))
+        );
+        for bad in [
+            "pack x -tfoo",
+            "pack x -mx=12",
+            "pack x -v",
+            "pack x -z",
+            "pack x -vabc",
+        ] {
+            assert!(Command::parse(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn parses_unpack_and_testarchive() {
+        assert_eq!(
+            Command::parse("unpack"),
+            Ok(Command::Unpack(UnpackArgs::default()))
+        );
+        assert_eq!(
+            Command::parse("unpack -s -ppw"),
+            Ok(Command::Unpack(UnpackArgs {
+                password: Some("pw".into()),
+                subfolder: true
+            }))
+        );
+        assert_eq!(
+            Command::parse("testarchive"),
+            Ok(Command::TestArchive(None))
+        );
+        assert_eq!(
+            Command::parse("testarchive -pxyz"),
+            Ok(Command::TestArchive(Some("xyz".into())))
+        );
+        assert!(Command::parse("unpack somewhere").is_err());
+        assert!(Command::parse("unpack -q").is_err());
     }
 
     #[test]
