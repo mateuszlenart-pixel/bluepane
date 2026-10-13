@@ -3,16 +3,21 @@
 //! The UI only translates input into command lines and draws the engine's state.
 //! It contains no file system logic.
 
-use bluepane_engine::{format_modified, human_size, name_parts, Command, Panel, Session, SortKey};
+use std::time::Duration;
+
+use bluepane_engine::{
+    format_modified, human_size, name_parts, Command, InputKind, Panel, Pending, Session, SortKey,
+};
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
 const CMD_LINE_ID: &str = "bluepane-command-line";
 
 /// F-key bar: (key, label, command line). Same bindings as the default key map.
 const FKEYS: &[(&str, &str, &str)] = &[
+    ("F2", "Zmień nazwę", "rename"),
     ("F5", "Kopiuj", "copy"),
     ("F6", "Przenieś", "move"),
-    ("F7", "Nowy katalog", "mkdir "),
+    ("F7", "Nowy katalog", "mkdir"),
     ("F8", "Do kosza", "delete"),
     ("F9", "Odśwież", "refresh"),
 ];
@@ -21,7 +26,8 @@ pub struct BluepaneUi {
     session: Session,
     command_line: String,
     focus_command_line: bool,
-    last_error: bool,
+    /// "Apply to all" checkbox of the conflict dialog.
+    apply_to_all: bool,
     /// Editable text of each panel's path bar (resynced from the panel while not focused).
     path_text: [String; 2],
 }
@@ -32,7 +38,7 @@ impl BluepaneUi {
             session,
             command_line: String::new(),
             focus_command_line: false,
-            last_error: false,
+            apply_to_all: false,
             path_text: [String::new(), String::new()],
         }
     }
@@ -44,6 +50,11 @@ impl BluepaneUi {
     /// Draws one frame. Call this from `eframe::App::ui`.
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // Collect what the background job reported; keep redrawing while it runs.
+        self.session.poll();
+        if self.session.is_busy() {
+            ctx.request_repaint_after(Duration::from_millis(50));
+        }
         let cmd_id = egui::Id::new(CMD_LINE_ID);
         // While any text field (command line, path bar) has focus, keys belong to it.
         if !ctx.egui_wants_keyboard_input() {
@@ -59,6 +70,162 @@ impl BluepaneUi {
                     self.panel_ui(ui, index);
                 }
             });
+        });
+        match &self.session.pending {
+            Some(Pending::Input { .. }) => self.input_dialog(&ctx),
+            Some(Pending::Conflict(_)) => self.conflict_dialog(&ctx),
+            _ => {}
+        }
+    }
+
+    /// Name dialog for F7 (new directory) and F2 (rename).
+    fn input_dialog(&mut self, ctx: &egui::Context) {
+        let session = &mut self.session;
+        let Some(Pending::Input { kind, text }) = &mut session.pending else {
+            return;
+        };
+        let title = match kind {
+            InputKind::Mkdir => "Nowy katalog",
+            InputKind::Rename(_) => "Zmień nazwę",
+        };
+        let (status, is_error) = (&session.status, session.status_is_error);
+        let mut accepted = None;
+        egui::Window::new(title)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                let color = if is_error {
+                    Color32::LIGHT_RED
+                } else {
+                    ui.visuals().weak_text_color()
+                };
+                ui.label(RichText::new(status).color(color));
+                let response = ui.add(egui::TextEdit::singleline(text).desired_width(340.0));
+                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    accepted = Some(true);
+                }
+                // The dialog is modal in spirit: keep the cursor in the field.
+                response.request_focus();
+                ui.horizontal(|ui| {
+                    if ui.button("OK (Enter)").clicked() {
+                        accepted = Some(true);
+                    }
+                    if ui.button("Anuluj (Esc)").clicked() {
+                        accepted = Some(false);
+                    }
+                });
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    accepted = Some(false);
+                }
+            });
+        match accepted {
+            Some(true) => self.dispatch("confirm"),
+            Some(false) => self.dispatch("cancel"),
+            None => {}
+        }
+    }
+
+    /// Asks what to do about an existing file while copying or moving.
+    fn conflict_dialog(&mut self, ctx: &egui::Context) {
+        let Some(Pending::Conflict(prompt)) = &self.session.pending else {
+            return;
+        };
+        let conflict = prompt.conflict.clone();
+        let source_is_newer = matches!(
+            (conflict.src_modified, conflict.dst_modified),
+            (Some(new), Some(old)) if new > old
+        );
+        let mut answer: Option<&'static str> = None;
+        egui::Window::new("Plik już istnieje")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label(RichText::new(conflict.dst.display().to_string()).strong());
+                ui.add_space(4.0);
+                egui::Grid::new("conflict-grid").show(ui, |ui| {
+                    ui.label("Istniejący:");
+                    ui.label(format!(
+                        "{}   {}",
+                        human_size(conflict.dst_size),
+                        format_modified(conflict.dst_modified)
+                    ));
+                    ui.end_row();
+                    ui.label("Nowy:");
+                    let note = if source_is_newer { "   (nowszy)" } else { "" };
+                    ui.label(format!(
+                        "{}   {}{note}",
+                        human_size(conflict.src_size),
+                        format_modified(conflict.src_modified)
+                    ));
+                    ui.end_row();
+                });
+                ui.add_space(4.0);
+                ui.checkbox(&mut self.apply_to_all, "Dla wszystkich kolejnych plików");
+                ui.horizontal_wrapped(|ui| {
+                    for (label, command) in [
+                        ("Nadpisz", "overwrite"),
+                        ("Nadpisz starsze", "newer"),
+                        ("Pomiń", "skip"),
+                        ("Zachowaj oba", "keepboth"),
+                        ("Anuluj", "cancel"),
+                    ] {
+                        if ui.button(label).clicked() {
+                            answer = Some(command);
+                        }
+                    }
+                });
+            });
+        match answer {
+            Some("cancel") => self.dispatch("cancel"),
+            Some(command) => {
+                let suffix = if self.apply_to_all { "-all" } else { "" };
+                self.dispatch(&format!("{command}{suffix}"));
+            }
+            None => {}
+        }
+        if answer.is_some() {
+            self.apply_to_all = false;
+        }
+    }
+
+    /// Progress of the running job with a cancel button.
+    fn progress_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(job) = self.session.job_status() else {
+            return;
+        };
+        ui.horizontal(|ui| {
+            let queued = if job.queued > 0 {
+                format!(" (w kolejce: {})", job.queued)
+            } else {
+                String::new()
+            };
+            ui.label(format!("{}{queued}", job.label));
+            let bar = match job.fraction() {
+                Some(fraction) => egui::ProgressBar::new(fraction)
+                    .desired_width(240.0)
+                    .show_percentage(),
+                None => egui::ProgressBar::new(0.0)
+                    .desired_width(240.0)
+                    .animate(true)
+                    .text("liczenie…"),
+            };
+            ui.add(bar);
+            if job.bytes_total > 0 {
+                ui.label(format!(
+                    "{} / {}",
+                    human_size(job.bytes_done),
+                    human_size(job.bytes_total)
+                ));
+            }
+            ui.label(RichText::new(&job.current).weak());
+            if job.waiting_for_answer {
+                ui.label(RichText::new("czeka na decyzję").color(Color32::YELLOW));
+            }
+            if ui.button("Anuluj").clicked() {
+                self.dispatch("stop");
+            }
         });
     }
 
@@ -112,7 +279,7 @@ impl BluepaneUi {
         }
         if !typed.is_empty() {
             let filter = format!("{}{typed}", self.session.active_panel().filter);
-            self.last_error = self.session.execute(Command::Filter(filter)).is_err();
+            let _ = self.session.execute(Command::Filter(filter));
         }
     }
 
@@ -122,17 +289,23 @@ impl BluepaneUi {
             self.command_line = line.to_string();
             self.focus_command_line = true;
         } else {
-            self.last_error = self.session.run_line(line).is_err();
+            let _ = self.session.run_line(line);
         }
     }
 
     fn bottom_bar(&mut self, ui: &mut egui::Ui, cmd_id: egui::Id) {
-        let status_color = if self.last_error {
+        let status_color = if self.session.status_is_error {
             Color32::LIGHT_RED
         } else {
             ui.visuals().weak_text_color()
         };
-        if self.session.pending.is_some() {
+        self.progress_ui(ui);
+        // Conflicts and name dialogs have their own window; only yes/no questions use the bar.
+        let simple_question = matches!(
+            self.session.pending,
+            Some(Pending::Duplicate(_) | Pending::ConfirmDelete(_))
+        );
+        if simple_question {
             ui.label(RichText::new(&self.session.status).color(Color32::YELLOW));
             ui.horizontal(|ui| {
                 if ui.button("Tak (Enter)").clicked() {
@@ -161,7 +334,7 @@ impl BluepaneUi {
             if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 let line = std::mem::take(&mut self.command_line);
                 if !line.trim().is_empty() {
-                    self.last_error = self.session.run_line(&line).is_err();
+                    let _ = self.session.run_line(&line);
                 }
             }
         });
@@ -218,16 +391,13 @@ impl BluepaneUi {
             if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 self.session.active = index;
                 let line = format!("cd {}", self.path_text[index]);
-                self.last_error = self.session.run_line(&line).is_err();
+                let _ = self.session.run_line(&line);
             }
         });
 
         if let Some(i) = chosen {
             self.session.active = index;
-            self.last_error = self
-                .session
-                .execute(Command::Volume((i + 1).to_string()))
-                .is_err();
+            let _ = self.session.execute(Command::Volume((i + 1).to_string()));
         }
     }
 
@@ -399,7 +569,7 @@ impl BluepaneUi {
         }
         if let Some(key) = sort_by {
             self.session.active = index;
-            self.last_error = self.session.execute(Command::Sort(key, None)).is_err();
+            let _ = self.session.execute(Command::Sort(key, None));
         }
     }
 }
@@ -417,7 +587,7 @@ struct Columns {
 impl Columns {
     const EXT: f32 = 56.0;
     const SIZE: f32 = 80.0;
-    const DATE: f32 = 128.0;
+    const DATE: f32 = 140.0;
 
     fn split(row: Rect) -> Columns {
         let date_left = row.right() - Self::DATE;

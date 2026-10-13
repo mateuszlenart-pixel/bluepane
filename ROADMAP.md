@@ -10,7 +10,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 1 | Fundament | ✅ | workspace, CLAUDE.md, CI na obu systemach, okno z dwoma panelami pokazującymi pliki |
 | 2 | Nawigacja | 🟡 | po dysku da się poruszać samym klawiaturą |
 | 3 | Zaznaczanie | ✅ | katalog z 100 tys. plików nie zacina się (cel) |
-| 4 | Operacje F5–F8 | 🟡 | operacje w tle z postępem, dialog konfliktów, testy na katalogach tymczasowych |
+| 4 | Operacje F5–F8 | ✅ | operacje w tle z postępem, dialog konfliktów, testy na katalogach tymczasowych |
 | 5 | Podgląd i edycja | ⬜ | duży plik otwiera się bez wczytywania całości do pamięci |
 | 6 | Archiwa | ⬜ | Enter wchodzi do archiwum, kopiowanie działa w obie strony |
 | 7 | Zaawansowane | ⬜ | synchronizacja pokazuje zmiany przed wykonaniem |
@@ -40,12 +40,13 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] Test wydajności: 100 tys. wpisów (test w CI na liście w pamięci; ręczny `--ignored` na 100 tys. prawdziwych plików: listing ok. 1 s, razem z zaznaczeniem i sortowaniem ok. 2,7 s w release)
 
 ### Etap 4: operacje
-- [ ] Wykonywanie w wątku w tle (`Session` dostaje kolejkę zadań), pasek postępu, przycisk Anuluj
-- [ ] Kopiowanie w kawałkach (postęp bajtów w trakcie dużego pliku)
-- [ ] Dialog konfliktów: nadpisz / pomiń / zmień nazwę / dla wszystkich
-- [ ] F2 zmiana nazwy, F7 jako okno dialogowe
-- [ ] Potwierdzenie przed usunięciem
-- [ ] Windows: długie ścieżki (`\\?\`), atrybuty tylko do odczytu; Linux: symlinki, uprawnienia
+- [x] Wykonywanie w wątku w tle (`Session` z kolejką zadań, `poll`), pasek postępu, przycisk Anuluj (`stop`)
+- [x] Kopiowanie w kawałkach 256 KiB (postęp bajtów w trakcie dużego pliku, anulowanie w trakcie pliku, niepełny plik usuwany)
+- [x] Dialog konfliktów: nadpisz / nadpisz starsze / pomiń / zachowaj oba / anuluj, każdy też „dla wszystkich"; scalanie katalogów; nadpisywanie przez plik tymczasowy
+- [x] F2 zmiana nazwy, F7 jako okno dialogowe
+- [x] Potwierdzenie przed usunięciem (Enter/Esc)
+- [x] Windows: długie ścieżki (`\\?\`, tylko dla ścieżek > 240 znaków), odczyt-tylko przy nadpisywaniu; Linux/Windows: symlinki odtwarzane (z awaryjnym kopiowaniem celu). Różnice systemowe siedzą w `vfs` i trafiają do `ops` przez trait `Host`.
+- [ ] Do sprawdzenia ręcznie na Windows: długie ścieżki, pliki tylko do odczytu, symlinki (wymagają uprawnień). Kod tych ścieżek kompiluje się w CI, ale nie był uruchamiany.
 
 ## Notatki do późniejszych etapów
 
@@ -58,9 +59,6 @@ Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **
 - dialog konfliktów (nadpisz / pomiń / zmień nazwę).
 
 ## Znane uproszczenia szkieletu
-- Operacje na plikach działają synchronicznie w wątku UI (duże kopie zamrożą okno do etapu 4).
-- Kopiowanie symlinków podąża za celem (`fs::copy`), nie odtwarza dowiązania.
-- Brak dialogów: F7 wpisuje `mkdir ` w wiersz poleceń, a F8 usuwa od razu (do kosza).
 - Interfejs sprawdzony ręcznie na Linuksie (Linux Mint, X11, wgpu); **nie był jeszcze uruchamiany
   na Windows** (kompiluje się i przechodzi CI).
 - Kursor startuje na wierszu `..`, więc `copy`/`move`/`delete` bez zaznaczenia i bez ruchu kursora

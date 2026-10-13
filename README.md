@@ -34,9 +34,10 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Ctrl+F3 … F6 | sortuj po nazwie / rozszerzeniu / dacie / rozmiarze (drugi raz = odwrotnie); klik w nagłówek kolumny też |
 | Ctrl+L | wiersz poleceń z `cd ` (przejście do wpisanej ścieżki) |
 | Spacja, Insert | zaznacz i przejdź niżej |
+| F2 | zmień nazwę (okno z bieżącą nazwą; nie nadpisuje istniejących) |
 | F5 / F6 | kopiuj / przenieś do drugiego panelu; F5 przy tym samym katalogu w obu panelach proponuje kopię „nazwa (kopia).ext” (Enter = tak, Esc = nie) |
-| F7 | nowy katalog (wpisz nazwę w wierszu poleceń) |
-| F8 | do kosza |
+| F7 | nowy katalog (okno z polem na nazwę) |
+| F8 | do kosza (po potwierdzeniu: Enter = tak, Esc = nie) |
 | F9 | odśwież |
 
 Nad każdym panelem jest lista wolumenów i edytowalny pasek ścieżki (Enter wykonuje `cd`).
@@ -44,7 +45,18 @@ Nad każdym panelem jest lista wolumenów i edytowalny pasek ścieżki (Enter wy
 Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `forward`,
 `volume <numer|nazwa>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
-`sort <name|ext|size|date> [asc|desc]`, `select <nazwa>`, `cursor <n>`, `confirm` / `cancel` (odpowiedź na pytanie), `refresh`.
+`sort <name|ext|size|date> [asc|desc]`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
+`overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
+odpowiedzi na „plik już istnieje”), `refresh`.
+
+## Kopiowanie i przenoszenie
+
+F5/F6 działają w tle: pasek postępu pod panelami pokazuje bajty, bieżący plik i przycisk
+**Anuluj** (niepełne pliki są usuwane). Kolejne operacje ustawiają się w kolejce. Gdy plik już
+istnieje w celu, okno pyta: **Nadpisz**, **Nadpisz starsze** (tylko gdy nowy plik ma nowszą datę),
+**Pomiń**, **Zachowaj oba** (nowy dostaje nazwę `plik (kopia).ext`) albo **Anuluj**. Pole „Dla
+wszystkich kolejnych plików” stosuje wybór do reszty operacji. Katalogi istniejące po obu stronach
+są scalane. Nadpisywanie nigdy nie następuje bez Twojej decyzji.
 
 ## Bez okna
 
@@ -52,6 +64,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 cargo run -p bluepane-cli -- commands
 cargo run -p bluepane-cli -- ls <katalog>
 cargo run -p bluepane-cli -- run <lewy> <prawy> "select a.txt" "copy"
+cargo run -p bluepane-cli -- run <lewy> <prawy> "select a.txt" "delete" "confirm"
 ```
 
 ## Dla developerów

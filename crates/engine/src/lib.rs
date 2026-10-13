@@ -12,6 +12,7 @@ mod mask;
 mod panel;
 mod session;
 
+pub use bluepane_ops::Resolution;
 pub use command::{Command, COMMAND_NAMES};
 pub use format::{format_modified, human_size, name_parts};
 pub use job::{Answer, Event, JobKind, JobSpec, Report, RunningJob};
