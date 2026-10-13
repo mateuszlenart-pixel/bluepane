@@ -5,7 +5,7 @@ use std::path::Path;
 use bluepane_ops::{self as ops, Progress};
 use bluepane_vfs::Volume;
 
-use crate::{is_parent_entry, Command, EngineError, Keymap, Panel};
+use crate::{is_parent_entry, Command, EngineError, Keymap, Mask, Panel};
 
 /// A question waiting for the user's answer (`confirm` or `cancel`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +100,21 @@ impl Session {
             }
             Command::Back => self.active_panel_mut().back()?,
             Command::Forward => self.active_panel_mut().forward()?,
+            Command::SelectMask(text) => self.select_by_mask(&text, true)?,
+            Command::UnselectMask(text) => self.select_by_mask(&text, false)?,
+            Command::SelectAll => {
+                let count = self.active_panel_mut().select_all();
+                self.status = format!("Zaznaczono: {count}");
+            }
+            Command::UnselectAll => {
+                self.active_panel_mut().unselect_all();
+                self.status = "Odznaczono wszystko".into();
+            }
+            Command::InvertSelection => {
+                self.active_panel_mut().invert_selection();
+                self.status = format!("Zaznaczono: {}", self.active_panel().selected.len());
+            }
+            Command::Sort(key, descending) => self.active_panel_mut().set_sort(key, descending),
             Command::Filter(text) => self.active_panel_mut().set_filter(&text),
             Command::Volume(which) => self.go_to_volume(&which)?,
             Command::Select(name) => {
@@ -136,6 +151,14 @@ impl Session {
             }
             Command::Delete => self.delete()?,
         }
+        Ok(())
+    }
+
+    fn select_by_mask(&mut self, text: &str, select: bool) -> Result<(), EngineError> {
+        let mask = Mask::parse(text).ok_or_else(|| EngineError("pusta maska".into()))?;
+        let count = self.active_panel_mut().select_matching(&mask, select);
+        let verb = if select { "Zaznaczono" } else { "Odznaczono" };
+        self.status = format!("{verb}: {count} ({text})");
         Ok(())
     }
 
@@ -534,5 +557,51 @@ mod tests {
         assert_eq!(volume_index(&volumes, Path::new("/a/b/c")), Some(1));
         assert_eq!(volume_index(&volumes, Path::new("/a/x")), Some(0));
         assert_eq!(volume_index(&volumes, Path::new("/z")), None);
+    }
+
+    #[test]
+    fn selection_commands_report_in_status() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("left/c.md"), "c").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("selmask *.txt").unwrap();
+        assert!(s.status.contains("Zaznaczono: 2"), "{}", s.status);
+        s.run_line("unselmask b*").unwrap();
+        assert_eq!(s.active_panel().selected.len(), 1);
+        s.run_line("invert").unwrap();
+        assert_eq!(s.active_panel().selected.len(), 2);
+        s.run_line("selectall").unwrap();
+        assert!(s.status.contains("Zaznaczono: 3"));
+        s.run_line("unselectall").unwrap();
+        assert!(s.active_panel().selected.is_empty());
+        assert!(s.run_line("selmask ;").is_err());
+    }
+
+    #[test]
+    fn copy_acts_on_the_mask_selection() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("left/c.md"), "c").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("selmask *.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(tmp.path().join("right/a.txt").exists());
+        assert!(tmp.path().join("right/b.txt").exists());
+        assert!(!tmp.path().join("right/c.md").exists());
+    }
+
+    #[test]
+    fn sort_command_reorders_the_active_panel_only() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("left/big.bin"), vec![0u8; 100]).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("sort size desc").unwrap();
+        let names: Vec<_> = s.panels[0]
+            .entries
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect();
+        assert_eq!(names, ["..", "big.bin", "a.txt", "b.txt"]);
+        assert_eq!(s.panels[1].sort.key, crate::SortKey::Name);
+        assert!(s.run_line("sort bogus").is_err());
     }
 }
