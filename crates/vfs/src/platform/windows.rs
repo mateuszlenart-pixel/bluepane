@@ -43,6 +43,9 @@ pub fn extended_path(path: &Path) -> PathBuf {
 }
 
 /// Clears the read-only attribute, which would make replacing the file fail.
+// The lint warns that on Unix `set_readonly(false)` makes a file world-writable. This module
+// only builds on Windows, where it just clears the attribute.
+#[allow(clippy::permissions_set_readonly_false)]
 pub fn make_writable(path: &Path) -> io::Result<()> {
     let mut permissions = fs::metadata(path)?.permissions();
     if permissions.readonly() {
