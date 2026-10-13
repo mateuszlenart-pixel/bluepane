@@ -4,8 +4,8 @@ use crate::EngineError;
 
 /// Names accepted at the command line (aliases excluded).
 pub const COMMAND_NAMES: &[&str] = &[
-    "switch", "up", "enter", "cursor", "toggle", "select", "cd", "refresh", "copy", "move",
-    "mkdir", "delete",
+    "switch", "up", "enter", "cursor", "toggle", "select", "cd", "back", "forward", "volume",
+    "filter", "refresh", "copy", "move", "mkdir", "delete",
 ];
 
 /// One user action.
@@ -13,7 +13,8 @@ pub const COMMAND_NAMES: &[&str] = &[
 pub enum Command {
     /// Move focus to the other panel (Tab).
     SwitchPanel,
-    /// Go to the parent directory (Backspace).
+    /// Go to the parent directory (Backspace). With a quick filter active, removes its
+    /// last character instead.
     Up,
     /// Enter the directory under the cursor (Enter).
     Enter,
@@ -25,6 +26,14 @@ pub enum Command {
     Select(String),
     /// Change directory in the active panel.
     Cd(PathBuf),
+    /// Previous directory in the active panel's history (Alt+Left).
+    Back,
+    /// Next directory in the active panel's history (Alt+Right).
+    Forward,
+    /// Jump the active panel to a volume, given as a 1-based number or a name (Alt+1..9).
+    Volume(String),
+    /// Set the quick filter of the active panel; empty text clears it (Escape).
+    Filter(String),
     Refresh,
     /// Copy the selection (or the entry under the cursor) to the other panel (F5).
     Copy,
@@ -57,7 +66,11 @@ impl Command {
             "up" => Ok(Command::Up),
             "enter" => Ok(Command::Enter),
             "toggle" => Ok(Command::ToggleSelect),
+            "back" => Ok(Command::Back),
+            "forward" => Ok(Command::Forward),
             "refresh" => Ok(Command::Refresh),
+            "filter" => Ok(Command::Filter(rest.to_string())),
+            "volume" | "drive" => need_arg("numer lub nazwa").map(Command::Volume),
             "copy" | "cp" => Ok(Command::Copy),
             "move" | "mv" => Ok(Command::Move),
             "delete" | "rm" => Ok(Command::Delete),
@@ -95,6 +108,19 @@ mod tests {
             Command::parse("cd /tmp"),
             Ok(Command::Cd(PathBuf::from("/tmp")))
         );
+        assert_eq!(Command::parse("volume 2"), Ok(Command::Volume("2".into())));
+        assert_eq!(
+            Command::parse("filter my file"),
+            Ok(Command::Filter("my file".into()))
+        );
+    }
+
+    #[test]
+    fn parses_history_and_filter_clearing() {
+        assert_eq!(Command::parse("back"), Ok(Command::Back));
+        assert_eq!(Command::parse("forward"), Ok(Command::Forward));
+        assert_eq!(Command::parse("filter"), Ok(Command::Filter(String::new())));
+        assert!(Command::parse("volume").is_err());
     }
 
     #[test]

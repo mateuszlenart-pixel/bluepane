@@ -24,15 +24,22 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | --- | --- |
 | Tab | przełącz panel |
 | Strzałki, PageUp/PageDown | kursor |
-| Enter / Backspace | wejdź do katalogu / w górę |
+| Enter / Backspace | wejdź do katalogu / w górę (wiersz `..` też wychodzi w górę) |
+| Alt+← / Alt+→ | historia katalogów: wstecz / naprzód (osobna dla każdego panelu) |
+| litery | szybki filtr listy (nazwa zawiera wpisany tekst); Backspace skraca filtr, Esc czyści |
+| Alt+1 … Alt+9 | skok aktywnego panelu do wolumenu o tym numerze |
+| Ctrl+L | wiersz poleceń z `cd ` (przejście do wpisanej ścieżki) |
 | Spacja, Insert | zaznacz i przejdź niżej |
 | F5 / F6 | kopiuj / przenieś do drugiego panelu |
 | F7 | nowy katalog (wpisz nazwę w wierszu poleceń) |
 | F8 | do kosza |
 | F9 | odśwież |
 
-Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `mkdir <nazwa>`, `copy`, `move`,
-`delete`, `select <nazwa>`, `cursor <n>`, `refresh`.
+Nad każdym panelem jest lista wolumenów i edytowalny pasek ścieżki (Enter wykonuje `cd`).
+
+Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `forward`,
+`volume <numer|nazwa>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
+`select <nazwa>`, `cursor <n>`, `refresh`.
 
 ## Bez okna
 

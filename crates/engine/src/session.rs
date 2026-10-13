@@ -1,8 +1,11 @@
 use std::path::PathBuf;
 
-use bluepane_ops::{self as ops, Progress};
+use std::path::Path;
 
-use crate::{Command, EngineError, Keymap, Panel};
+use bluepane_ops::{self as ops, Progress};
+use bluepane_vfs::Volume;
+
+use crate::{is_parent_entry, Command, EngineError, Keymap, Panel};
 
 /// The whole application state except the UI: two panels, which one is active,
 /// the key map and the last status message.
@@ -12,6 +15,18 @@ pub struct Session {
     pub active: usize,
     pub keymap: Keymap,
     pub status: String,
+    /// Mounted volumes, re-read on `refresh`.
+    pub volumes: Vec<Volume>,
+}
+
+/// Index of the volume that contains `cwd` (the one with the longest matching path).
+fn volume_index(volumes: &[Volume], cwd: &Path) -> Option<usize> {
+    volumes
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| cwd.starts_with(&v.path))
+        .max_by_key(|(_, v)| v.path.components().count())
+        .map(|(i, _)| i)
 }
 
 impl Session {
@@ -21,7 +36,13 @@ impl Session {
             active: 0,
             keymap: Keymap::default(),
             status: String::new(),
+            volumes: bluepane_vfs::volumes(),
         }
+    }
+
+    /// Index into `volumes` of the volume the given panel is on.
+    pub fn volume_of(&self, panel: usize) -> Option<usize> {
+        volume_index(&self.volumes, &self.panels[panel].cwd)
     }
 
     pub fn active_panel(&self) -> &Panel {
@@ -44,14 +65,30 @@ impl Session {
     pub fn execute(&mut self, command: Command) -> Result<(), EngineError> {
         match command {
             Command::SwitchPanel => self.active = 1 - self.active,
-            Command::Up => self.active_panel_mut().up(),
+            Command::Up => {
+                let panel = self.active_panel_mut();
+                if !panel.filter_backspace() {
+                    panel.up();
+                }
+            }
             Command::Enter => self.active_panel_mut().enter(),
             Command::Cursor(delta) => self.active_panel_mut().move_cursor(delta),
             Command::ToggleSelect => self.active_panel_mut().toggle_select(),
-            Command::Refresh => self.panels.iter_mut().for_each(Panel::reload),
+            Command::Refresh => {
+                self.volumes = bluepane_vfs::volumes();
+                self.panels.iter_mut().for_each(Panel::reload);
+            }
+            Command::Back => self.active_panel_mut().back()?,
+            Command::Forward => self.active_panel_mut().forward()?,
+            Command::Filter(text) => self.active_panel_mut().set_filter(&text),
+            Command::Volume(which) => self.go_to_volume(&which)?,
             Command::Select(name) => {
                 let panel = self.active_panel_mut();
-                let Some(index) = panel.entries.iter().position(|e| e.name == name) else {
+                let Some(index) = panel
+                    .entries
+                    .iter()
+                    .position(|e| e.name == name && !is_parent_entry(e))
+                else {
                     return Err(EngineError(format!("brak elementu: {name}")));
                 };
                 panel.cursor = index;
@@ -79,6 +116,38 @@ impl Session {
             }
             Command::Delete => self.delete()?,
         }
+        Ok(())
+    }
+
+    /// Jumps the active panel to a volume given as a 1-based number or a name.
+    fn go_to_volume(&mut self, which: &str) -> Result<(), EngineError> {
+        let found = match which.parse::<usize>() {
+            Ok(n) => n.checked_sub(1).and_then(|i| self.volumes.get(i)),
+            Err(_) => self
+                .volumes
+                .iter()
+                .find(|v| v.name.eq_ignore_ascii_case(which) || v.path == Path::new(which)),
+        };
+        let Some(volume) = found else {
+            let known: Vec<String> = self
+                .volumes
+                .iter()
+                .enumerate()
+                .map(|(i, v)| format!("{} {}", i + 1, v.name))
+                .collect();
+            return Err(EngineError(format!(
+                "nie ma wolumenu: {which} (dostępne: {})",
+                known.join(", ")
+            )));
+        };
+        let path = volume.path.clone();
+        if !path.is_dir() {
+            return Err(EngineError(format!(
+                "wolumen niedostępny: {}",
+                path.display()
+            )));
+        }
+        self.active_panel_mut().change_dir(path);
         Ok(())
     }
 
@@ -181,13 +250,14 @@ mod tests {
         s.run_line("copy").unwrap();
         assert!(tmp.path().join("right/a.txt").exists());
         assert!(tmp.path().join("left/a.txt").exists());
-        assert_eq!(s.panels[1].entries.len(), 1);
+        assert_eq!(s.panels[1].entries.len(), 2); // ".." and a.txt
         assert!(s.panels[0].selected.is_empty());
     }
 
     #[test]
     fn move_uses_cursor_when_nothing_is_selected() {
         let (tmp, mut s) = two_dirs();
+        s.run_line("cursor 1").unwrap();
         s.run_line("move").unwrap();
         assert!(!tmp.path().join("left/a.txt").exists());
         assert!(tmp.path().join("right/a.txt").exists());
@@ -220,5 +290,98 @@ mod tests {
         let (_tmp, mut s) = two_dirs();
         assert!(s.run_line("frobnicate").is_err());
         assert!(s.status.contains("nieznana"));
+    }
+
+    #[test]
+    fn parent_row_is_not_an_operation_target() {
+        let (tmp, mut s) = two_dirs();
+        // The cursor starts on "..": nothing to copy, and nothing must happen to the parent.
+        assert!(s.run_line("copy").is_err());
+        assert!(s.run_line("delete").is_err());
+        assert!(s.run_line("select ..").is_err());
+        assert!(tmp.path().join("left/a.txt").exists());
+    }
+
+    #[test]
+    fn back_and_forward_follow_the_history() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir sub").unwrap();
+        s.run_line("cd sub").unwrap();
+        s.run_line("back").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left"));
+        s.run_line("forward").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left/sub"));
+        assert!(s.run_line("forward").is_err());
+        assert!(s.status.contains("historii"));
+        // The other panel has its own history.
+        s.run_line("switch").unwrap();
+        assert!(s.run_line("back").is_err());
+    }
+
+    #[test]
+    fn backspace_edits_the_filter_before_going_up() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("filter b").unwrap();
+        assert_eq!(s.active_panel().entries.len(), 2); // ".." and b.txt
+        s.run_line("up").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left"));
+        assert!(s.active_panel().filter.is_empty());
+        s.run_line("up").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path());
+    }
+
+    #[test]
+    fn operations_ignore_entries_hidden_by_the_filter() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("filter b").unwrap();
+        s.run_line("copy").unwrap(); // acts on b.txt under the cursor, not on hidden a.txt
+        assert!(tmp.path().join("right/b.txt").exists());
+        assert!(!tmp.path().join("right/a.txt").exists());
+    }
+
+    #[test]
+    fn volume_jump_by_number_and_name() {
+        let (tmp, mut s) = two_dirs();
+        s.volumes = vec![
+            Volume {
+                name: "one".into(),
+                path: tmp.path().join("left"),
+            },
+            Volume {
+                name: "Two".into(),
+                path: tmp.path().join("right"),
+            },
+        ];
+        s.run_line("volume 2").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("right"));
+        s.run_line("volume one").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left"));
+        s.run_line("volume TWO").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("right"));
+        s.run_line("back").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left"));
+
+        assert!(s.run_line("volume 0").is_err());
+        assert!(s.run_line("volume 3").is_err());
+        let err = s.run_line("volume nope").unwrap_err();
+        assert!(err.0.contains("dostępne: 1 one, 2 Two"), "{err}");
+    }
+
+    #[test]
+    fn volume_of_picks_the_longest_prefix() {
+        let volumes = vec![
+            Volume {
+                name: "root".into(),
+                path: PathBuf::from("/a"),
+            },
+            Volume {
+                name: "nested".into(),
+                path: PathBuf::from("/a/b"),
+            },
+        ];
+        assert_eq!(volume_index(&volumes, Path::new("/a/b/c")), Some(1));
+        assert_eq!(volume_index(&volumes, Path::new("/a/x")), Some(0));
+        assert_eq!(volume_index(&volumes, Path::new("/z")), None);
     }
 }
