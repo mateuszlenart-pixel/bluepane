@@ -27,7 +27,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Enter / Backspace | wejdź do katalogu / w górę (wiersz `..` też wychodzi w górę) |
 | Alt+← / Alt+→ | historia katalogów: wstecz / naprzód (osobna dla każdego panelu) |
 | litery | szybki filtr listy (nazwa zawiera wpisany tekst); Backspace skraca filtr, Esc czyści |
-| Enter na archiwum | wejdź do archiwum (zip, tar, tar.gz, tgz, `*.zip.001`); `..` na górze wychodzi |
+| Enter na archiwum | wejdź do archiwum (zip, 7z, tar, tar.gz, tgz, także części `*.001`); `..` na górze wychodzi |
 | F5 w archiwum | rozpakuj zaznaczone do katalogu drugiego panelu |
 | Alt+F5 / Alt+F9 | pakuj (okno) / rozpakuj archiwum pod kursorem lub otwarte |
 | Ctrl+T / Ctrl+W | nowa zakładka (ten sam katalog) / zamknij zakładkę |
@@ -78,7 +78,7 @@ i kolejne **N** szuka dalej. Komendy: `view`, `viewer scroll|page|hscroll|top|bo
 
 ## Archiwa
 
-Obsługiwane formaty: **ZIP**, **TAR**, **TAR.GZ** (`.tgz`). Archiwum otwiera się w panelu jak
+Obsługiwane formaty: **ZIP**, **7z**, **TAR**, **TAR.GZ** (`.tgz`). Archiwum otwiera się w panelu jak
 katalog (tylko do odczytu): F5 rozpakowuje zaznaczone pliki i katalogi do drugiego panelu, a
 **Alt+F9** (`unpack`) całe archiwum (`unpack -s` do podkatalogu o nazwie archiwum).
 
@@ -89,18 +89,26 @@ panelu. To samo z linii poleceń, z przełącznikami jak w 7-Zip:
 ```
 pack raport.zip -psekret -mx=9 -v100m     # ZIP z hasłem, maksymalna kompresja, części po 100 MB
 pack kopia -ttgz                          # TAR.GZ o nazwie wziętej z nazwy
+pack tajne -t7z -psekret -mhe             # 7z z hasłem i ukrytymi nazwami plików
 ```
 
 | Przełącznik | Znaczenie |
 | --- | --- |
-| `-tzip`, `-ttar`, `-ttgz` | format (domyślnie z rozszerzenia nazwy, inaczej ZIP) |
+| `-tzip`, `-t7z`, `-ttar`, `-ttgz` | format (domyślnie z rozszerzenia nazwy, inaczej ZIP) |
 | `-mx=0` … `-mx=9` | kompresja: 0 = bez, 1–3 szybka, 4–6 normalna, 7–9 maksymalna |
-| `-p<hasło>` | hasło (tylko ZIP, szyfrowanie AES-256) |
+| `-p<hasło>` | hasło (ZIP i 7z, szyfrowanie AES-256) |
+| `-mhe` | 7z: zaszyfruj też nazwy plików (wymaga `-p`) |
 | `-v<rozmiar>` | podział na części `nazwa.zip.001`, `.002`, … (np. `-v700m`, `-v4g`) |
 
-- **Hasła** działają tylko w ZIP (TAR nie szyfruje, więc hasło dla TAR jest odrzucane, a nie
-  ignorowane). Czyta się ZipCrypto i AES, tworzy AES-256 (zgodne z 7-Zip). Przy zaszyfrowanym
-  archiwum okno pyta o hasło, a po błędnym pyta ponownie. Nazw plików w ZIP nie da się ukryć.
+- **Hasła** działają w ZIP i 7z (TAR nie szyfruje, więc hasło dla TAR jest odrzucane, a nie
+  ignorowane). W ZIP czyta się ZipCrypto i AES, tworzy AES-256; w 7z AES-256. Przy zaszyfrowanym
+  archiwum okno pyta o hasło, a po błędnym pyta ponownie. **Nazwy plików** da się ukryć tylko w
+  7z (okno: „Szyfruj też nazwy plików”, komenda: `-mhe`); wtedy hasło jest potrzebne już do
+  samego otwarcia archiwum. W ZIP nazwy są zawsze widoczne.
+- **7z** używa kompresji LZMA2 (poziomy jak w ZIP). Archiwa 7z utworzone tu są nielite (każdy plik
+  osobno), więc rozpakowanie jednego pliku nie wymaga odczytu reszty; archiwa lite z 7-Zip
+  czyta się w całości do żądanego pliku (tak działa format). Metody BZip2 i PPMd w 7z nie są
+  obsługiwane (dają czytelny błąd).
 - **Części**: odczyt wskazuje się na pierwszej części (`*.001`), reszta jest doczytywana
   automatycznie. Podział potrzebuje na dysku miejsca na archiwum dwukrotnie w trakcie pracy.
 - `testarchive` sprawdza integralność archiwum. Dowiązania symboliczne i pliki urządzeń są

@@ -60,13 +60,14 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [ ] Do sprawdzenia ręcznie na Windows: F4 przez `explorer`, wyszukiwanie w dużych plikach
 
 ### Etap 6: archiwa
-- [x] Enter wchodzi do archiwum (ZIP, TAR, TAR.GZ, także wieloczęściowe `.001`), przeglądanie jak katalogu (tylko do odczytu), F5 rozpakowuje zaznaczenie
+- [x] Enter wchodzi do archiwum (ZIP, 7z, TAR, TAR.GZ, także wieloczęściowe `.001`), przeglądanie jak katalogu (tylko do odczytu), F5 rozpakowuje zaznaczenie
 - [x] Tworzenie archiwów (`pack`, okno Alt+F5): format, poziom kompresji, hasło, podział na części; przełączniki w stylu 7-Zip
-- [x] Hasła: odczyt ZipCrypto i AES, zapis AES-256 (ZIP); pytanie o hasło z ponawianiem, hasło zapamiętane dla archiwum
+- [x] Hasła: odczyt ZipCrypto i AES, zapis AES-256 (ZIP i 7z); w 7z także ukrywanie nazw plików (`-mhe`); pytanie o hasło z ponawianiem, hasło zapamiętane dla archiwum
 - [x] Podział na części (`nazwa.zip.001`, ...) i odczyt wieloczęściowych; `testarchive`; konflikty jak przy kopiowaniu
 - [x] Bezpieczeństwo: odrzucanie ścieżek wychodzących poza cel (zip-slip), pomijanie dowiązań i urządzeń, bez bitów setuid
 - [x] Zgodność sprawdzona z prawdziwymi narzędziami: 7-Zip (zwykły ZIP, AES-256, wolumeny), Info-ZIP (ZipCrypto), GNU tar
-- [ ] Nie ma: dodawania/usuwania plików w istniejącym archiwum, podglądu (F3) pliku wewnątrz archiwum, 7z/RAR, kompresji w ZIP innej niż deflate przy odczycie (LZMA/BZip2 dają czytelny błąd „nieobsługiwane”), szyfrowania nazw plików (ZIP tego nie potrafi)
+- [x] 7z: odczyt i zapis (LZMA2, AES-256, szyfrowanie nagłówka, części `.7z.001`), zgodność z prawdziwym 7-Zip w obie strony (archiwa lite i nielite, wolumeny, hasła)
+- [ ] Nie ma: dodawania/usuwania plików w istniejącym archiwum, podglądu (F3) pliku wewnątrz archiwum (oba w planie), RAR (świadomie pominięty: wymaga kodu w C), BZip2/PPMd w 7z oraz LZMA/BZip2/Zstd w ZIP (czytelny błąd „nieobsługiwane”)
 - [ ] Do sprawdzenia ręcznie na Windows (testy kompilują się i przechodzą w CI, ale GUI i nazwy niedozwolone w Windows nie były oglądane)
 
 ### Etap 8: FTP/SFTP

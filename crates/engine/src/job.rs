@@ -67,6 +67,8 @@ pub struct PackOptions {
     pub format: Format,
     pub level: Level,
     pub split: Option<u64>,
+    /// 7z only: also hide the file names behind the password.
+    pub encrypt_names: bool,
     /// File name of the archive (with its extension), created in the job's `dest`.
     pub output_name: String,
 }
@@ -318,7 +320,7 @@ fn run_archive(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Repor
                 level: pack.level,
                 password: job.password.clone(),
                 split: pack.split,
-                encrypt_names: false,
+                encrypt_names: pack.encrypt_names,
             };
             let created = archive::create(
                 &spec.sources,

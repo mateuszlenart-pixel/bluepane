@@ -197,6 +197,7 @@ impl BluepaneUi {
                         ui.horizontal(|ui| {
                             for (format, label) in [
                                 (ArchiveFormat::Zip, "ZIP"),
+                                (ArchiveFormat::SevenZ, "7Z"),
                                 (ArchiveFormat::Tar, "TAR"),
                                 (ArchiveFormat::TarGz, "TAR.GZ"),
                             ] {
@@ -245,7 +246,14 @@ impl BluepaneUi {
                         ui.end_row();
                         if !encryptable {
                             ui.label("");
-                            ui.label(RichText::new("TAR nie obsługuje haseł (użyj ZIP)").weak());
+                            ui.label(
+                                RichText::new("TAR nie obsługuje haseł (użyj ZIP lub 7Z)").weak(),
+                            );
+                            ui.end_row();
+                        }
+                        if form.format.can_encrypt_names() {
+                            ui.label("");
+                            ui.checkbox(&mut form.encrypt_names, "Szyfruj też nazwy plików");
                             ui.end_row();
                         }
 

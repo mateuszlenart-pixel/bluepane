@@ -84,6 +84,8 @@ pub struct PackArgs {
     pub password: Option<String>,
     /// `-v<size>`: cut into volumes of this many bytes, e.g. `-v100m`.
     pub split: Option<u64>,
+    /// `-mhe`: 7z only, hide the file names too (needs `-p`).
+    pub encrypt_names: bool,
 }
 
 /// Settings given to `unpack`.
@@ -273,6 +275,7 @@ fn parse_format(text: &str) -> Option<Format> {
         "zip" => Some(Format::Zip),
         "tar" => Some(Format::Tar),
         "tgz" | "tar.gz" | "targz" | "gz" => Some(Format::TarGz),
+        "7z" => Some(Format::SevenZ),
         _ => None,
     }
 }
@@ -293,7 +296,7 @@ fn parse_pack(args: &str) -> Result<Command, EngineError> {
     }
     let usage = |what: &str| {
         EngineError(format!(
-            "pack: {what} (użycie: pack [nazwa] [-tzip|-ttar|-ttgz] [-mx=0..9] [-p<hasło>] [-v<rozmiar>])"
+            "pack: {what} (użycie: pack [nazwa] [-tzip|-t7z|-ttar|-ttgz] [-mx=0..9] [-p<hasło>] [-mhe] [-v<rozmiar>])"
         ))
     };
     let (words, switches) = split_switches(args);
@@ -306,6 +309,8 @@ fn parse_pack(args: &str) -> Result<Command, EngineError> {
             pack.password = Some(password.to_string());
         } else if let Some(size) = switch.strip_prefix("-v") {
             pack.split = Some(parse_size(size)?);
+        } else if switch == "-mhe" || switch == "-mhe=on" {
+            pack.encrypt_names = true;
         } else if let Some(name) = switch.strip_prefix("-t") {
             pack.format = Some(parse_format(name).ok_or_else(|| usage("nieznany format"))?);
         } else if let Some(level) = switch.strip_prefix("-mx") {
@@ -616,6 +621,7 @@ mod tests {
                 level: Some(Level::Maximum),
                 password: Some("sekret".into()),
                 split: Some(100 * 1024 * 1024),
+                encrypt_names: false,
             })))
         );
         assert_eq!(

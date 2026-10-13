@@ -478,7 +478,15 @@ fn write_stream(
     ctx.progress
         .set_current(&label.file_name().unwrap_or_default().to_string_lossy());
     let mut output = OpenOptions::new().write(true).create_new(true).open(dst)?;
-    let result = pump(ctx, reader, &mut output, size);
+    let result = pump(ctx, reader, &mut output, size).and_then(|copied| match finish {
+        // An archive entry that ends early (damaged data, a wrong password) must not leave a
+        // plausible-looking truncated file behind.
+        Finish::Stream { .. } if copied != size => Err(OpError::Io(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!("dane kończą się po {copied} z {size} bajtów"),
+        ))),
+        _ => Ok(()),
+    });
     match result {
         Ok(()) => {
             match finish {
@@ -512,19 +520,21 @@ fn pump(
     input: &mut dyn Read,
     output: &mut File,
     size_hint: u64,
-) -> Result<(), OpError> {
+) -> Result<u64, OpError> {
     // Small files get a small buffer: allocating 256 KiB per file hurts with 100k files.
     let len = usize::try_from(size_hint)
         .unwrap_or(COPY_CHUNK)
         .clamp(1, COPY_CHUNK);
     let mut buffer = vec![0u8; len];
+    let mut total = 0u64;
     loop {
         ctx.progress.check()?;
         let read = input.read(&mut buffer)?;
         if read == 0 {
-            return Ok(());
+            return Ok(total);
         }
         output.write_all(&buffer[..read])?;
+        total += read as u64;
         ctx.progress.add(read as u64);
         ctx.host.tick(ctx.progress);
     }
@@ -1468,5 +1478,24 @@ mod tests {
             !tmp.path().join("new").exists(),
             "no directory may be created"
         );
+    }
+
+    #[test]
+    fn a_stream_shorter_than_declared_is_an_error_and_leaves_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = FailOnConflict;
+        let mut writer = Writer::new(&progress, &mut host);
+        let mut data: &[u8] = b"only 10 b.";
+        let res = writer.write_file(
+            Path::new("x/f"),
+            &mut data,
+            50,
+            None,
+            None,
+            &tmp.path().join("f"),
+        );
+        assert!(matches!(res, Err(OpError::Io(ref e)) if e.kind() == io::ErrorKind::UnexpectedEof));
+        assert!(!tmp.path().join("f").exists());
     }
 }

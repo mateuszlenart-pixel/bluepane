@@ -1093,3 +1093,84 @@ fn cancelling_a_seven_z_in_the_middle_of_a_big_file_cleans_up() {
         .collect();
     assert!(leftovers.is_empty(), "{leftovers:?}");
 }
+
+/// The wrong-password check of 7z has no check value, so it relies on decoding noise failing.
+/// Every archive has a fresh random salt and IV, so repeat on many, with several kinds of
+/// content (tiny, patterned, pseudo-random, empty), to catch flaky detection. A short run
+/// keeps CI quick; `BLUEPANE_ROUNDS=1500` gives a deep run (about 40 minutes in a debug build).
+#[test]
+fn a_wrong_7z_password_is_always_recognised() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut state = 7u64;
+    let noise: Vec<u8> = (0..150_000)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 33) as u8
+        })
+        .collect();
+    write(
+        &tmp.path().join("src/small.txt"),
+        "a short note ".repeat(30),
+    );
+    write(
+        &tmp.path().join("src/pattern.bin"),
+        (0..120_000u32)
+            .map(|i| (i % 251) as u8)
+            .collect::<Vec<u8>>(),
+    );
+    write(&tmp.path().join("src/noise.bin"), &noise);
+    write(&tmp.path().join("src/empty.txt"), "");
+    let sources = [
+        tmp.path().join("src/small.txt"),
+        tmp.path().join("src/pattern.bin"),
+        tmp.path().join("src/noise.bin"),
+        tmp.path().join("src/empty.txt"),
+    ];
+    let rounds: u32 = std::env::var("BLUEPANE_ROUNDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    for round in 0..rounds {
+        for names_too in [false, true] {
+            let name = format!("r{round}-{names_too}.7z");
+            create(
+                &sources,
+                &tmp.path().join(&name),
+                &seven_with_password(names_too),
+                &Progress::new(),
+                &mut FailOnConflict,
+            )
+            .unwrap();
+            let archive = tmp.path().join(&name);
+            let dest = tmp.path().join(format!("o{round}-{names_too}"));
+            let wrong = if names_too {
+                list(&archive, Some("nope"), &Progress::new()).map(|_| ())
+            } else {
+                unpack(&archive, &dest, Some("nope"))
+            };
+            assert!(
+                matches!(wrong, Err(ArchiveError::WrongPassword)),
+                "round {round}, names hidden {names_too}: {wrong:?}"
+            );
+            if dest.exists() {
+                let wrote: Vec<String> = fs::read_dir(&dest)
+                    .map(|d| {
+                        d.filter_map(Result::ok)
+                            .map(|e| e.path().display().to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                panic!("a wrong password must write nothing, but {dest:?} exists: {wrote:?} (round {round})");
+            }
+            if !names_too {
+                let checked = verify(&archive, Some("nope"), &Progress::new());
+                assert!(
+                    matches!(checked, Err(ArchiveError::WrongPassword)),
+                    "verify, round {round}: {checked:?}"
+                );
+            }
+        }
+    }
+}

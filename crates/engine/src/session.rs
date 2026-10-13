@@ -39,6 +39,8 @@ pub struct PackForm {
     pub password_again: String,
     /// Volume size such as `100m`; empty for a single file.
     pub split: String,
+    /// 7z only: hide the file names too (needs a password).
+    pub encrypt_names: bool,
     /// What is wrong with the settings, shown in the dialog.
     pub error: Option<String>,
     sources: Vec<PathBuf>,
@@ -65,7 +67,7 @@ impl PackForm {
 /// The name without a known archive extension (`photos.zip` and `a.tar.gz` lose it).
 fn strip_archive_extension(name: &str) -> &str {
     let lower = name.to_lowercase();
-    for ext in [".tar.gz", ".tgz", ".tar", ".zip"] {
+    for ext in [".tar.gz", ".tgz", ".tar", ".zip", ".7z"] {
         if lower.ends_with(ext) {
             return &name[..name.len() - ext.len()];
         }
@@ -853,7 +855,9 @@ impl Session {
                     ));
                 }
                 if still_there {
-                    self.panels[side].open_archive(path, listing, None);
+                    // A password given to read hidden names is kept for extracting too.
+                    let known = spec.archive.as_ref().and_then(|a| a.password.clone());
+                    self.panels[side].open_archive(path, listing, known);
                 } else {
                     text.push_str(" (panel zmienił katalog: nie otwieram)");
                 }
@@ -1273,6 +1277,7 @@ impl Session {
             password: String::new(),
             password_again: String::new(),
             split: String::new(),
+            encrypt_names: false,
             error: None,
             sources,
             dest,
@@ -1301,6 +1306,7 @@ impl Session {
                 if let Some(split) = args.split {
                     form.split = split.to_string();
                 }
+                form.encrypt_names = args.encrypt_names;
                 self.start_pack(&form)
             }
         }
@@ -1349,8 +1355,16 @@ impl Session {
         }
         if !form.password.is_empty() && !form.format.supports_password() {
             return Err(EngineError(
-                "TAR nie obsługuje haseł: wybierz ZIP albo usuń hasło".into(),
+                "TAR nie obsługuje haseł: wybierz ZIP lub 7z albo usuń hasło".into(),
             ));
+        }
+        if form.encrypt_names && !form.format.can_encrypt_names() {
+            return Err(EngineError(
+                "ukrycie nazw plików jest możliwe tylko w formacie 7z".into(),
+            ));
+        }
+        if form.encrypt_names && form.password.is_empty() {
+            return Err(EngineError("ukrycie nazw plików wymaga hasła".into()));
         }
         let split = if form.split.trim().is_empty() {
             None
@@ -1367,6 +1381,7 @@ impl Session {
                     format: form.format,
                     level: form.level,
                     split,
+                    encrypt_names: form.encrypt_names,
                     output_name: output_name(name, form.format),
                 }),
                 ..ArchiveJob::default()
@@ -2888,5 +2903,134 @@ mod tests {
         );
         s.run_line(&format!("cd {}", tmp.path().display())).unwrap();
         assert!(s.active_panel().archive.is_none());
+    }
+
+    #[test]
+    fn pack_to_7z_with_hidden_names_then_open_it_with_the_password() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("selmask *.txt").unwrap();
+        s.run_line("pack vault -t7z -psekret -mhe").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("Spakowano: 2"), "{}", s.status);
+        assert!(tmp.path().join("right/vault.7z").exists());
+
+        // Open it from the other side: the names are hidden, so even opening asks.
+        s.run_line("switch").unwrap();
+        s.run_line("select vault.7z").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            matches!(
+                s.pending,
+                Some(Pending::Input {
+                    kind: InputKind::ArchivePassword,
+                    ..
+                })
+            ),
+            "{:?}",
+            s.pending
+        );
+        assert!(s.active_panel().archive.is_none());
+        type_into_dialog(&mut s, "wrong");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status_is_error, "{}", s.status);
+        assert!(
+            matches!(s.pending, Some(Pending::Input { .. })),
+            "asks again"
+        );
+
+        type_into_dialog(&mut s, "sekret");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.active_panel().archive.is_some(), "{}", s.status);
+        assert_eq!(rows(&s), ["..", "a.txt", "b.txt"]);
+
+        // The password given to read the names also covers extracting: no second prompt.
+        // (The originals are gone, so nothing clashes in the destination.)
+        for name in ["a.txt", "b.txt"] {
+            std::fs::remove_file(tmp.path().join("left").join(name)).unwrap();
+        }
+        s.run_line("refresh").unwrap();
+        s.run_line("selectall").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.pending.is_none());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("left/a.txt")).unwrap(),
+            "a"
+        );
+    }
+
+    #[test]
+    fn pack_to_7z_with_a_visible_password_asks_only_when_extracting() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack lock.7z -ppw -mx=9").unwrap();
+        assert!(s.wait_idle());
+        s.run_line("switch").unwrap();
+        s.run_line("select lock.7z").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            s.pending.is_none(),
+            "the names are readable without the password"
+        );
+        assert!(s.status.contains("zaszyfrowane"), "{}", s.status);
+        // The original is removed so that nothing clashes in the destination.
+        std::fs::remove_file(tmp.path().join("left/a.txt")).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(matches!(s.pending, Some(Pending::Input { .. })));
+        type_into_dialog(&mut s, "pw");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("left/a.txt")).unwrap(),
+            "a"
+        );
+    }
+
+    #[test]
+    fn the_pack_dialog_validates_7z_options() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack").unwrap();
+        let form = pack_form(&mut s);
+        form.format = Format::SevenZ;
+        assert_eq!(form.output_name(), "a.7z");
+        form.encrypt_names = true;
+        assert!(
+            s.run_line("confirm").unwrap_err().0.contains("hasła"),
+            "needs a password"
+        );
+        let form = pack_form(&mut s);
+        form.password = "pw".into();
+        form.password_again = "pw".into();
+        form.format = Format::Zip;
+        assert!(
+            s.run_line("confirm").unwrap_err().0.contains("7z"),
+            "ZIP cannot hide names"
+        );
+        let form = pack_form(&mut s);
+        form.format = Format::Tar;
+        form.encrypt_names = false;
+        assert!(s.run_line("confirm").unwrap_err().0.contains("TAR"));
+        let form = pack_form(&mut s);
+        form.format = Format::SevenZ;
+        form.encrypt_names = true;
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("right/a.7z").exists());
+    }
+
+    #[test]
+    fn output_names_know_the_7z_extension() {
+        assert_eq!(output_name("data", Format::SevenZ), "data.7z");
+        assert_eq!(output_name("data.7z", Format::SevenZ), "data.7z");
+        assert_eq!(output_name("data.zip", Format::SevenZ), "data.7z");
+        assert_eq!(output_name("data.7z", Format::Zip), "data.zip");
     }
 }

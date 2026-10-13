@@ -94,6 +94,48 @@ fn encrypted_files(archive: &Archive) -> Vec<bool> {
         .collect()
 }
 
+/// Checks the password by fully reading one small encrypted file (with its checksum).
+///
+/// A 7z password has no check value, and a wrong key makes the LZMA2 decoder produce noise
+/// that can look valid for a while, so the failure would otherwise only show part-way into
+/// extraction, after directories and partial files exist. The probe picks the smallest
+/// encrypted file that starts its block (cheap even in a solid archive) and reads it first.
+fn probe_password(
+    reader: &mut ArchiveReader<Joined>,
+    progress: &Progress,
+) -> Result<(), ArchiveError> {
+    let archive = reader.archive();
+    let encrypted = encrypted_files(archive);
+    let probe = archive
+        .files
+        .iter()
+        .enumerate()
+        .filter(|(index, entry)| {
+            encrypted.get(*index).copied().unwrap_or(false)
+                && entry.has_stream
+                && entry.size > 0
+                && archive.stream_map.file_block_index[*index]
+                    .is_some_and(|block| archive.stream_map.block_first_file_index[block] == *index)
+        })
+        .min_by_key(|(_, entry)| entry.size)
+        .map(|(_, entry)| (entry.name().to_string(), entry.size));
+    let Some((name, size)) = probe else {
+        return Ok(());
+    };
+    let data = reader
+        .read_file(&name)
+        .map_err(|e| match failure(progress, e, true) {
+            keep @ (ArchiveError::Cancelled | ArchiveError::Unsupported(_)) => keep,
+            _ => ArchiveError::WrongPassword,
+        })?;
+    // The library checks the checksum only when it read exactly the declared size: noise
+    // that ends early passes silently, so compare the length ourselves.
+    if data.len() as u64 != size {
+        return Err(ArchiveError::WrongPassword);
+    }
+    Ok(())
+}
+
 /// Reads the table of contents. With encrypted file names this needs the password.
 pub fn list(
     volumes: &[PathBuf],
@@ -101,8 +143,15 @@ pub fn list(
     progress: &Progress,
 ) -> Result<(Vec<Entry>, usize), ArchiveError> {
     let mut joined = Joined::open(volumes)?;
-    let archive = Archive::read(&mut joined, &password_of(password))
-        .map_err(|e| failure(progress, e, password.is_some()))?;
+    let archive = Archive::read(&mut joined, &password_of(password)).map_err(|e| {
+        let mapped = failure(progress, e, password.is_some());
+        // An encrypted header decrypted with a wrong password is just noise, which fails in
+        // many ways: with a password given, an unreadable header means the password.
+        match mapped {
+            ArchiveError::Corrupt(_) if password.is_some() => ArchiveError::WrongPassword,
+            other => other,
+        }
+    })?;
     let encrypted = encrypted_files(&archive);
     let mut raw = Vec::new();
     let mut unsafe_skipped = 0;
@@ -167,6 +216,22 @@ pub fn extract(
         }
     }
 
+    if had_password {
+        probe_password(&mut reader, progress)?;
+    }
+
+    let encrypted_names: std::collections::HashSet<String> = {
+        let flags = encrypted_files(reader.archive());
+        reader
+            .archive()
+            .files
+            .iter()
+            .zip(flags)
+            .filter(|(_, encrypted)| *encrypted)
+            .map(|(entry, _)| entry.name().to_string())
+            .collect()
+    };
+    let mut wrote_encrypted = false;
     let mut special_skipped = 0u64;
     let mut stopped: Option<ArchiveError> = None;
     let result = reader.for_each_entries(|entry, data| {
@@ -206,10 +271,26 @@ pub fn extract(
                 &target,
             )
         };
+        let is_encrypted = encrypted_names.contains(entry.name());
         match written {
-            Ok(()) => Ok(true),
+            Ok(()) => {
+                wrote_encrypted |= is_encrypted && !entry.is_directory();
+                Ok(true)
+            }
             Err(error) => {
-                stopped = Some(op_failure(progress, error, had_password));
+                // A wrong 7z password only shows as garbage while decoding: a failure on the
+                // first encrypted file, with a password given, means the password.
+                stopped = Some(
+                    if is_encrypted
+                        && had_password
+                        && !wrote_encrypted
+                        && matches!(error, bluepane_ops::OpError::Io(_))
+                    {
+                        ArchiveError::WrongPassword
+                    } else {
+                        op_failure(progress, error, had_password)
+                    },
+                );
                 Err(Error::Other("stopped".into()))
             }
         }
@@ -217,7 +298,19 @@ pub fn extract(
     if let Some(error) = stopped {
         return Err(error);
     }
-    result.map_err(|e| failure(progress, e, had_password))?;
+    result.map_err(|e| {
+        let mapped = failure(progress, e, had_password);
+        match mapped {
+            ArchiveError::Cancelled
+            | ArchiveError::NeedsPassword
+            | ArchiveError::Unsupported(_) => mapped,
+            // The decoder itself failed before the first encrypted file came out: noise.
+            _ if had_password && !encrypted_names.is_empty() && !wrote_encrypted => {
+                ArchiveError::WrongPassword
+            }
+            other => other,
+        }
+    })?;
     Ok(special_skipped)
 }
 
@@ -231,8 +324,12 @@ pub fn verify(
     let had_password = password.is_some();
     let mut reader = ArchiveReader::new(Joined::open(volumes)?, password_of(password))
         .map_err(|e| failure(progress, e, had_password))?;
-    if password.is_none() && encrypted_files(reader.archive()).iter().any(|&e| e) {
+    let any_encrypted = encrypted_files(reader.archive()).iter().any(|&e| e);
+    if password.is_none() && any_encrypted {
         return Err(ArchiveError::NeedsPassword);
+    }
+    if had_password {
+        probe_password(&mut reader, progress)?;
     }
     let mut report = VerifyReport::default();
     let mut buffer = vec![0u8; 64 * 1024];
@@ -267,13 +364,12 @@ pub fn verify(
         Err(error) => match failure(progress, error, had_password) {
             ArchiveError::Cancelled => Err(ArchiveError::Cancelled),
             ArchiveError::NeedsPassword => Err(ArchiveError::NeedsPassword),
-            // A 7z password has no check value: wrong data and a wrong password look the same.
-            // Failing on the very first file with a password given means the password.
-            ArchiveError::WrongPassword
-                if damaged.is_none() || (had_password && report.files == 0) =>
-            {
+            // A 7z password has no check value: wrong data and a wrong password look the
+            // same. Failing on the very first file with a password given means the password.
+            _ if had_password && any_encrypted && report.files == 0 => {
                 Err(ArchiveError::WrongPassword)
             }
+            ArchiveError::WrongPassword if damaged.is_none() => Err(ArchiveError::WrongPassword),
             other => {
                 report
                     .damaged
