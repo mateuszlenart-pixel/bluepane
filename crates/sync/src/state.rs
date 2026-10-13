@@ -11,7 +11,8 @@ use std::io;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use crate::scan::{Kind, Node, Tree};
+use crate::compare::{Category, Diff};
+use crate::scan::{Kind, Node};
 
 /// File name of the snapshot inside each synchronized folder (never synchronized itself).
 pub const STATE_FILE: &str = ".bluepane-sync.db";
@@ -25,12 +26,18 @@ pub struct SyncState {
 }
 
 impl SyncState {
-    /// A snapshot of two freshly scanned (and now equal) folders.
-    pub fn from_trees(left: &Tree, right: &Tree) -> SyncState {
-        SyncState {
-            left: left.nodes.clone(),
-            right: right.nodes.clone(),
+    /// A snapshot of the items that are equal on both sides right now. Items that still
+    /// differ (skipped, in conflict, failed) are deliberately left out: remembering them
+    /// would make the next run believe nobody ever touched them.
+    pub fn from_diffs(diffs: &[Diff]) -> SyncState {
+        let mut state = SyncState::default();
+        for diff in diffs.iter().filter(|d| d.category == Category::Equal) {
+            if let (Some(l), Some(r)) = (diff.left, diff.right) {
+                state.left.insert(diff.path.clone(), l);
+                state.right.insert(diff.path.clone(), r);
+            }
         }
+        state
     }
 
     /// Writes the snapshot into both folders. Failing to write is not fatal for the sync

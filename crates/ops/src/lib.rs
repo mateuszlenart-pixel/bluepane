@@ -491,6 +491,11 @@ fn write_stream(
         Ok(()) => {
             match finish {
                 Finish::Copy(meta) => {
+                    // The copy keeps the original's modification time (comparisons and
+                    // synchronization rely on it), set before a read-only mode is applied.
+                    if let Ok(time) = meta.modified() {
+                        let _ = output.set_modified(time);
+                    }
                     let _ = output.set_permissions(meta.permissions());
                 }
                 Finish::Stream { mode, modified } => {
@@ -790,6 +795,23 @@ pub fn delete_to_trash(path: &Path) -> Result<(), OpError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_keeps_the_modification_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("a.txt");
+        fs::write(&src, "x").unwrap();
+        let old = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_500_000_000);
+        File::options()
+            .write(true)
+            .open(&src)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        fs::create_dir(tmp.path().join("d")).unwrap();
+        let copy = super::copy(&src, &tmp.path().join("d"), &Progress::new()).unwrap();
+        assert_eq!(fs::metadata(copy).unwrap().modified().unwrap(), old);
+    }
 
     fn tree() -> tempfile::TempDir {
         let tmp = tempfile::tempdir().unwrap();
