@@ -30,6 +30,7 @@ fn opts(format: Format) -> CreateOptions {
         level: Level::Normal,
         password: None,
         split: None,
+        encrypt_names: false,
     }
 }
 
@@ -101,6 +102,7 @@ fn every_format_round_trips() {
         (Format::Zip, "out.zip"),
         (Format::Tar, "out.tar"),
         (Format::TarGz, "out.tar.gz"),
+        (Format::SevenZ, "out.7z"),
     ] {
         let tmp = tempfile::tempdir().unwrap();
         let report = make(tmp.path(), name, &opts(format)).unwrap();
@@ -108,7 +110,7 @@ fn every_format_round_trips() {
         assert_eq!(report.files, 4);
         assert!(!tmp.path().join(format!(".{name}.bluepane-tmp")).exists());
 
-        let listing = list(&tmp.path().join(name), &Progress::new()).unwrap();
+        let listing = list(&tmp.path().join(name), None, &Progress::new()).unwrap();
         assert_eq!(listing.format, format);
         let paths: Vec<_> = listing.entries.iter().map(|e| e.path.as_str()).collect();
         for expected in [
@@ -138,7 +140,11 @@ fn every_format_round_trips() {
 #[test]
 fn modification_times_survive_a_round_trip() {
     let stamp = UNIX_EPOCH + Duration::from_secs(1_600_000_000);
-    for (format, name) in [(Format::Zip, "t.zip"), (Format::TarGz, "t.tar.gz")] {
+    for (format, name) in [
+        (Format::Zip, "t.zip"),
+        (Format::TarGz, "t.tar.gz"),
+        (Format::SevenZ, "t.7z"),
+    ] {
         let tmp = tempfile::tempdir().unwrap();
         let src = tmp.path().join("f.txt");
         write(&src, "x");
@@ -209,7 +215,7 @@ fn zip_passwords_protect_content_but_not_names() {
     let archive = tmp.path().join("p.zip");
 
     // The table of contents needs no password, and shows which files are encrypted.
-    let listing = list(&archive, &Progress::new()).unwrap();
+    let listing = list(&archive, None, &Progress::new()).unwrap();
     assert!(listing.has_encrypted());
     assert!(listing.find("photos/a.txt").unwrap().encrypted);
     assert!(!listing.find("photos").unwrap().encrypted);
@@ -261,7 +267,7 @@ fn an_empty_password_means_no_encryption() {
         ..opts(Format::Zip)
     };
     make(tmp.path(), "p.zip", &options).unwrap();
-    assert!(!list(&tmp.path().join("p.zip"), &Progress::new())
+    assert!(!list(&tmp.path().join("p.zip"), None, &Progress::new())
         .unwrap()
         .has_encrypted());
 }
@@ -282,7 +288,11 @@ fn tar_cannot_be_password_protected() {
 
 #[test]
 fn split_archives_are_cut_into_volumes_and_read_back_from_the_first() {
-    for (format, name) in [(Format::Zip, "s.zip"), (Format::TarGz, "s.tar.gz")] {
+    for (format, name) in [
+        (Format::Zip, "s.zip"),
+        (Format::TarGz, "s.tar.gz"),
+        (Format::SevenZ, "s.7z"),
+    ] {
         let tmp = tempfile::tempdir().unwrap();
         let options = CreateOptions {
             split: Some(100_000),
@@ -309,7 +319,7 @@ fn split_archives_are_cut_into_volumes_and_read_back_from_the_first() {
         let first = tmp.path().join(format!("{name}.001"));
         assert_eq!(detect(&first), Some(format));
         assert_eq!(
-            list(&first, &Progress::new()).unwrap().volumes,
+            list(&first, None, &Progress::new()).unwrap().volumes,
             report.volumes.len()
         );
         let dest = tmp.path().join("out");
@@ -348,7 +358,7 @@ fn a_missing_volume_makes_the_archive_unreadable() {
     make(tmp.path(), "m.zip", &options).unwrap();
     fs::remove_file(tmp.path().join("m.zip.003")).unwrap();
     // The numbering now breaks after volume 2, so the end of the archive is missing.
-    let err = list(&tmp.path().join("m.zip.001"), &Progress::new()).unwrap_err();
+    let err = list(&tmp.path().join("m.zip.001"), None, &Progress::new()).unwrap_err();
     assert!(
         matches!(err, ArchiveError::Corrupt(_) | ArchiveError::Io(_)),
         "{err}"
@@ -384,7 +394,7 @@ fn an_existing_archive_is_handled_through_the_host() {
 
     let replaced = run(vec![Resolution::Overwrite]).unwrap();
     assert_eq!(replaced.volumes, std::slice::from_ref(&out));
-    assert!(list(&out, &Progress::new()).is_ok());
+    assert!(list(&out, None, &Progress::new()).is_ok());
 }
 
 #[test]
@@ -502,7 +512,7 @@ fn the_archive_is_never_packed_into_itself() {
     )
     .unwrap();
     // Packing again must not pick up the first archive's bytes either way.
-    let listing = list(&out, &Progress::new()).unwrap();
+    let listing = list(&out, None, &Progress::new()).unwrap();
     let files: Vec<_> = listing
         .entries
         .iter()
@@ -599,7 +609,7 @@ fn hostile_zip_names_never_write_outside_the_destination() {
         }
         zip.finish().unwrap();
     }
-    let listing = list(&archive, &Progress::new()).unwrap();
+    let listing = list(&archive, None, &Progress::new()).unwrap();
     assert_eq!(listing.unsafe_skipped, 3);
     assert_eq!(listing.entries.len(), 1);
 
@@ -639,7 +649,7 @@ fn hostile_tar_names_never_write_outside_the_destination() {
     bytes.extend_from_slice(&[0u8; 1024]);
     let archive = tmp.path().join("evil.tar");
     fs::write(&archive, bytes).unwrap();
-    let listing = list(&archive, &Progress::new()).unwrap();
+    let listing = list(&archive, None, &Progress::new()).unwrap();
     assert_eq!(listing.unsafe_skipped, 2);
     let dest = tmp.path().join("nested/out");
     unpack(&archive, &dest, None).unwrap();
@@ -669,7 +679,7 @@ fn links_in_a_tar_are_listed_but_not_extracted() {
             .unwrap();
         builder.finish().unwrap();
     }
-    let listing = list(&archive, &Progress::new()).unwrap();
+    let listing = list(&archive, None, &Progress::new()).unwrap();
     assert!(listing.find("link").unwrap().special);
     let dest = tmp.path().join("out");
     let report = extract(
@@ -767,7 +777,7 @@ fn unknown_and_broken_files_are_clear_errors() {
     let tmp = tempfile::tempdir().unwrap();
     write(&tmp.path().join("notes.txt"), "x");
     assert!(matches!(
-        list(&tmp.path().join("notes.txt"), &Progress::new()),
+        list(&tmp.path().join("notes.txt"), None, &Progress::new()),
         Err(ArchiveError::Unsupported(_))
     ));
     write(
@@ -775,12 +785,12 @@ fn unknown_and_broken_files_are_clear_errors() {
         "this is not a zip file at all",
     );
     assert!(matches!(
-        list(&tmp.path().join("fake.zip"), &Progress::new()),
+        list(&tmp.path().join("fake.zip"), None, &Progress::new()),
         Err(ArchiveError::Corrupt(_))
     ));
     write(&tmp.path().join("fake.tar.gz"), "this is not gzip");
-    assert!(list(&tmp.path().join("fake.tar.gz"), &Progress::new()).is_err());
-    assert!(list(&tmp.path().join("missing.zip"), &Progress::new()).is_err());
+    assert!(list(&tmp.path().join("fake.tar.gz"), None, &Progress::new()).is_err());
+    assert!(list(&tmp.path().join("missing.zip"), None, &Progress::new()).is_err());
 }
 
 #[test]
@@ -788,7 +798,7 @@ fn listing_progress_counts_the_archive_bytes() {
     let tmp = tempfile::tempdir().unwrap();
     make(tmp.path(), "p.tar.gz", &opts(Format::TarGz)).unwrap();
     let progress = Progress::new();
-    let listing = list(&tmp.path().join("p.tar.gz"), &progress).unwrap();
+    let listing = list(&tmp.path().join("p.tar.gz"), None, &progress).unwrap();
     assert_eq!(progress.bytes_total(), listing.packed_size);
     assert!(progress.bytes_done() > 0 && progress.bytes_done() <= listing.packed_size);
     assert_eq!(progress.current(), "p.tar.gz");
@@ -798,7 +808,7 @@ fn listing_progress_counts_the_archive_bytes() {
 fn measure_matches_what_extraction_writes() {
     let tmp = tempfile::tempdir().unwrap();
     make(tmp.path(), "m.zip", &opts(Format::Zip)).unwrap();
-    let listing = list(&tmp.path().join("m.zip"), &Progress::new()).unwrap();
+    let listing = list(&tmp.path().join("m.zip"), None, &Progress::new()).unwrap();
     assert_eq!(listing.measure(&[]), (5 + 3_000_000 + 12 + 6, 4));
     assert_eq!(listing.measure(&["photos/sub".to_string()]), (3_000_000, 1));
     let progress = Progress::new();
@@ -816,4 +826,351 @@ fn measure_matches_what_extraction_writes() {
     .unwrap();
     assert_eq!(progress.bytes_done(), 5 + 3_000_000 + 12 + 6);
     assert_eq!(progress.items_done(), 4);
+}
+
+// ---- 7z -----------------------------------------------------------------------------
+
+fn seven_with_password(names_too: bool) -> CreateOptions {
+    CreateOptions {
+        password: Some("sekret".into()),
+        encrypt_names: names_too,
+        ..opts(Format::SevenZ)
+    }
+}
+
+#[test]
+fn seven_z_passwords_protect_content_and_can_hide_the_names() {
+    let tmp = tempfile::tempdir().unwrap();
+    make(tmp.path(), "visible.7z", &seven_with_password(false)).unwrap();
+    make(tmp.path(), "hidden.7z", &seven_with_password(true)).unwrap();
+
+    // Names left visible: the table of contents needs no password, the content does.
+    let visible = tmp.path().join("visible.7z");
+    let listing = list(&visible, None, &Progress::new()).unwrap();
+    assert!(listing.has_encrypted());
+    assert!(listing.find("photos/a.txt").unwrap().encrypted);
+    let dest = tmp.path().join("out1");
+    assert!(matches!(
+        unpack(&visible, &dest, None),
+        Err(ArchiveError::NeedsPassword)
+    ));
+    assert!(matches!(
+        unpack(&visible, &dest, Some("wrong")),
+        Err(ArchiveError::WrongPassword)
+    ));
+    assert!(!dest.exists(), "a failed attempt creates nothing");
+    unpack(&visible, &dest, Some("sekret")).unwrap();
+    assert_sample_extracted(&dest);
+
+    // Names hidden: even listing needs the password.
+    let hidden = tmp.path().join("hidden.7z");
+    assert!(matches!(
+        list(&hidden, None, &Progress::new()),
+        Err(ArchiveError::NeedsPassword)
+    ));
+    assert!(list(&hidden, Some("wrong"), &Progress::new()).is_err());
+    let listing = list(&hidden, Some("sekret"), &Progress::new()).unwrap();
+    assert!(listing.find("photos/sub/big.bin").is_some());
+    let dest = tmp.path().join("out2");
+    assert!(matches!(
+        unpack(&hidden, &dest, None),
+        Err(ArchiveError::NeedsPassword)
+    ));
+    unpack(&hidden, &dest, Some("sekret")).unwrap();
+    assert_sample_extracted(&dest);
+}
+
+#[test]
+fn seven_z_options_that_make_no_sense_are_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Hiding names needs a password...
+    let no_password = CreateOptions {
+        encrypt_names: true,
+        ..opts(Format::SevenZ)
+    };
+    assert!(matches!(
+        make(tmp.path(), "a.7z", &no_password),
+        Err(ArchiveError::Unsupported(_))
+    ));
+    // ...and a format that can do it.
+    let zip = CreateOptions {
+        password: Some("pw".into()),
+        encrypt_names: true,
+        ..opts(Format::Zip)
+    };
+    assert!(matches!(
+        make(tmp.path(), "a.zip", &zip),
+        Err(ArchiveError::Unsupported(_))
+    ));
+    assert!(!tmp.path().join("a.7z").exists() && !tmp.path().join("a.zip").exists());
+}
+
+#[test]
+fn split_seven_z_with_hidden_names_round_trips() {
+    let tmp = tempfile::tempdir().unwrap();
+    let options = CreateOptions {
+        split: Some(300_000),
+        level: Level::Store,
+        ..seven_with_password(true)
+    };
+    let report = make(tmp.path(), "p.7z", &options).unwrap();
+    assert!(report.volumes.len() >= 8);
+    let first = tmp.path().join("p.7z.001");
+    assert_eq!(detect(&first), Some(Format::SevenZ));
+    assert!(matches!(
+        list(&first, None, &Progress::new()),
+        Err(ArchiveError::NeedsPassword)
+    ));
+    let dest = tmp.path().join("out");
+    extract(
+        &first,
+        &Selection {
+            strip: "",
+            entries: &[],
+        },
+        &dest,
+        Some("sekret"),
+        &Progress::new(),
+        &mut FailOnConflict,
+    )
+    .unwrap();
+    assert_sample_extracted(&dest);
+}
+
+#[test]
+fn seven_z_verification_reports_passwords_and_damage() {
+    let tmp = tempfile::tempdir().unwrap();
+    make(tmp.path(), "v.7z", &seven_with_password(false)).unwrap();
+    let archive = tmp.path().join("v.7z");
+    assert!(matches!(
+        verify(&archive, None, &Progress::new()),
+        Err(ArchiveError::NeedsPassword)
+    ));
+    assert!(matches!(
+        verify(&archive, Some("nope"), &Progress::new()),
+        Err(ArchiveError::WrongPassword)
+    ));
+    let ok = verify(&archive, Some("sekret"), &Progress::new()).unwrap();
+    assert!(ok.damaged.is_empty());
+    assert_eq!(ok.files, 4);
+
+    // A stored (uncompressed) archive: flipping a data byte breaks that file's checksum.
+    let stored = CreateOptions {
+        level: Level::Store,
+        ..opts(Format::SevenZ)
+    };
+    make(tmp.path(), "d.7z", &stored).unwrap();
+    let path = tmp.path().join("d.7z");
+    let mut bytes = fs::read(&path).unwrap();
+    let at = bytes.windows(5).position(|w| w == b"alpha").unwrap();
+    bytes[at] ^= 0xff;
+    fs::write(&path, bytes).unwrap();
+    let report = verify(&path, None, &Progress::new()).unwrap();
+    assert_eq!(report.damaged.len(), 1, "{:?}", report.damaged);
+    assert!(report.files < 4);
+}
+
+#[test]
+fn a_truncated_seven_z_is_corrupt() {
+    let tmp = tempfile::tempdir().unwrap();
+    make(tmp.path(), "t.7z", &opts(Format::SevenZ)).unwrap();
+    let path = tmp.path().join("t.7z");
+    let bytes = fs::read(&path).unwrap();
+    fs::write(&path, &bytes[..bytes.len() / 2]).unwrap();
+    assert!(list(&path, None, &Progress::new()).is_err());
+    fs::write(&path, b"7z but not really").unwrap();
+    assert!(matches!(
+        list(&path, None, &Progress::new()),
+        Err(ArchiveError::Corrupt(_)) | Err(ArchiveError::Io(_))
+    ));
+}
+
+#[test]
+fn hostile_seven_z_names_never_write_outside_the_destination() {
+    use sevenz_rust2::{ArchiveEntry, ArchiveWriter};
+    let tmp = tempfile::tempdir().unwrap();
+    let archive = tmp.path().join("evil.7z");
+    {
+        let mut writer = ArchiveWriter::new(fs::File::create(&archive).unwrap()).unwrap();
+        for name in ["../evil.txt", "/abs.txt", "ok.txt"] {
+            writer
+                .push_archive_entry(ArchiveEntry::new_file(name), Some(&b"data"[..]))
+                .unwrap();
+        }
+        writer.finish().unwrap();
+    }
+    let listing = list(&archive, None, &Progress::new()).unwrap();
+    assert_eq!(listing.unsafe_skipped, 2);
+    let dest = tmp.path().join("nested/out");
+    unpack(&archive, &dest, None).unwrap();
+    assert!(dest.join("ok.txt").exists());
+    assert!(!tmp.path().join("evil.txt").exists());
+    assert!(!tmp.path().join("nested/evil.txt").exists());
+    assert!(!Path::new("/abs.txt").exists());
+}
+
+/// Reports a fixed Unix mode for every file, as a platform that has modes would.
+struct Modes;
+
+impl Host for Modes {
+    fn conflict(&mut self, _conflict: &Conflict) -> Result<Resolution, OpError> {
+        Err(OpError::Cancelled)
+    }
+
+    fn file_mode(&self, _path: &Path) -> Option<u32> {
+        Some(0o750)
+    }
+}
+
+#[test]
+fn unix_modes_are_stored_and_listed_for_every_format() {
+    for (format, name) in [
+        (Format::Zip, "m.zip"),
+        (Format::Tar, "m.tar"),
+        (Format::TarGz, "m.tar.gz"),
+        (Format::SevenZ, "m.7z"),
+    ] {
+        let tmp = tempfile::tempdir().unwrap();
+        write(&tmp.path().join("src/f.sh"), "#!/bin/sh\n");
+        create(
+            &[tmp.path().join("src/f.sh")],
+            &tmp.path().join(name),
+            &opts(format),
+            &Progress::new(),
+            &mut Modes,
+        )
+        .unwrap();
+        let listing = list(&tmp.path().join(name), None, &Progress::new()).unwrap();
+        assert_eq!(
+            listing.find("f.sh").unwrap().mode,
+            Some(0o750),
+            "{format:?}"
+        );
+    }
+}
+
+#[test]
+fn cancelling_a_seven_z_in_the_middle_of_a_big_file_cleans_up() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut state = 99u64;
+    let data: Vec<u8> = (0..16 * 1024 * 1024)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 33) as u8
+        })
+        .collect();
+    write(&tmp.path().join("src/big.bin"), &data);
+    let progress = Progress::new();
+    let canceller = {
+        let progress = progress.clone();
+        std::thread::spawn(move || {
+            while progress.bytes_done() == 0 {
+                std::thread::yield_now();
+            }
+            progress.cancel();
+        })
+    };
+    let options = CreateOptions {
+        level: Level::Maximum,
+        ..opts(Format::SevenZ)
+    };
+    let result = create(
+        &[tmp.path().join("src/big.bin")],
+        &tmp.path().join("big.7z"),
+        &options,
+        &progress,
+        &mut FailOnConflict,
+    );
+    canceller.join().unwrap();
+    assert!(matches!(result, Err(ArchiveError::Cancelled)), "{result:?}");
+    let leftovers: Vec<_> = fs::read_dir(tmp.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n != "src")
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+}
+
+/// The wrong-password check of 7z has no check value, so it relies on decoding noise failing.
+/// Every archive has a fresh random salt and IV, so repeat on many, with several kinds of
+/// content (tiny, patterned, pseudo-random, empty), to catch flaky detection. A short run
+/// keeps CI quick; `BLUEPANE_ROUNDS=1500` gives a deep run (about 40 minutes in a debug build).
+#[test]
+fn a_wrong_7z_password_is_always_recognised() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut state = 7u64;
+    let noise: Vec<u8> = (0..150_000)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 33) as u8
+        })
+        .collect();
+    write(
+        &tmp.path().join("src/small.txt"),
+        "a short note ".repeat(30),
+    );
+    write(
+        &tmp.path().join("src/pattern.bin"),
+        (0..120_000u32)
+            .map(|i| (i % 251) as u8)
+            .collect::<Vec<u8>>(),
+    );
+    write(&tmp.path().join("src/noise.bin"), &noise);
+    write(&tmp.path().join("src/empty.txt"), "");
+    let sources = [
+        tmp.path().join("src/small.txt"),
+        tmp.path().join("src/pattern.bin"),
+        tmp.path().join("src/noise.bin"),
+        tmp.path().join("src/empty.txt"),
+    ];
+    let rounds: u32 = std::env::var("BLUEPANE_ROUNDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8);
+    for round in 0..rounds {
+        for names_too in [false, true] {
+            let name = format!("r{round}-{names_too}.7z");
+            create(
+                &sources,
+                &tmp.path().join(&name),
+                &seven_with_password(names_too),
+                &Progress::new(),
+                &mut FailOnConflict,
+            )
+            .unwrap();
+            let archive = tmp.path().join(&name);
+            let dest = tmp.path().join(format!("o{round}-{names_too}"));
+            let wrong = if names_too {
+                list(&archive, Some("nope"), &Progress::new()).map(|_| ())
+            } else {
+                unpack(&archive, &dest, Some("nope"))
+            };
+            assert!(
+                matches!(wrong, Err(ArchiveError::WrongPassword)),
+                "round {round}, names hidden {names_too}: {wrong:?}"
+            );
+            if dest.exists() {
+                let wrote: Vec<String> = fs::read_dir(&dest)
+                    .map(|d| {
+                        d.filter_map(Result::ok)
+                            .map(|e| e.path().display().to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                panic!("a wrong password must write nothing, but {dest:?} exists: {wrote:?} (round {round})");
+            }
+            if !names_too {
+                let checked = verify(&archive, Some("nope"), &Progress::new());
+                assert!(
+                    matches!(checked, Err(ArchiveError::WrongPassword)),
+                    "verify, round {round}: {checked:?}"
+                );
+            }
+        }
+    }
 }

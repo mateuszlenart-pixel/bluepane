@@ -197,6 +197,7 @@ impl BluepaneUi {
                         ui.horizontal(|ui| {
                             for (format, label) in [
                                 (ArchiveFormat::Zip, "ZIP"),
+                                (ArchiveFormat::SevenZ, "7Z"),
                                 (ArchiveFormat::Tar, "TAR"),
                                 (ArchiveFormat::TarGz, "TAR.GZ"),
                             ] {
@@ -245,7 +246,14 @@ impl BluepaneUi {
                         ui.end_row();
                         if !encryptable {
                             ui.label("");
-                            ui.label(RichText::new("TAR nie obsługuje haseł (użyj ZIP)").weak());
+                            ui.label(
+                                RichText::new("TAR nie obsługuje haseł (użyj ZIP lub 7Z)").weak(),
+                            );
+                            ui.end_row();
+                        }
+                        if form.format.can_encrypt_names() {
+                            ui.label("");
+                            ui.checkbox(&mut form.encrypt_names, "Szyfruj też nazwy plików");
                             ui.end_row();
                         }
 
@@ -567,7 +575,7 @@ impl BluepaneUi {
         // Conflicts and name dialogs have their own window; only yes/no questions use the bar.
         let simple_question = matches!(
             self.session.pending,
-            Some(Pending::Duplicate(_) | Pending::ConfirmDelete(_))
+            Some(Pending::Duplicate(_) | Pending::ConfirmDelete(_) | Pending::ConfirmRemove { .. })
         );
         if simple_question {
             ui.label(RichText::new(&self.session.status).color(Color32::YELLOW));

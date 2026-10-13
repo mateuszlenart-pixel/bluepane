@@ -54,6 +54,7 @@ fn opts(format: Format) -> CreateOptions {
         level: Level::Normal,
         password: None,
         split: None,
+        encrypt_names: false,
     }
 }
 
@@ -208,7 +209,9 @@ fn zip_made_by_info_zip_with_a_password_opens_here() {
         tmp.path()
     )));
     let archive = tmp.path().join("sys.zip");
-    assert!(list(&archive, &Progress::new()).unwrap().has_encrypted());
+    assert!(list(&archive, None, &Progress::new())
+        .unwrap()
+        .has_encrypted());
     let out = tmp.path().join("out");
     assert!(matches!(
         unpack_mine(&archive, &out, None),
@@ -298,8 +301,254 @@ fn zip_with_a_compression_method_this_build_lacks_is_a_clear_error() {
     }
     let archive = tmp.path().join("bz.zip");
     // The table of contents is still readable...
-    assert!(list(&archive, &Progress::new()).is_ok());
+    assert!(list(&archive, None, &Progress::new()).is_ok());
     // ...and extracting says what is wrong instead of failing obscurely.
     let err = unpack_mine(&archive, &tmp.path().join("out"), None).unwrap_err();
     assert!(matches!(err, ArchiveError::Unsupported(_)), "{err}");
+}
+
+#[test]
+fn seven_z_made_here_passes_seven_zip_including_hidden_names() {
+    let Some(z) = seven_zip() else { return };
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tree(tmp.path());
+    let plain = opts(Format::SevenZ);
+    let secret = CreateOptions {
+        password: Some("sekret".into()),
+        ..opts(Format::SevenZ)
+    };
+    let hidden = CreateOptions {
+        password: Some("sekret".into()),
+        encrypt_names: true,
+        ..opts(Format::SevenZ)
+    };
+    mine(
+        std::slice::from_ref(&data),
+        &tmp.path().join("plain.7z"),
+        &plain,
+    );
+    mine(
+        std::slice::from_ref(&data),
+        &tmp.path().join("secret.7z"),
+        &secret,
+    );
+    mine(
+        std::slice::from_ref(&data),
+        &tmp.path().join("hidden.7z"),
+        &hidden,
+    );
+
+    assert!(ok(&run(&z, &["t", "plain.7z"], tmp.path())), "plain");
+    assert!(ok(&run(&z, &["x", "plain.7z", "-oout1", "-y"], tmp.path())));
+    same_tree(&data, &tmp.path().join("out1/data"));
+
+    assert!(
+        ok(&run(&z, &["t", "secret.7z", "-psekret"], tmp.path())),
+        "password"
+    );
+    assert!(
+        !ok(&run(&z, &["t", "secret.7z", "-pwrong"], tmp.path())),
+        "wrong password"
+    );
+    // Names stay readable without the password when only the content is encrypted...
+    let listing = run(&z, &["l", "secret.7z"], tmp.path());
+    assert!(String::from_utf8_lossy(&listing.stdout).contains("a.txt"));
+
+    // ...and are hidden when the header is encrypted.
+    assert!(
+        ok(&run(&z, &["t", "hidden.7z", "-psekret"], tmp.path())),
+        "hidden names"
+    );
+    let hidden_listing = run(&z, &["l", "hidden.7z", "-pwrong"], tmp.path());
+    assert!(!String::from_utf8_lossy(&hidden_listing.stdout).contains("a.txt"));
+    assert!(ok(&run(
+        &z,
+        &["x", "hidden.7z", "-psekret", "-oout2", "-y"],
+        tmp.path()
+    )));
+    same_tree(&data, &tmp.path().join("out2/data"));
+}
+
+#[test]
+fn split_seven_z_made_here_opens_in_seven_zip() {
+    let Some(z) = seven_zip() else { return };
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tree(tmp.path());
+    let options = CreateOptions {
+        split: Some(30_000),
+        level: Level::Store,
+        password: Some("pw".into()),
+        ..opts(Format::SevenZ)
+    };
+    mine(
+        std::slice::from_ref(&data),
+        &tmp.path().join("v.7z"),
+        &options,
+    );
+    assert!(tmp.path().join("v.7z.002").exists());
+    let out = run(&z, &["x", "v.7z.001", "-ppw", "-oout", "-y"], tmp.path());
+    assert!(ok(&out), "{}", String::from_utf8_lossy(&out.stdout));
+    same_tree(&data, &tmp.path().join("out/data"));
+}
+
+#[test]
+fn seven_z_made_by_seven_zip_opens_here() {
+    let Some(z) = seven_zip() else { return };
+    let tmp = tempfile::tempdir().unwrap();
+    let data = tree(tmp.path());
+    // Default (solid LZMA2), non-solid, stored, AES with encrypted names, split volumes.
+    assert!(ok(&run(&z, &["a", "-t7z", "solid.7z", "data"], tmp.path())));
+    assert!(ok(&run(
+        &z,
+        &["a", "-t7z", "-ms=off", "loose.7z", "data"],
+        tmp.path()
+    )));
+    assert!(ok(&run(
+        &z,
+        &["a", "-t7z", "-mx=0", "stored.7z", "data"],
+        tmp.path()
+    )));
+    assert!(ok(&run(
+        &z,
+        &["a", "-t7z", "-ppw1", "-mhe=on", "hidden.7z", "data"],
+        tmp.path()
+    )));
+    assert!(ok(&run(
+        &z,
+        &["a", "-t7z", "-ppw1", "aes.7z", "data"],
+        tmp.path()
+    )));
+    assert!(ok(&run(
+        &z,
+        &["a", "-t7z", "-mx=0", "-v30k", "vol.7z", "data"],
+        tmp.path()
+    )));
+
+    let cases: [(&str, Option<&str>); 6] = [
+        ("solid.7z", None),
+        ("loose.7z", None),
+        ("stored.7z", None),
+        ("hidden.7z", Some("pw1")),
+        ("aes.7z", Some("pw1")),
+        ("vol.7z.001", None),
+    ];
+    for (name, password) in cases {
+        let archive = tmp.path().join(name);
+        let out = tmp.path().join(format!("out-{name}"));
+        let listing = list(&archive, password, &Progress::new())
+            .unwrap_or_else(|e| panic!("listing {name}: {e}"));
+        assert!(listing.find("data/sub/b.bin").is_some(), "{name}");
+        unpack_mine(&archive, &out, password).unwrap_or_else(|e| panic!("{name}: {e}"));
+        same_tree(&data, &out.join("data"));
+    }
+    assert!(matches!(
+        list(&tmp.path().join("hidden.7z"), None, &Progress::new()),
+        Err(ArchiveError::NeedsPassword)
+    ));
+    assert!(matches!(
+        unpack_mine(&tmp.path().join("aes.7z"), &tmp.path().join("o"), None),
+        Err(ArchiveError::NeedsPassword)
+    ));
+    assert!(matches!(
+        unpack_mine(
+            &tmp.path().join("aes.7z"),
+            &tmp.path().join("o"),
+            Some("bad")
+        ),
+        Err(ArchiveError::WrongPassword)
+    ));
+}
+
+#[test]
+fn seven_z_with_methods_this_build_lacks_is_a_clear_error() {
+    let Some(z) = seven_zip() else { return };
+    let tmp = tempfile::tempdir().unwrap();
+    tree(tmp.path());
+    for (method, name) in [("BZip2", "bz.7z"), ("PPMd", "ppmd.7z")] {
+        let made = run(
+            &z,
+            &["a", "-t7z", &format!("-m0={method}"), name, "data"],
+            tmp.path(),
+        );
+        if !ok(&made) {
+            continue;
+        }
+        let err = unpack_mine(&tmp.path().join(name), &tmp.path().join("out"), None).unwrap_err();
+        assert!(
+            matches!(err, ArchiveError::Unsupported(_)),
+            "{method}: {err}"
+        );
+    }
+}
+
+#[test]
+fn archives_made_by_real_tools_can_be_changed_and_stay_valid() {
+    use bluepane_archive::{modify, Change};
+
+    let tmp = tempfile::tempdir().unwrap();
+    tree(tmp.path());
+    fs::write(tmp.path().join("new.txt"), "added here").unwrap();
+    let mut cases: Vec<(&str, &str, Vec<&str>)> = Vec::new();
+    if find_tool(&["zip"]).is_some() {
+        // Info-ZIP writes extra fields (Unix owner, timestamps) that must survive a rewrite.
+        cases.push(("zip", "info.zip", vec!["-qr", "info.zip", "data"]));
+    }
+    if let Some(z) = seven_zip() {
+        let z: &'static str = Box::leak(z.into_boxed_str());
+        cases.push((z, "seven.7z", vec!["a", "-t7z", "seven.7z", "data"]));
+        cases.push((z, "seven.zip", vec!["a", "-tzip", "seven.zip", "data"]));
+    }
+    for (program, name, args) in cases {
+        assert!(ok(&run(program, &args, tmp.path())), "{program} {name}");
+        let archive = tmp.path().join(name);
+        let relist = || list(&archive, None, &Progress::new()).unwrap();
+        for change in [
+            Change::Add {
+                sources: vec![tmp.path().join("new.txt")],
+                into: "data".into(),
+            },
+            Change::Rename {
+                from: "data/sub".into(),
+                to: "data/moved".into(),
+            },
+            Change::Remove {
+                entries: vec!["data/a.txt".into()],
+            },
+        ] {
+            modify(
+                &archive,
+                &relist(),
+                &change,
+                None,
+                &Progress::new(),
+                &mut FailOnConflict,
+            )
+            .unwrap_or_else(|e| panic!("{name} {change:?}: {e}"));
+        }
+        let names: Vec<String> = relist().entries.iter().map(|e| e.path.clone()).collect();
+        assert!(
+            names.contains(&"data/new.txt".to_string()),
+            "{name}: {names:?}"
+        );
+        assert!(
+            !names.contains(&"data/a.txt".to_string()),
+            "{name}: {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n.starts_with("data/moved/")),
+            "{name}: {names:?}"
+        );
+
+        // The real tools still accept what was written.
+        if name.ends_with(".zip") {
+            if find_tool(&["unzip"]).is_some() {
+                assert!(
+                    ok(&run("unzip", &["-t", name], tmp.path())),
+                    "unzip -t {name}"
+                );
+            }
+        } else if let Some(z) = seven_zip() {
+            assert!(ok(&run(&z, &["t", name], tmp.path())), "7z t {name}");
+        }
+    }
 }

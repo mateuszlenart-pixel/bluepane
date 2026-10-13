@@ -12,6 +12,7 @@ bluepane-ops.workspace = true
 zip.workspace = true
 tar.workspace = true
 flate2.workspace = true
+sevenz-rust2.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]

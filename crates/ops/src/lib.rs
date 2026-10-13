@@ -478,7 +478,15 @@ fn write_stream(
     ctx.progress
         .set_current(&label.file_name().unwrap_or_default().to_string_lossy());
     let mut output = OpenOptions::new().write(true).create_new(true).open(dst)?;
-    let result = pump(ctx, reader, &mut output, size);
+    let result = pump(ctx, reader, &mut output, size).and_then(|copied| match finish {
+        // An archive entry that ends early (damaged data, a wrong password) must not leave a
+        // plausible-looking truncated file behind.
+        Finish::Stream { .. } if copied != size => Err(OpError::Io(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!("dane kończą się po {copied} z {size} bajtów"),
+        ))),
+        _ => Ok(()),
+    });
     match result {
         Ok(()) => {
             match finish {
@@ -512,19 +520,21 @@ fn pump(
     input: &mut dyn Read,
     output: &mut File,
     size_hint: u64,
-) -> Result<(), OpError> {
+) -> Result<u64, OpError> {
     // Small files get a small buffer: allocating 256 KiB per file hurts with 100k files.
     let len = usize::try_from(size_hint)
         .unwrap_or(COPY_CHUNK)
         .clamp(1, COPY_CHUNK);
     let mut buffer = vec![0u8; len];
+    let mut total = 0u64;
     loop {
         ctx.progress.check()?;
         let read = input.read(&mut buffer)?;
         if read == 0 {
-            return Ok(());
+            return Ok(total);
         }
         output.write_all(&buffer[..read])?;
+        total += read as u64;
         ctx.progress.add(read as u64);
         ctx.host.tick(ctx.progress);
     }
@@ -550,7 +560,8 @@ impl<'a> Writer<'a> {
     }
 
     /// Writes `reader` (`size` bytes) to `dst`, creating missing parent directories (archives
-    /// often list a file without listing its directory). `label` names the source in
+    /// often list a file without listing its directory), but only once the stream has
+    /// delivered its first chunk. `label` names the source in
     /// conflict questions. An existing target is resolved through the host.
     pub fn write_file(
         &mut self,
@@ -562,13 +573,18 @@ impl<'a> Writer<'a> {
         dst: &Path,
     ) -> Result<(), OpError> {
         self.ctx.progress.check()?;
+        // Read the first chunk before touching the file system: a stream that fails at once
+        // (an archive entry with a wrong password) must not leave directories behind.
+        let mut head = Vec::new();
+        (&mut *reader).take(8 * 1024).read_to_end(&mut head)?;
         if let Some(parent) = dst.parent() {
             fs::create_dir_all(parent)?;
         }
+        let mut stream = io::Cursor::new(head).chain(reader);
         store_file(
             &mut self.ctx,
             label,
-            reader,
+            &mut stream,
             size,
             modified,
             dst,
@@ -1368,8 +1384,8 @@ mod tests {
         let mut writer = Writer::new(&progress, &mut host);
         let res = writer.write_file(
             Path::new("x/f"),
-            &mut Failing(3),
-            100,
+            &mut Failing(5000), // fails after about 20 KB, well past the first chunk
+            100_000,
             None,
             None,
             &tmp.path().join("f"),
@@ -1435,5 +1451,51 @@ mod tests {
             )
             .unwrap();
         assert_eq!(text(tmp.path().join("a/b/c/f")), "deep");
+    }
+
+    #[test]
+    fn a_stream_that_fails_at_once_leaves_nothing_behind() {
+        struct FailsAtOnce;
+        impl Read for FailsAtOnce {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::other("wrong password"))
+            }
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = FailOnConflict;
+        let mut writer = Writer::new(&progress, &mut host);
+        let res = writer.write_file(
+            Path::new("x/f"),
+            &mut FailsAtOnce,
+            10,
+            None,
+            None,
+            &tmp.path().join("new/dir/f"),
+        );
+        assert!(matches!(res, Err(OpError::Io(_))));
+        assert!(
+            !tmp.path().join("new").exists(),
+            "no directory may be created"
+        );
+    }
+
+    #[test]
+    fn a_stream_shorter_than_declared_is_an_error_and_leaves_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = FailOnConflict;
+        let mut writer = Writer::new(&progress, &mut host);
+        let mut data: &[u8] = b"only 10 b.";
+        let res = writer.write_file(
+            Path::new("x/f"),
+            &mut data,
+            50,
+            None,
+            None,
+            &tmp.path().join("f"),
+        );
+        assert!(matches!(res, Err(OpError::Io(ref e)) if e.kind() == io::ErrorKind::UnexpectedEof));
+        assert!(!tmp.path().join("f").exists());
     }
 }
