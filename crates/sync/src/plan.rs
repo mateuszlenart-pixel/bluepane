@@ -92,6 +92,29 @@ pub struct Action {
     pub bytes: u64,
     /// Is this a directory (on whichever side exists)?
     pub is_dir: bool,
+    /// What each side holds, for showing sizes and dates.
+    pub left: Option<Node>,
+    pub right: Option<Node>,
+}
+
+impl Action {
+    /// The user overrides the direction of one row (FreeFileSync's per-item arrows).
+    /// Rows that cannot be resolved by copying (a file against a directory) and the deletion
+    /// of whole directories are refused: change the files inside instead.
+    pub fn redirect(&mut self, direction: Direction) -> Result<(), String> {
+        if matches!(self.category, Category::Conflict(_)) {
+            return Err(
+                "plik i katalog o tej samej nazwie: usuń lub zmień nazwę jednego z nich".into(),
+            );
+        }
+        let op = op_for(direction, self.left.is_some(), self.right.is_some());
+        if self.is_dir && matches!(op, Op::DeleteLeft | Op::DeleteRight) {
+            return Err("usunięcie katalogu: zmień kierunek plików w środku".into());
+        }
+        self.bytes = copy_bytes(&op, &self.left, &self.right);
+        self.op = op;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -100,6 +123,14 @@ pub struct Plan {
 }
 
 impl Plan {
+    /// Overrides the direction of the action with this index.
+    pub fn redirect(&mut self, index: usize, direction: Direction) -> Result<(), String> {
+        self.actions
+            .get_mut(index)
+            .ok_or_else(|| format!("nie ma pozycji {}", index + 1))?
+            .redirect(direction)
+    }
+
     pub fn count(&self, pred: impl Fn(&Op) -> bool) -> usize {
         self.actions.iter().filter(|a| pred(&a.op)).count()
     }
@@ -158,11 +189,7 @@ pub fn plan(
                 }
             }
         };
-        let bytes = match (&op, &diff.left, &diff.right) {
-            (Op::CopyToRight, Some(l), _) if l.kind == Kind::File => l.size,
-            (Op::CopyToLeft, _, Some(r)) if r.kind == Kind::File => r.size,
-            _ => 0,
-        };
+        let bytes = copy_bytes(&op, &diff.left, &diff.right);
         actions.push(Action {
             path: diff.path.clone(),
             op,
@@ -172,6 +199,8 @@ pub fn plan(
                 .iter()
                 .flatten()
                 .any(|n| n.kind == Kind::Dir),
+            left: diff.left,
+            right: diff.right,
         });
     }
     protect_directories(&mut actions);
@@ -179,12 +208,24 @@ pub fn plan(
 }
 
 fn apply(direction: Direction, diff: &Diff) -> Op {
+    op_for(direction, diff.left.is_some(), diff.right.is_some())
+}
+
+fn op_for(direction: Direction, has_left: bool, has_right: bool) -> Op {
     match direction {
         Direction::Skip => Op::Skip,
-        Direction::ToRight if diff.left.is_some() => Op::CopyToRight,
+        Direction::ToRight if has_left => Op::CopyToRight,
         Direction::ToRight => Op::DeleteRight,
-        Direction::ToLeft if diff.right.is_some() => Op::CopyToLeft,
+        Direction::ToLeft if has_right => Op::CopyToLeft,
         Direction::ToLeft => Op::DeleteLeft,
+    }
+}
+
+fn copy_bytes(op: &Op, left: &Option<Node>, right: &Option<Node>) -> u64 {
+    match (op, left, right) {
+        (Op::CopyToRight, Some(l), _) if l.kind == Kind::File => l.size,
+        (Op::CopyToLeft, _, Some(r)) if r.kind == Kind::File => r.size,
+        _ => 0,
     }
 }
 
@@ -502,6 +543,40 @@ mod tests {
         assert_eq!(
             p.actions[0].op,
             Op::Conflict("katalog zawiera pliki, które zostają".into())
+        );
+    }
+
+    #[test]
+    fn a_row_can_be_redirected_by_hand() {
+        let mut p = plan(&sample(), Variant::Update, None, TOL);
+        // `ro` (right only) is skipped by Update; copy it to the left instead.
+        let ro = p.actions.iter().position(|a| a.path == "ro").unwrap();
+        p.redirect(ro, Direction::ToLeft).unwrap();
+        assert_eq!(p.actions[ro].op, Op::CopyToLeft);
+        assert_eq!(p.actions[ro].bytes, 20);
+        p.redirect(ro, Direction::ToRight).unwrap();
+        assert_eq!(p.actions[ro].op, Op::DeleteRight);
+        assert_eq!(p.actions[ro].bytes, 0);
+        p.redirect(ro, Direction::Skip).unwrap();
+        assert_eq!(p.actions[ro].op, Op::Skip);
+        assert!(p.redirect(99, Direction::Skip).is_err());
+    }
+
+    #[test]
+    fn directories_and_kind_clashes_refuse_risky_overrides() {
+        let d = vec![
+            diff("clash", file(1, 0), dir(), Category::Conflict("x".into())),
+            diff("old", None, dir(), Category::RightOnly),
+        ];
+        let mut p = plan(&d, Variant::Update, None, TOL);
+        assert!(p.redirect(0, Direction::ToRight).is_err());
+        assert!(
+            p.redirect(1, Direction::ToRight).is_err(),
+            "no whole-directory delete"
+        );
+        assert!(
+            p.redirect(1, Direction::ToLeft).is_ok(),
+            "copying it over is fine"
         );
     }
 }
