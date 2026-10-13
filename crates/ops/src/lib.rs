@@ -135,6 +135,9 @@ impl Progress {
 pub enum Resolution {
     /// Replace the existing file with the new one.
     Overwrite,
+    /// Replace the existing file only when the new one is strictly newer; otherwise leave
+    /// it alone. Equal or unknown modification times count as "not newer" (the safe side).
+    OverwriteOlder,
     /// Leave the existing file alone and do not copy this one.
     Skip,
     /// Keep both: the new file gets a free name such as `a (kopia).txt`.
@@ -305,14 +308,23 @@ fn resolve_target(
         src_modified: src_meta.modified().ok(),
         dst_modified: dst_meta.modified().ok(),
     };
-    match ctx.host.conflict(&conflict)? {
+    let resolution = match ctx.host.conflict(&conflict)? {
+        Resolution::OverwriteOlder => match (conflict.src_modified, conflict.dst_modified) {
+            (Some(new), Some(old)) if new > old => Resolution::Overwrite,
+            _ => Resolution::Skip,
+        },
+        other => other,
+    };
+    match resolution {
         Resolution::Skip => {
             ctx.outcome.skipped += 1;
             ctx.progress.add(src_meta.len());
             ctx.progress.finish_item();
             Ok(Target::Skip)
         }
-        Resolution::Overwrite => Ok(Target::Replace(dst.to_path_buf())),
+        Resolution::Overwrite | Resolution::OverwriteOlder => {
+            Ok(Target::Replace(dst.to_path_buf()))
+        }
         Resolution::KeepBoth => Ok(Target::Write(duplicate_path(dst)?)),
     }
 }
@@ -1033,5 +1045,60 @@ mod tests {
         let tmp = tree();
         let out = rename(&tmp.path().join("src/sub"), "renamed").unwrap();
         assert!(out.join("b.txt").exists());
+    }
+
+    fn set_mtime(path: &Path, secs_since_epoch: u64) {
+        let time = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs_since_epoch);
+        File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(time)
+            .unwrap();
+    }
+
+    #[test]
+    fn overwrite_older_replaces_only_when_the_source_is_newer() {
+        let cases = [
+            (2_000, 1_000, "new"),
+            (1_000, 2_000, "old"),
+            (1_000, 1_000, "old"),
+        ];
+        for (src_time, dst_time, expected) in cases {
+            let tmp = clash();
+            set_mtime(&tmp.path().join("src/a.txt"), src_time);
+            set_mtime(&tmp.path().join("dst/a.txt"), dst_time);
+            let mut host = Script::answering(vec![Resolution::OverwriteOlder]);
+            let out = copy_with(
+                &tmp.path().join("src/a.txt"),
+                &tmp.path().join("dst"),
+                &Progress::new(),
+                &mut host,
+            )
+            .unwrap();
+            assert_eq!(
+                text(tmp.path().join("dst/a.txt")),
+                expected,
+                "src {src_time}, dst {dst_time}"
+            );
+            assert_eq!(out.skipped, u64::from(expected == "old"));
+        }
+    }
+
+    #[test]
+    fn a_move_that_skipped_an_older_source_keeps_it() {
+        let tmp = clash();
+        set_mtime(&tmp.path().join("src/a.txt"), 1_000);
+        set_mtime(&tmp.path().join("dst/a.txt"), 2_000);
+        let mut host = Script::answering(vec![Resolution::OverwriteOlder]);
+        move_with(
+            &tmp.path().join("src/a.txt"),
+            &tmp.path().join("dst"),
+            &Progress::new(),
+            &mut host,
+        )
+        .unwrap();
+        assert!(tmp.path().join("src/a.txt").exists());
+        assert_eq!(text(tmp.path().join("dst/a.txt")), "old");
     }
 }
