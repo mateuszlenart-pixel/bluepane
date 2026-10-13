@@ -50,10 +50,12 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 ## Notatki do późniejszych etapów
 
 ### Etap 8: FTP/SFTP
-Wymaganie od właściciela projektu: funkcjonalność na wzór **FileZilli**, czyli m.in.
-(moja interpretacja, do potwierdzenia z właścicielem): menedżer witryn (zapisane połączenia), FTP, FTPS i SFTP, kolejka transferów z
-postępem, wznawianie przerwanych transferów i dialog konfliktów. Zakres do dopracowania
-przy starcie etapu.
+Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**:
+- menedżer witryn z zapisanymi połączeniami, w tym rozbudowany wybór i konfiguracja
+  połączenia (protokół FTP / FTPS / SFTP, host, port, tryb logowania, dane uwierzytelniające,
+  katalog startowy; szczegóły do dopracowania przy starcie etapu),
+- kolejka transferów z postępem, wznawianie przerwanych transferów,
+- dialog konfliktów (nadpisz / pomiń / zmień nazwę).
 
 ## Znane uproszczenia szkieletu
 - Operacje na plikach działają synchronicznie w wątku UI (duże kopie zamrożą okno do etapu 4).
