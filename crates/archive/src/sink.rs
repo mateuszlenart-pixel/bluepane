@@ -130,7 +130,9 @@ impl<'a> ZipSink<'a> {
             options = options.last_modified_time(stamp);
         }
         if let Some(mode) = meta.mode {
-            options = options.unix_permissions(mode);
+            // The zip crate stores DOS attributes on Windows unless told otherwise, which
+            // would lose the Unix mode that was asked for.
+            options = options.unix_permissions(mode).system(zip::System::Unix);
         }
         options
     }
