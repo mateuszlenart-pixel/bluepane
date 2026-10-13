@@ -95,6 +95,8 @@ struct ParkedTabs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TabStrip {
     pub titles: Vec<String>,
+    /// Full directory of each tab, for tooltips.
+    pub paths: Vec<PathBuf>,
     /// Index of the active tab in `titles`.
     pub active: usize,
 }
@@ -647,10 +649,11 @@ impl Session {
     /// The tab row of one side, for drawing.
     pub fn tab_strip(&self, side: usize) -> TabStrip {
         let parked = &self.parked[side];
-        let mut titles: Vec<String> = parked.others.iter().map(|p| tab_title(&p.cwd)).collect();
-        titles.insert(parked.position, tab_title(&self.panels[side].cwd));
+        let mut paths: Vec<PathBuf> = parked.others.iter().map(|p| p.cwd.clone()).collect();
+        paths.insert(parked.position, self.panels[side].cwd.clone());
         TabStrip {
-            titles,
+            titles: paths.iter().map(|p| tab_title(p)).collect(),
+            paths,
             active: parked.position,
         }
     }
@@ -1483,13 +1486,10 @@ mod tests {
     #[test]
     fn a_new_tab_copies_the_directory_and_becomes_active() {
         let (tmp, mut s) = two_dirs();
-        assert_eq!(
-            s.tab_strip(0),
-            TabStrip {
-                titles: vec!["left".into()],
-                active: 0
-            }
-        );
+        let strip = s.tab_strip(0);
+        assert_eq!(strip.titles, ["left"]);
+        assert_eq!(strip.paths, [tmp.path().join("left")]);
+        assert_eq!(strip.active, 0);
         s.run_line("tab new").unwrap();
         assert_eq!(titles(&s, 0), ["left", "left"]);
         assert_eq!(s.tab_strip(0).active, 1);

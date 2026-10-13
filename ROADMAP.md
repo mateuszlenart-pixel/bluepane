@@ -8,7 +8,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | # | Etap | Stan | Gotowe, gdy |
 | --- | --- | --- | --- |
 | 1 | Fundament | ✅ | workspace, CLAUDE.md, CI na obu systemach, okno z dwoma panelami pokazującymi pliki |
-| 2 | Nawigacja | 🟡 | po dysku da się poruszać samym klawiaturą |
+| 2 | Nawigacja | ✅ | po dysku da się poruszać samym klawiaturą |
 | 3 | Zaznaczanie | ✅ | katalog z 100 tys. plików nie zacina się (cel) |
 | 4 | Operacje F5–F8 | ✅ | operacje w tle z postępem, dialog konfliktów, testy na katalogach tymczasowych |
 | 5 | Podgląd i edycja | ✅ | duży plik otwiera się bez wczytywania całości do pamięci |
@@ -29,7 +29,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 ### Etap 2: nawigacja
 - [x] Pasek ścieżki z edycją, lista wolumenów (`bluepane_vfs::volumes`) w UI, skok do wolumenu (`volume`, Alt+1..9)
 - [x] Historia katalogów (wstecz/naprzód) per panel (`back`, `forward`, Alt+←/→)
-- [ ] Zakładki (reszta etapu 2; stan etapu zostaje 🟡 do ich zrobienia)
+- [x] Zakładki per panel (`tab new|open|close|next|prev|n`, Ctrl+T/W/↑/Tab/1..9, klik w pasku). Zakładki nie są jeszcze zapamiętywane między uruchomieniami (zapis ustawień to osobne zadanie).
 - [x] Szybkie filtrowanie po wpisaniu liter (`filter`, Esc czyści, Backspace skraca)
 - [x] Wpis `..` na górze listy (nie jest celem operacji, nie da się go zaznaczyć)
 
