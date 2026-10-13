@@ -7,7 +7,9 @@ use bluepane_ops::{self as ops, Conflict, Resolution};
 use bluepane_vfs::Volume;
 
 use crate::job::{Answer, Event, JobKind, JobSpec, Report, RunningJob};
-use crate::{is_parent_entry, Command, EngineError, Keymap, Mask, Panel, Viewer, ViewerAction};
+use crate::{
+    is_parent_entry, Command, EngineError, Keymap, Mask, Panel, TabAction, Viewer, ViewerAction,
+};
 
 /// What a name dialog is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,10 +83,58 @@ impl JobStatus {
     }
 }
 
+/// The tabs of one side other than the active one. Together with the active panel they
+/// form the tab row: `others` in order with the active panel inserted at `position`.
+#[derive(Debug, Default)]
+struct ParkedTabs {
+    others: Vec<Panel>,
+    position: usize,
+}
+
+/// What the UI needs to draw one side's tab row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TabStrip {
+    pub titles: Vec<String>,
+    /// Index of the active tab in `titles`.
+    pub active: usize,
+}
+
+/// Resolves `.` and `..` components lexically, like `cd` in a shell (symlinks are not
+/// followed), so `a/b/..` becomes `a` and the panel never shows a path containing `..`.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // Never climb above the root (or a Windows drive prefix).
+                if !matches!(
+                    out.components().next_back(),
+                    Some(Component::RootDir | Component::Prefix(_)) | None
+                ) {
+                    out.pop();
+                }
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+/// Short label for a tab: the directory name, or the whole path for a root.
+fn tab_title(cwd: &Path) -> String {
+    cwd.file_name().map_or_else(
+        || cwd.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    )
+}
+
 /// The whole application state except the UI: two panels, which one is active,
 /// the key map and the last status message.
 #[derive(Debug)]
 pub struct Session {
+    /// The active tab of each side.
     pub panels: [Panel; 2],
     pub active: usize,
     pub keymap: Keymap,
@@ -99,6 +149,7 @@ pub struct Session {
     pub auto_resolve: Option<Resolution>,
     /// The open file viewer (F3); while it is set the UI shows it instead of the panels.
     pub viewer: Option<Viewer>,
+    parked: [ParkedTabs; 2],
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
 }
@@ -125,6 +176,7 @@ impl Session {
             pending: None,
             auto_resolve: None,
             viewer: None,
+            parked: [ParkedTabs::default(), ParkedTabs::default()],
             current: None,
             queue: VecDeque::new(),
         }
@@ -186,6 +238,7 @@ impl Session {
             Command::Cancel => self.cancel_question(),
             Command::Resolve(resolution, for_all) => self.resolve(resolution, for_all)?,
             Command::StopJob => self.stop_jobs(),
+            Command::Tab(action) => self.tab_action(action)?,
             Command::View => self.open_viewer()?,
             Command::Edit => self.edit_file()?,
             Command::Viewer(action) => self.viewer_action(action)?,
@@ -236,11 +289,11 @@ impl Session {
             }
             Command::Cd(path) => {
                 let panel = self.active_panel_mut();
-                let target = if path.is_absolute() {
+                let target = normalize_path(&if path.is_absolute() {
                     path
                 } else {
                     panel.cwd.join(path)
-                };
+                });
                 if !target.is_dir() {
                     return Err(EngineError(format!("to nie katalog: {}", target.display())));
                 }
@@ -589,6 +642,110 @@ impl Session {
             }
             std::thread::sleep(Duration::from_millis(1));
         }
+    }
+
+    /// The tab row of one side, for drawing.
+    pub fn tab_strip(&self, side: usize) -> TabStrip {
+        let parked = &self.parked[side];
+        let mut titles: Vec<String> = parked.others.iter().map(|p| tab_title(&p.cwd)).collect();
+        titles.insert(parked.position, tab_title(&self.panels[side].cwd));
+        TabStrip {
+            titles,
+            active: parked.position,
+        }
+    }
+
+    fn tab_count(&self, side: usize) -> usize {
+        self.parked[side].others.len() + 1
+    }
+
+    fn tab_action(&mut self, action: TabAction) -> Result<(), EngineError> {
+        let side = self.active;
+        let count = self.tab_count(side);
+        let position = self.parked[side].position;
+        match action {
+            TabAction::New => {
+                let cwd = self.panels[side].cwd.clone();
+                self.open_tab(side, cwd);
+            }
+            TabAction::Open => {
+                let entry = self
+                    .active_panel()
+                    .current()
+                    .filter(|e| !is_parent_entry(e) && e.is_dir())
+                    .ok_or_else(|| EngineError("kursor nie wskazuje katalogu".into()))?;
+                let path = entry.path.clone();
+                self.open_tab(side, path);
+            }
+            TabAction::Close(which) => {
+                let index = which.map_or(position, |n| n - 1);
+                self.close_tab(side, index)?;
+            }
+            TabAction::Next => self.switch_tab(side, (position + 1) % count),
+            TabAction::Prev => self.switch_tab(side, (position + count - 1) % count),
+            TabAction::Goto(n) => {
+                if n > count {
+                    return Err(EngineError(format!("nie ma zakładki {n} (jest {count})")));
+                }
+                self.switch_tab(side, n - 1);
+            }
+        }
+        let strip = self.tab_strip(side);
+        self.status = format!("Zakładka {} z {}", strip.active + 1, strip.titles.len());
+        Ok(())
+    }
+
+    /// Makes tab `index` (0-based, in tab-row order) the active one of `side`.
+    fn switch_tab(&mut self, side: usize, index: usize) {
+        let parked = &mut self.parked[side];
+        if index == parked.position {
+            return;
+        }
+        let current = std::mem::replace(&mut self.panels[side], Panel::blank());
+        parked.others.insert(parked.position, current);
+        self.panels[side] = parked.others.remove(index);
+        parked.position = index;
+        // The directory may have changed while the tab was in the background.
+        self.panels[side].reload();
+    }
+
+    /// Opens a new tab for `cwd` right after the active one and makes it active.
+    fn open_tab(&mut self, side: usize, cwd: PathBuf) {
+        let parked = &mut self.parked[side];
+        let current = std::mem::replace(&mut self.panels[side], Panel::new(cwd));
+        parked.others.insert(parked.position, current);
+        parked.position += 1;
+    }
+
+    fn close_tab(&mut self, side: usize, index: usize) -> Result<(), EngineError> {
+        let count = self.tab_count(side);
+        if count == 1 {
+            return Err(EngineError("to jedyna zakładka".into()));
+        }
+        if index >= count {
+            return Err(EngineError(format!(
+                "nie ma zakładki {} (jest {count})",
+                index + 1
+            )));
+        }
+        let parked = &mut self.parked[side];
+        if index == parked.position {
+            // Closing the active tab activates its right neighbour, or the left one at the end.
+            let take = if index < parked.others.len() {
+                index
+            } else {
+                index - 1
+            };
+            self.panels[side] = parked.others.remove(take);
+            parked.position = take;
+            self.panels[side].reload();
+        } else if index < parked.position {
+            parked.others.remove(index);
+            parked.position -= 1;
+        } else {
+            parked.others.remove(index - 1);
+        }
+        Ok(())
     }
 
     /// The file under the cursor, for view and edit: never `..`, never a directory.
@@ -1317,5 +1474,179 @@ mod tests {
             s.viewer.is_some(),
             "cancelling the dialog keeps the viewer open"
         );
+    }
+
+    fn titles(s: &Session, side: usize) -> Vec<String> {
+        s.tab_strip(side).titles
+    }
+
+    #[test]
+    fn a_new_tab_copies_the_directory_and_becomes_active() {
+        let (tmp, mut s) = two_dirs();
+        assert_eq!(
+            s.tab_strip(0),
+            TabStrip {
+                titles: vec!["left".into()],
+                active: 0
+            }
+        );
+        s.run_line("tab new").unwrap();
+        assert_eq!(titles(&s, 0), ["left", "left"]);
+        assert_eq!(s.tab_strip(0).active, 1);
+        assert_eq!(s.panels[0].cwd, tmp.path().join("left"));
+        assert!(s.status.contains("2 z 2"), "{}", s.status);
+        // The other side is untouched.
+        assert_eq!(titles(&s, 1), ["right"]);
+    }
+
+    #[test]
+    fn tabs_keep_their_own_directory_history_and_sort() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir sub").unwrap();
+        s.run_line("tab new").unwrap();
+        s.run_line("cd sub").unwrap();
+        s.run_line("sort size desc").unwrap();
+        assert_eq!(titles(&s, 0), ["left", "sub"]);
+        s.run_line("tab 1").unwrap();
+        assert_eq!(s.panels[0].cwd, tmp.path().join("left"));
+        assert!(
+            !s.panels[0].sort.descending,
+            "the first tab was not re-sorted"
+        );
+        assert!(!s.panels[0].can_go_back());
+        s.run_line("tab 2").unwrap();
+        assert_eq!(s.panels[0].cwd, tmp.path().join("left/sub"));
+        assert!(s.panels[0].sort.descending);
+        assert!(s.panels[0].can_go_back(), "history belongs to the tab");
+    }
+
+    #[test]
+    fn next_and_prev_wrap_around() {
+        let (_tmp, mut s) = two_dirs();
+        s.run_line("tab new").unwrap();
+        s.run_line("tab new").unwrap();
+        assert_eq!(s.tab_strip(0).active, 2);
+        s.run_line("tab next").unwrap();
+        assert_eq!(s.tab_strip(0).active, 0);
+        s.run_line("tab prev").unwrap();
+        assert_eq!(s.tab_strip(0).active, 2);
+        s.run_line("tab prev").unwrap();
+        assert_eq!(s.tab_strip(0).active, 1);
+    }
+
+    #[test]
+    fn open_puts_the_directory_under_the_cursor_in_a_new_tab() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir sub").unwrap();
+        s.run_line("cursor -5").unwrap(); // up to ".."
+        assert!(s.run_line("tab open").is_err());
+        s.run_line("select sub").unwrap();
+        s.run_line("tab open").unwrap();
+        assert_eq!(s.panels[0].cwd, tmp.path().join("left/sub"));
+        assert_eq!(titles(&s, 0), ["left", "sub"]);
+        s.run_line("tab 1").unwrap();
+        s.run_line("cursor 100").unwrap();
+        assert!(s.run_line("tab open").is_err(), "a file is not a directory");
+    }
+
+    #[test]
+    fn closing_tabs_activates_a_neighbour_and_keeps_the_last_one() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir a").unwrap();
+        s.run_line("mkdir b").unwrap();
+        s.run_line("tab new").unwrap(); // tabs: left, left*
+        s.run_line("cd a").unwrap(); // left, a*
+        s.run_line("tab new").unwrap(); // left, a, a*
+        s.run_line("cd ..").unwrap();
+        s.run_line("cd b").unwrap(); // left, a, b*
+        assert_eq!(titles(&s, 0), ["left", "a", "b"]);
+
+        // Closing the last tab activates the one on its left.
+        s.run_line("tab close").unwrap();
+        assert_eq!(titles(&s, 0), ["left", "a"]);
+        assert_eq!(s.panels[0].cwd, tmp.path().join("left/a"));
+        // Closing a background tab keeps the active one and fixes the index.
+        s.run_line("tab close 1").unwrap();
+        assert_eq!(titles(&s, 0), ["a"]);
+        assert_eq!(s.tab_strip(0).active, 0);
+        assert_eq!(s.panels[0].cwd, tmp.path().join("left/a"));
+        assert!(s.run_line("tab close").is_err(), "the last tab stays");
+    }
+
+    #[test]
+    fn closing_the_active_tab_in_the_middle_activates_the_one_to_its_right() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir a").unwrap();
+        s.run_line("mkdir b").unwrap();
+        s.run_line("tab new").unwrap();
+        s.run_line("cd a").unwrap();
+        s.run_line("tab new").unwrap();
+        s.run_line("cd ..").unwrap();
+        s.run_line("cd b").unwrap(); // left, a, b*
+        s.run_line("tab 2").unwrap();
+        s.run_line("tab close").unwrap();
+        assert_eq!(titles(&s, 0), ["left", "b"]);
+        assert_eq!(s.panels[0].cwd, tmp.path().join("left/b"));
+        assert_eq!(s.tab_strip(0).active, 1);
+    }
+
+    #[test]
+    fn bad_tab_numbers_are_errors() {
+        let (_tmp, mut s) = two_dirs();
+        assert!(s.run_line("tab 2").is_err());
+        assert!(s.run_line("tab close 3").is_err());
+        assert!(s.run_line("tab 0").is_err());
+        assert!(s.status_is_error);
+    }
+
+    #[test]
+    fn a_background_tab_is_refreshed_when_it_is_shown_again() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("tab new").unwrap();
+        s.run_line("tab 1").unwrap();
+        std::fs::write(tmp.path().join("left/fresh.txt"), "x").unwrap();
+        s.run_line("tab 2").unwrap();
+        assert!(s.panels[0].entries.iter().any(|e| e.name == "fresh.txt"));
+    }
+
+    #[test]
+    fn operations_use_the_active_tab_of_each_side() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::create_dir(tmp.path().join("other")).unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line("tab new").unwrap();
+        s.run_line(&format!("cd {}", tmp.path().join("other").display()))
+            .unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            tmp.path().join("other/a.txt").exists(),
+            "copied into the active tab of the other side"
+        );
+        assert!(!tmp.path().join("right/a.txt").exists());
+    }
+
+    #[test]
+    fn cd_normalises_dot_and_dotdot() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir a").unwrap();
+        s.run_line("cd a").unwrap();
+        s.run_line("cd ..").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left"));
+        s.run_line("cd ./a/../a/.").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left/a"));
+        s.run_line(&format!("cd {}/left/a/../../right", tmp.path().display()))
+            .unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("right"));
+    }
+
+    #[test]
+    fn normalising_never_climbs_above_the_root() {
+        let root = if cfg!(windows) { r"C:\" } else { "/" };
+        let beyond = Path::new(root).join("..").join("..");
+        assert_eq!(normalize_path(&beyond), Path::new(root));
+        assert_eq!(normalize_path(Path::new("a/b/../../..")), Path::new(""));
     }
 }
