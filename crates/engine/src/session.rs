@@ -2213,6 +2213,7 @@ mod tests {
             level: bluepane_archive::Level::Normal,
             password: password.map(str::to_string),
             split: None,
+            encrypt_names: false,
         };
         bluepane_archive::create(
             sources,
@@ -2585,7 +2586,7 @@ mod tests {
     }
 
     fn list_names(path: &Path) -> Vec<String> {
-        let listing = bluepane_archive::list(path, &bluepane_ops::Progress::new()).unwrap();
+        let listing = bluepane_archive::list(path, None, &bluepane_ops::Progress::new()).unwrap();
         listing.entries.iter().map(|e| e.path.clone()).collect()
     }
 
@@ -2684,7 +2685,7 @@ mod tests {
         assert!(s.wait_idle());
         let archive = tmp.path().join("right/secret.zip");
         assert!(
-            bluepane_archive::list(&archive, &bluepane_ops::Progress::new())
+            bluepane_archive::list(&archive, None, &bluepane_ops::Progress::new())
                 .unwrap()
                 .has_encrypted()
         );
@@ -2825,6 +2826,7 @@ mod tests {
             level: bluepane_archive::Level::Store,
             password: None,
             split: None,
+            encrypt_names: false,
         };
         bluepane_archive::create(
             &[src],

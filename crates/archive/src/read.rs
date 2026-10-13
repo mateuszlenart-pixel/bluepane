@@ -97,7 +97,7 @@ fn io_failure(progress: &Progress, error: io::Error, encrypted: bool) -> Archive
     }
 }
 
-fn op_failure(progress: &Progress, error: OpError, encrypted: bool) -> ArchiveError {
+pub(crate) fn op_failure(progress: &Progress, error: OpError, encrypted: bool) -> ArchiveError {
     match error {
         OpError::Io(e) => io_failure(progress, e, encrypted),
         other => other.into(),
@@ -163,8 +163,13 @@ fn format_of(path: &Path) -> Result<Format, ArchiveError> {
 }
 
 /// Reads the table of contents. For ZIP that is quick (the central directory); TAR and
-/// TAR.GZ have to be read through, so the progress counts the bytes read of the file.
-pub fn list(path: &Path, progress: &Progress) -> Result<Listing, ArchiveError> {
+/// TAR.GZ have to be read through, so the progress counts the bytes read of the file. The
+/// password matters only for a 7z archive whose file names are encrypted.
+pub fn list(
+    path: &Path,
+    password: Option<&str>,
+    progress: &Progress,
+) -> Result<Listing, ArchiveError> {
     let format = format_of(path)?;
     let volumes = volumes_of(path);
     let packed = packed_size(&volumes);
@@ -194,6 +199,12 @@ pub fn list(path: &Path, progress: &Progress) -> Result<Listing, ArchiveError> {
                     special: file.is_symlink(),
                 });
             }
+            progress.add(packed);
+        }
+        Format::SevenZ => {
+            let (entries, skipped) = crate::seven::list(&volumes, password, progress)?;
+            raw = entries;
+            unsafe_skipped = skipped;
             progress.add(packed);
         }
         Format::Tar | Format::TarGz => {
@@ -237,14 +248,14 @@ pub fn list(path: &Path, progress: &Progress) -> Result<Listing, ArchiveError> {
 }
 
 /// `path` below `strip`, or `None` when it is `strip` itself or lies elsewhere.
-fn below<'p>(path: &'p str, strip: &str) -> Option<&'p str> {
+pub(crate) fn below<'p>(path: &'p str, strip: &str) -> Option<&'p str> {
     if strip.is_empty() {
         return Some(path);
     }
     path.strip_prefix(strip)?.strip_prefix('/')
 }
 
-fn wanted(path: &str, selection: &Selection<'_>) -> bool {
+pub(crate) fn wanted(path: &str, selection: &Selection<'_>) -> bool {
     selection.entries.is_empty() || selection.entries.iter().any(|s| is_selected(path, s))
 }
 
@@ -349,6 +360,17 @@ pub fn extract(
                     )
                     .map_err(|e| op_failure(progress, e, encrypted))?;
             }
+        }
+        Format::SevenZ => {
+            special_skipped = crate::seven::extract(
+                &volumes,
+                &label_root,
+                selection,
+                dest,
+                password,
+                progress,
+                &mut writer,
+            )?;
         }
         Format::Tar | Format::TarGz => {
             let reader = tar_reader(&volumes, format, progress, false)?;
@@ -468,6 +490,7 @@ pub fn verify(
                 }
             }
         }
+        Format::SevenZ => return crate::seven::verify(&volumes, password, progress),
         Format::Tar | Format::TarGz => {
             let reader = tar_reader(&volumes, format, progress, false)?;
             let mut archive = tar::Archive::new(reader);

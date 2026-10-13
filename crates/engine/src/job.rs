@@ -279,9 +279,11 @@ fn run_archive(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Repor
     let name = file_name(&source);
     let no_dest = || ArchiveError::Op("brak katalogu docelowego".into());
     let result: Result<(), ArchiveError> = match spec.kind {
-        JobKind::OpenArchive => archive::list(&source, progress).map(|listing| {
-            report.listing = Some(Arc::new(listing));
-        }),
+        JobKind::OpenArchive => {
+            archive::list(&source, job.password.as_deref(), progress).map(|listing| {
+                report.listing = Some(Arc::new(listing));
+            })
+        }
         JobKind::Extract => (|| {
             let dest = spec.dest.as_deref().ok_or_else(no_dest)?;
             if let Some(listing) = &job.listing {
@@ -316,6 +318,7 @@ fn run_archive(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Repor
                 level: pack.level,
                 password: job.password.clone(),
                 split: pack.split,
+                encrypt_names: false,
             };
             let created = archive::create(
                 &spec.sources,

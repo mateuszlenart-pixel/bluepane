@@ -26,6 +26,8 @@ tempfile = "3"
 zip = { version = "9", default-features = false, features = ["deflate", "aes-crypto"] }
 tar = { version = "0.4", default-features = false }
 flate2 = "1"
+# 7z (pure Rust): LZMA/LZMA2, AES-256 and header encryption. No BZip2/PPMd: they pull in C code.
+sevenz-rust2 = { version = "0.24", default-features = false, features = ["aes256", "compress"] }
 # Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

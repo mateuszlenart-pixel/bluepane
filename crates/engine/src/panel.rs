@@ -951,6 +951,7 @@ mod tests {
             level: bluepane_archive::Level::Normal,
             password: None,
             split: None,
+            encrypt_names: false,
         };
         let sources = [src.join("docs"), src.join("top.txt")];
         bluepane_archive::create(
@@ -961,7 +962,8 @@ mod tests {
             &mut bluepane_ops::FailOnConflict,
         )
         .unwrap();
-        let listing = bluepane_archive::list(&archive, &bluepane_ops::Progress::new()).unwrap();
+        let listing =
+            bluepane_archive::list(&archive, None, &bluepane_ops::Progress::new()).unwrap();
         let mut panel = Panel::new(tmp.path());
         panel.open_archive(archive, Arc::new(listing), None);
         (tmp, panel)

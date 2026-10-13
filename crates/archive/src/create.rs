@@ -49,6 +49,8 @@ pub struct CreateOptions {
     pub password: Option<String>,
     /// Cut the archive into volumes of at most this many bytes (`name.zip.001`, ...).
     pub split: Option<u64>,
+    /// 7z only: hide the file names too (needs a password).
+    pub encrypt_names: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -63,18 +65,18 @@ pub struct CreateReport {
     pub skipped: bool,
 }
 
-enum Kind {
+pub(crate) enum Kind {
     Dir,
     File { size: u64 },
 }
 
-struct Item {
-    path: PathBuf,
+pub(crate) struct Item {
+    pub path: PathBuf,
     /// Name inside the archive, `/` separated.
-    name: String,
-    kind: Kind,
-    modified: Option<SystemTime>,
-    mode: Option<u32>,
+    pub name: String,
+    pub kind: Kind,
+    pub modified: Option<SystemTime>,
+    pub mode: Option<u32>,
 }
 
 /// Removes the temporary file unless it was handed over.
@@ -92,9 +94,9 @@ impl Drop for TempFile {
 }
 
 /// Counts bytes read from a source file and stops reading once the job is cancelled.
-struct SourceReader<'a> {
-    file: File,
-    progress: &'a Progress,
+pub(crate) struct SourceReader<'a> {
+    pub file: File,
+    pub progress: &'a Progress,
 }
 
 impl Read for SourceReader<'_> {
@@ -412,8 +414,16 @@ pub fn create(
         path: temp_path,
         keep: false,
     };
+    if options.encrypt_names && (password.is_none() || !options.format.can_encrypt_names()) {
+        return Err(ArchiveError::Unsupported(
+            "szyfrowanie nazw plików wymaga formatu 7z i hasła".into(),
+        ));
+    }
     match options.format {
         Format::Zip => write_zip(&items, &temp.path, options, password, progress)?,
+        Format::SevenZ => {
+            crate::seven::write(&items, &temp.path, options, password, progress, host)?
+        }
         Format::Tar => {
             let mut file = write_tar(&items, File::create(&temp.path)?, progress)?;
             file.flush().map_err(|e| io_failure(progress, e))?;
