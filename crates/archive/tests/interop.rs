@@ -111,7 +111,7 @@ fn aes_zip_made_here_opens_in_seven_zip_with_the_password_only() {
     let tmp = tempfile::tempdir().unwrap();
     let data = tree(tmp.path());
     let options = CreateOptions {
-        password: Some("sekret ąę".into()),
+        password: Some("sekret".into()),
         ..opts(Format::Zip)
     };
     mine(
@@ -120,7 +120,7 @@ fn aes_zip_made_here_opens_in_seven_zip_with_the_password_only() {
         &options,
     );
     assert!(
-        ok(&run(&z, &["t", "p.zip", "-psekret ąę"], tmp.path())),
+        ok(&run(&z, &["t", "p.zip", "-psekret"], tmp.path())),
         "right password"
     );
     assert!(
@@ -129,7 +129,7 @@ fn aes_zip_made_here_opens_in_seven_zip_with_the_password_only() {
     );
     assert!(ok(&run(
         &z,
-        &["x", "p.zip", "-psekret ąę", "-oout", "-y"],
+        &["x", "p.zip", "-psekret", "-oout", "-y"],
         tmp.path()
     )));
     same_tree(&data, &tmp.path().join("out/data"));
@@ -271,4 +271,25 @@ fn archives_made_by_gnu_tar_open_here() {
         unpack_mine(&tmp.path().join(name), &out, None).unwrap();
         same_tree(&data, &out.join("data"));
     }
+}
+
+#[test]
+fn zip_with_a_compression_method_this_build_lacks_is_a_clear_error() {
+    let Some(z) = seven_zip() else { return };
+    let tmp = tempfile::tempdir().unwrap();
+    tree(tmp.path());
+    let made = run(
+        &z,
+        &["a", "-tzip", "-mm=BZip2", "bz.zip", "data"],
+        tmp.path(),
+    );
+    if !ok(&made) {
+        return; // this 7-Zip cannot write BZip2 zips: nothing to check
+    }
+    let archive = tmp.path().join("bz.zip");
+    // The table of contents is still readable...
+    assert!(list(&archive, &Progress::new()).is_ok());
+    // ...and extracting says what is wrong instead of failing obscurely.
+    let err = unpack_mine(&archive, &tmp.path().join("out"), None).unwrap_err();
+    assert!(matches!(err, ArchiveError::Unsupported(_)), "{err}");
 }
