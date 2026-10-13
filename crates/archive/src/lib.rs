@@ -12,6 +12,7 @@
 mod create;
 mod format;
 mod listing;
+mod modify;
 mod read;
 mod seven;
 mod sink;
@@ -26,6 +27,7 @@ use bluepane_ops::OpError;
 pub use create::{create, CreateOptions, CreateReport, Level};
 pub use format::{detect, volumes_of, Format};
 pub use listing::{ArchiveEntry, Listing};
+pub use modify::{modify, Change, ModifyReport};
 pub use read::{extract, list, verify, ExtractReport, Selection, VerifyReport};
 
 #[derive(Debug)]

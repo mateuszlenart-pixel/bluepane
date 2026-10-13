@@ -27,6 +27,19 @@ pub(crate) struct Meta {
     pub mode: Option<u32>,
 }
 
+/// An entry of an existing archive, handed out while it is being rewritten.
+pub(crate) struct Existing {
+    /// The cleaned-up path, or `None` for an entry with an unsafe name.
+    pub path: Option<String>,
+    /// The name as stored.
+    pub name: String,
+    pub is_dir: bool,
+    pub size: u64,
+    pub meta: Meta,
+    /// A symlink, device or the like, which a rewrite cannot carry over.
+    pub special: bool,
+}
+
 /// Settings every sink needs.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SinkSettings<'a> {

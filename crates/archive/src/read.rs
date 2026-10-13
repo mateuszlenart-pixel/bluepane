@@ -11,6 +11,7 @@ use zip::ZipArchive;
 
 use crate::format::{detect, volumes_of, Format};
 use crate::listing::{is_selected, normalize_name, ArchiveEntry, Listing};
+use crate::sink::{Existing, Meta};
 use crate::split::Joined;
 use crate::time::from_zip;
 use crate::ArchiveError;
@@ -61,7 +62,7 @@ impl<R: Read> Read for Counting<'_, R> {
     }
 }
 
-fn zip_error(error: ZipError) -> ArchiveError {
+pub(crate) fn zip_error(error: ZipError) -> ArchiveError {
     match error {
         ZipError::Io(e) => ArchiveError::Io(e),
         ZipError::InvalidPassword => ArchiveError::WrongPassword,
@@ -158,6 +159,49 @@ fn tar_time(header: &tar::Header) -> Option<SystemTime> {
         .map(|secs| UNIX_EPOCH + Duration::from_secs(secs))
 }
 
+/// Calls `each` for every entry of a tar (or tar.gz) with its data, in the order stored.
+pub(crate) fn stream_tar(
+    volumes: &[PathBuf],
+    format: Format,
+    progress: &Progress,
+    each: &mut dyn FnMut(&Existing, &mut dyn Read) -> Result<(), ArchiveError>,
+) -> Result<(), ArchiveError> {
+    let reader = tar_reader(volumes, format, progress, false)?;
+    let mut archive = tar::Archive::new(reader);
+    let entries = archive
+        .entries()
+        .map_err(|e| io_failure(progress, e, false))?;
+    for entry in entries {
+        let mut entry = entry.map_err(|e| io_failure(progress, e, false))?;
+        let name = entry
+            .path()
+            .map_err(|e| io_failure(progress, e, false))?
+            .to_string_lossy()
+            .into_owned();
+        let existing = {
+            let header = entry.header();
+            let kind = tar_kind(header.entry_type());
+            Existing {
+                path: normalize_name(&name),
+                name,
+                is_dir: matches!(kind, TarKind::Dir),
+                size: if matches!(kind, TarKind::File) {
+                    header.size().unwrap_or(0)
+                } else {
+                    0
+                },
+                meta: Meta {
+                    modified: tar_time(header),
+                    mode: header.mode().ok().map(|m| m & 0o777),
+                },
+                special: matches!(kind, TarKind::Special),
+            }
+        };
+        each(&existing, &mut entry)?;
+    }
+    Ok(())
+}
+
 fn format_of(path: &Path) -> Result<Format, ArchiveError> {
     detect(path).ok_or_else(|| ArchiveError::Unsupported("nieznany format archiwum".into()))
 }
@@ -177,6 +221,7 @@ pub fn list(
     progress.set_current(&path.file_name().unwrap_or_default().to_string_lossy());
     let mut raw = Vec::new();
     let mut unsafe_skipped = 0;
+    let mut names_encrypted = false;
     match format {
         Format::Zip => {
             let mut archive = open_zip(&volumes)?;
@@ -202,9 +247,10 @@ pub fn list(
             progress.add(packed);
         }
         Format::SevenZ => {
-            let (entries, skipped) = crate::seven::list(&volumes, password, progress)?;
+            let (entries, skipped, hidden) = crate::seven::list(&volumes, password, progress)?;
             raw = entries;
             unsafe_skipped = skipped;
+            names_encrypted = hidden;
             progress.add(packed);
         }
         Format::Tar | Format::TarGz => {
@@ -244,6 +290,7 @@ pub fn list(
         packed,
         raw,
         unsafe_skipped,
+        names_encrypted,
     ))
 }
 

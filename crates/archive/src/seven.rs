@@ -18,7 +18,7 @@ use sevenz_rust2::{
 use crate::create::Level;
 use crate::listing::{normalize_name, ArchiveEntry as Entry};
 use crate::read::{below, op_failure, wanted, Selection, VerifyReport};
-use crate::sink::{Meta, Sink, SinkSettings};
+use crate::sink::{Existing, Meta, Sink, SinkSettings};
 use crate::split::Joined;
 use crate::ArchiveError;
 
@@ -142,7 +142,7 @@ pub fn list(
     volumes: &[PathBuf],
     password: Option<&str>,
     progress: &Progress,
-) -> Result<(Vec<Entry>, usize), ArchiveError> {
+) -> Result<(Vec<Entry>, usize, bool), ArchiveError> {
     let mut joined = Joined::open(volumes)?;
     let archive = Archive::read(&mut joined, &password_of(password)).map_err(|e| {
         let mapped = failure(progress, e, password.is_some());
@@ -153,6 +153,11 @@ pub fn list(
             other => other,
         }
     })?;
+    // Are the names themselves behind the password? Try to read without one.
+    let names_encrypted = password.is_some()
+        && Joined::open(volumes)
+            .ok()
+            .is_some_and(|mut again| Archive::read(&mut again, &Password::empty()).is_err());
     let encrypted = encrypted_files(&archive);
     let mut raw = Vec::new();
     let mut unsafe_skipped = 0;
@@ -176,7 +181,60 @@ pub fn list(
             special,
         });
     }
-    Ok((raw, unsafe_skipped))
+    Ok((raw, unsafe_skipped, names_encrypted))
+}
+
+/// Checks that `password` opens the archive's encrypted content (see `probe_password`).
+pub(crate) fn check_password(
+    volumes: &[PathBuf],
+    password: &str,
+    progress: &Progress,
+) -> Result<(), ArchiveError> {
+    let mut reader = ArchiveReader::new(Joined::open(volumes)?, password_of(Some(password)))
+        .map_err(|e| failure(progress, e, true))?;
+    probe_password(&mut reader, progress)
+}
+
+/// Calls `each` for every entry with its data, in the order stored. Entries must be read to
+/// the end (or left alone: this drains what `each` did not read).
+pub(crate) fn stream_entries(
+    volumes: &[PathBuf],
+    password: Option<&str>,
+    progress: &Progress,
+    each: &mut dyn FnMut(&Existing, &mut dyn Read) -> Result<(), ArchiveError>,
+) -> Result<(), ArchiveError> {
+    let had_password = password.is_some();
+    let mut reader = ArchiveReader::new(Joined::open(volumes)?, password_of(password))
+        .map_err(|e| failure(progress, e, had_password))?;
+    let mut stopped: Option<ArchiveError> = None;
+    let result = reader.for_each_entries(|entry, data| {
+        let (mode, special) = unix_attributes(entry);
+        let existing = Existing {
+            path: normalize_name(entry.name()),
+            name: entry.name().to_string(),
+            is_dir: entry.is_directory(),
+            size: entry.size(),
+            meta: Meta {
+                modified: modified_of(entry),
+                mode,
+            },
+            special,
+        };
+        match each(&existing, data) {
+            Ok(()) => {
+                drain(data).map_err(|e| Error::Io(e, "".into()))?;
+                Ok(true)
+            }
+            Err(error) => {
+                stopped = Some(error);
+                Err(Error::Other("stopped".into()))
+            }
+        }
+    });
+    if let Some(error) = stopped {
+        return Err(error);
+    }
+    result.map_err(|e| failure(progress, e, had_password))
 }
 
 fn drain(data: &mut dyn Read) -> io::Result<u64> {

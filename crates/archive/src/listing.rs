@@ -76,6 +76,8 @@ pub struct Listing {
     pub packed_size: u64,
     /// Entries with unsafe names that were left out of the listing.
     pub unsafe_skipped: usize,
+    /// 7z only: the file names themselves are encrypted (the password was needed to list).
+    pub names_encrypted: bool,
     /// Every entry, directories included, sorted by path.
     pub entries: Vec<ArchiveEntry>,
     children: HashMap<String, Vec<usize>>,
@@ -90,6 +92,7 @@ impl Listing {
         packed_size: u64,
         raw: Vec<ArchiveEntry>,
         unsafe_skipped: usize,
+        names_encrypted: bool,
     ) -> Listing {
         let mut by_path: BTreeMap<String, ArchiveEntry> = BTreeMap::new();
         for entry in raw {
@@ -131,6 +134,7 @@ impl Listing {
             volumes,
             packed_size,
             unsafe_skipped,
+            names_encrypted,
             entries,
             children,
         }
@@ -196,7 +200,7 @@ mod tests {
                 entry("docs/a.txt", false, 10),
                 entry("docs/sub/b.txt", false, 20),
                 entry("top.txt", false, 5),
-                entry("empty", true, 0),
+                entry("empty", true, 0, false),
             ],
             0,
         )
@@ -280,6 +284,7 @@ mod tests {
             0,
             vec![entry("f", false, 1), entry("f", false, 2)],
             0,
+            false,
         );
         assert_eq!(listing.entries.len(), 1);
         assert_eq!(listing.find("f").unwrap().size, 2);
@@ -296,7 +301,7 @@ mod tests {
             special: true,
             ..entry("d/link", false, 99)
         });
-        let listing = Listing::build(Format::Tar, 1, 0, raw, 0);
+        let listing = Listing::build(Format::Tar, 1, 0, raw, 0, false);
         assert_eq!(listing.measure(&[]), (35, 3));
         assert_eq!(listing.measure(&["d".to_string()]), (30, 2));
         assert_eq!(

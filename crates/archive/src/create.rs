@@ -75,9 +75,9 @@ pub(crate) struct Item {
 }
 
 /// Removes the temporary file unless it was handed over.
-struct TempFile {
-    path: PathBuf,
-    keep: bool,
+pub(crate) struct TempFile {
+    pub path: PathBuf,
+    pub keep: bool,
 }
 
 impl Drop for TempFile {
@@ -105,7 +105,7 @@ impl Read for SourceReader<'_> {
     }
 }
 
-fn volume_name(base: &Path, number: usize) -> PathBuf {
+pub(crate) fn volume_name(base: &Path, number: usize) -> PathBuf {
     let name = base
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -113,13 +113,13 @@ fn volume_name(base: &Path, number: usize) -> PathBuf {
     base.with_file_name(format!("{name}.{number:03}"))
 }
 
-fn exists(path: &Path) -> bool {
+pub(crate) fn exists(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok()
 }
 
 /// Collects what goes into the archive. Symlinks to files are followed; symlinks to
 /// directories, broken links and special files are left out (and counted).
-fn collect(
+pub(crate) fn collect(
     sources: &[PathBuf],
     own_files: &[PathBuf],
     progress: &Progress,
@@ -182,6 +182,52 @@ fn collect(
         }
     }
     Ok((items, left_out))
+}
+
+/// Puts the finished archive `temp` in place as `output`: renames it, or cuts it into volumes
+/// (`output.001`, ...) when `split` is set. With `replace`, the old archive (or its old
+/// volumes) is removed first. Returns the files that now make up the archive.
+pub(crate) fn place(
+    temp: &mut TempFile,
+    output: &Path,
+    split: Option<u64>,
+    replace: bool,
+    progress: &Progress,
+    host: &mut dyn Host,
+) -> Result<Vec<PathBuf>, ArchiveError> {
+    let mut volumes = Vec::new();
+    if let Some(part_size) = split {
+        if replace {
+            for n in 1.. {
+                let old = volume_name(output, n);
+                if !exists(&old) {
+                    break;
+                }
+                host.make_writable(&old);
+                fs::remove_file(&old)?;
+            }
+        }
+        let mut writer = SplitWriter::new(output, part_size);
+        let copied = File::open(&temp.path)
+            .and_then(|mut source| io::copy(&mut source, &mut writer))
+            .and_then(|_| writer.flush());
+        if let Err(e) = copied {
+            for part in writer.parts() {
+                let _ = fs::remove_file(part);
+            }
+            return Err(io_failure(progress, e));
+        }
+        volumes.extend_from_slice(writer.parts());
+    } else {
+        if replace {
+            host.make_writable(output);
+            fs::remove_file(output)?;
+        }
+        fs::rename(&temp.path, output)?;
+        temp.keep = true; // moved: nothing left to clean up
+        volumes.push(output.to_path_buf());
+    }
+    Ok(volumes)
 }
 
 /// Finds a free name for the archive when the user chose "keep both".
@@ -329,39 +375,7 @@ pub fn create(
     sink.finish()?;
     progress.check()?;
 
-    // Put the finished archive in place.
-    let mut volumes = Vec::new();
-    if split {
-        if replace {
-            for n in 1.. {
-                let old = volume_name(&output, n);
-                if !exists(&old) {
-                    break;
-                }
-                host.make_writable(&old);
-                fs::remove_file(&old)?;
-            }
-        }
-        let mut writer = SplitWriter::new(&output, options.split.unwrap_or(u64::MAX));
-        let copied = File::open(&temp.path)
-            .and_then(|mut source| io::copy(&mut source, &mut writer))
-            .and_then(|_| writer.flush());
-        if let Err(e) = copied {
-            for part in writer.parts() {
-                let _ = fs::remove_file(part);
-            }
-            return Err(io_failure(progress, e));
-        }
-        volumes.extend_from_slice(writer.parts());
-    } else {
-        if replace {
-            host.make_writable(&output);
-            fs::remove_file(&output)?;
-        }
-        fs::rename(&temp.path, &output)?;
-        temp.keep = true; // moved: nothing left to clean up
-        volumes.push(output);
-    }
+    let volumes = place(&mut temp, &output, options.split, replace, progress, host)?;
     Ok(CreateReport {
         files,
         left_out,
