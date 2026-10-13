@@ -29,6 +29,8 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | litery | szybki filtr listy (nazwa zawiera wpisany tekst); Backspace skraca filtr, Esc czyści |
 | Enter na archiwum | wejdź do archiwum (zip, 7z, tar, tar.gz, tgz, także części `*.001`); `..` na górze wychodzi |
 | F5 w archiwum | rozpakuj zaznaczone do katalogu drugiego panelu |
+| F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
+| F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
 | Alt+F5 / Alt+F9 | pakuj (okno) / rozpakuj archiwum pod kursorem lub otwarte |
 | Ctrl+T / Ctrl+W | nowa zakładka (ten sam katalog) / zamknij zakładkę |
 | Ctrl+↑ | katalog pod kursorem w nowej zakładce |
@@ -79,7 +81,7 @@ i kolejne **N** szuka dalej. Komendy: `view`, `viewer scroll|page|hscroll|top|bo
 ## Archiwa
 
 Obsługiwane formaty: **ZIP**, **7z**, **TAR**, **TAR.GZ** (`.tgz`). Archiwum otwiera się w panelu jak
-katalog (tylko do odczytu): F5 rozpakowuje zaznaczone pliki i katalogi do drugiego panelu, a
+katalog: F5 rozpakowuje zaznaczone pliki i katalogi do drugiego panelu, a
 **Alt+F9** (`unpack`) całe archiwum (`unpack -s` do podkatalogu o nazwie archiwum).
 
 **Pakowanie** (**Alt+F5** lub przycisk „Pakuj”) otwiera okno: nazwa, format, kompresja (bez /
@@ -115,6 +117,14 @@ pack tajne -t7z -psekret -mhe             # 7z z hasłem i ukrytymi nazwami plik
   pomijane przy rozpakowaniu (z informacją), a nazwy wychodzące poza katalog docelowy
   (`../x`, ścieżki bezwzględne) są odrzucane.
 - Istniejące archiwum nie jest nadpisywane bez pytania (nadpisz / pomiń / zachowaj oba).
+- **Zmiany w istniejącym archiwum**: dodawanie (F5 z drugiego panelu), usuwanie (F8), zmiana nazwy
+  (F2) i nowy katalog (F7). Archiwum jest przepisywane do pliku tymczasowego obok i podmieniane
+  dopiero po zakończeniu, więc błąd lub anulowanie nie psuje oryginału. W ZIP wpisy są kopiowane
+  bez dekompresji (szybko, a usuwanie i zmiana nazwy nie wymagają hasła); TAR, TAR.GZ i 7z
+  trzeba odczytać i zapisać w całości, co trwa proporcjonalnie do rozmiaru (jest pasek postępu i
+  Anuluj). Archiwa wieloczęściowe zostają podzielone na części tej samej wielkości, a szyfrowanie
+  i ukryte nazwy w 7z są zachowane. Konflikt nazw przy dodawaniu pyta jak przy kopiowaniu.
+  Archiwum zmienione na dysku po otwarciu trzeba otworzyć ponownie (program tego pilnuje).
 
 ## Kopiowanie i przenoszenie
 

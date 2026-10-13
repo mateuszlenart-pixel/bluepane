@@ -575,7 +575,7 @@ impl BluepaneUi {
         // Conflicts and name dialogs have their own window; only yes/no questions use the bar.
         let simple_question = matches!(
             self.session.pending,
-            Some(Pending::Duplicate(_) | Pending::ConfirmDelete(_))
+            Some(Pending::Duplicate(_) | Pending::ConfirmDelete(_) | Pending::ConfirmRemove { .. })
         );
         if simple_question {
             ui.label(RichText::new(&self.session.status).color(Color32::YELLOW));

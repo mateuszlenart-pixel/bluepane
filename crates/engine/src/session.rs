@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-use bluepane_archive::{Format, Level};
+use bluepane_archive::{Change, Format, Level};
 use bluepane_ops::{self as ops, Conflict, Resolution};
 use bluepane_vfs::Volume;
 
@@ -111,6 +111,8 @@ pub enum Pending {
     Duplicate(Vec<PathBuf>),
     /// Move these paths to the trash.
     ConfirmDelete(Vec<PathBuf>),
+    /// Remove these entries from the archive shown in panel `side` (not recoverable).
+    ConfirmRemove { side: usize, entries: Vec<String> },
     /// A name is being typed; the UI edits `text` and `confirm` uses it.
     Input { kind: InputKind, text: String },
     /// An existing file stands in the way of the running copy or move.
@@ -375,12 +377,8 @@ impl Session {
             }
             Command::Copy => self.transfer(false)?,
             Command::Move => self.transfer(true)?,
-            Command::Mkdir(Some(name)) => {
-                self.deny_in_archive("tworzenie katalogu")?;
-                self.make_dir(&name)?
-            }
+            Command::Mkdir(Some(name)) => self.make_dir(&name)?,
             Command::Mkdir(None) => {
-                self.deny_in_archive("tworzenie katalogu")?;
                 self.status = "Nazwa nowego katalogu (Enter = utwórz, Esc = anuluj)".into();
                 self.pending = Some(Pending::Input {
                     kind: InputKind::Mkdir,
@@ -451,9 +449,17 @@ impl Session {
     /// Copy or move the active panel's targets into the other panel's directory.
     fn transfer(&mut self, remove_source: bool) -> Result<(), EngineError> {
         if self.panels[1 - self.active].archive.is_some() {
-            return Err(EngineError(
-                "nie można kopiować do wnętrza archiwum (użyj pack, aby spakować)".into(),
-            ));
+            if self.active_panel().archive.is_some() {
+                return Err(EngineError(
+                    "nie można kopiować z archiwum do archiwum (najpierw rozpakuj)".into(),
+                ));
+            }
+            if remove_source {
+                return Err(EngineError(
+                    "przenoszenie do archiwum niedostępne (F5 dodaje pliki do archiwum)".into(),
+                ));
+            }
+            return self.add_to_archive();
         }
         if self.active_panel().archive.is_some() {
             if remove_source {
@@ -511,7 +517,9 @@ impl Session {
 
     /// F8: ask first, then move to the trash.
     fn propose_delete(&mut self) -> Result<(), EngineError> {
-        self.deny_in_archive("usuwanie")?;
+        if self.active_panel().archive.is_some() {
+            return self.propose_archive_removal();
+        }
         let targets = self.active_panel().targets();
         if targets.is_empty() {
             return Err(EngineError("nic nie zaznaczono".into()));
@@ -541,6 +549,9 @@ impl Session {
                 dest: None,
                 archive: None,
             }),
+            Some(Pending::ConfirmRemove { side, entries }) => {
+                self.modify_archive(side, Change::Remove { entries })?
+            }
             Some(Pending::ConfirmDelete(sources)) => self.enqueue(JobSpec {
                 kind: JobKind::Delete,
                 sources,
@@ -739,7 +750,11 @@ impl Session {
 
         let (text, is_error) = if matches!(
             spec.kind,
-            JobKind::OpenArchive | JobKind::Extract | JobKind::Pack | JobKind::VerifyArchive
+            JobKind::OpenArchive
+                | JobKind::Extract
+                | JobKind::Pack
+                | JobKind::VerifyArchive
+                | JobKind::ModifyArchive
         ) {
             self.archive_result(&spec, report)
         } else {
@@ -891,6 +906,42 @@ impl Session {
                     text.push_str(&format!(", pominięto dowiązania: {}", report.left_out));
                 }
                 (text, false)
+            }
+            JobKind::ModifyArchive => {
+                let Some(done) = report.modified else {
+                    return ("Nie zmieniono archiwum".into(), true);
+                };
+                let path = spec.sources.first().cloned().unwrap_or_default();
+                if let Some(listing) = &report.listing {
+                    for panel in &mut self.panels {
+                        if panel.archive.as_ref().map(|v| &v.archive) == Some(&path) {
+                            panel.replace_listing(listing.clone());
+                        }
+                    }
+                }
+                let mut parts = Vec::new();
+                if done.added > 0 {
+                    parts.push(format!("dodano: {}", done.added));
+                }
+                if done.removed > 0 {
+                    parts.push(format!("usunięto: {}", done.removed));
+                }
+                if done.renamed > 0 {
+                    parts.push(format!("zmieniono nazwę: {}", done.renamed));
+                }
+                if done.skipped > 0 {
+                    parts.push(format!("pominięto: {}", done.skipped));
+                }
+                if done.left_out > 0 {
+                    parts.push(format!("pominięto dowiązania: {}", done.left_out));
+                }
+                if parts.is_empty() {
+                    parts.push("bez zmian".into());
+                }
+                (
+                    format!("Archiwum {archive_name}: {}", parts.join(", ")),
+                    false,
+                )
             }
             JobKind::VerifyArchive => match &report.verify {
                 Some(check) if check.damaged.is_empty() => (
@@ -1391,6 +1442,9 @@ impl Session {
     }
 
     fn make_dir(&mut self, name: &str) -> Result<(), EngineError> {
+        if self.active_panel().archive.is_some() {
+            return self.make_archive_dir(name);
+        }
         let cwd = self.active_panel().cwd.clone();
         let created = ops::mkdir(&cwd, name).map_err(|e| EngineError(e.to_string()))?;
         self.panels.iter_mut().for_each(Panel::reload);
@@ -1399,9 +1453,117 @@ impl Session {
         Ok(())
     }
 
+    /// Queues a change of the archive shown in panel `side`.
+    fn modify_archive(&mut self, side: usize, change: Change) -> Result<(), EngineError> {
+        let Some(view) = self.panels[side].archive.clone() else {
+            return Err(EngineError("to nie jest archiwum".into()));
+        };
+        self.enqueue(JobSpec {
+            kind: JobKind::ModifyArchive,
+            sources: vec![view.archive.clone()],
+            dest: None,
+            archive: Some(ArchiveJob {
+                password: view.password.clone(),
+                listing: Some(view.listing.clone()),
+                change: Some(change),
+                side,
+                ..ArchiveJob::default()
+            }),
+        });
+        Ok(())
+    }
+
+    /// F5 from a directory into an archive panel: add the selection to the archive.
+    fn add_to_archive(&mut self) -> Result<(), EngineError> {
+        let side = 1 - self.active;
+        let sources = self.active_panel().targets();
+        if sources.is_empty() {
+            return Err(EngineError("nic nie zaznaczono".into()));
+        }
+        let into = self.panels[side]
+            .archive
+            .as_ref()
+            .map(|v| v.inner.clone())
+            .unwrap_or_default();
+        self.modify_archive(side, Change::Add { sources, into })
+    }
+
+    /// F8 inside an archive: ask before taking entries out for good.
+    fn propose_archive_removal(&mut self) -> Result<(), EngineError> {
+        let panel = self.active_panel();
+        let Some(view) = &panel.archive else {
+            return Err(EngineError("to nie jest archiwum".into()));
+        };
+        let entries: Vec<String> = panel
+            .target_entries()
+            .into_iter()
+            .filter_map(|e| view.inner_path_of(e))
+            .collect();
+        if entries.is_empty() {
+            return Err(EngineError("nic nie zaznaczono".into()));
+        }
+        self.status = if let [only] = entries.as_slice() {
+            format!("Usunąć „{only}” z archiwum? Nie trafi do kosza. (Enter = tak, Esc = nie)")
+        } else {
+            format!(
+                "Usunąć z archiwum zaznaczone elementy ({})? Nie trafią do kosza. (Enter = tak, Esc = nie)",
+                entries.len()
+            )
+        };
+        self.pending = Some(Pending::ConfirmRemove {
+            side: self.active,
+            entries,
+        });
+        Ok(())
+    }
+
+    /// The archive path of a new name typed in the directory being browsed.
+    fn archive_child_path(&self, name: &str) -> Result<String, EngineError> {
+        let name = name.trim();
+        if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
+            return Err(EngineError(format!("niedozwolona nazwa: „{name}”")));
+        }
+        let inner = self
+            .active_panel()
+            .archive
+            .as_ref()
+            .map(|v| v.inner.as_str())
+            .unwrap_or_default();
+        Ok(if inner.is_empty() {
+            name.to_string()
+        } else {
+            format!("{inner}/{name}")
+        })
+    }
+
+    fn make_archive_dir(&mut self, name: &str) -> Result<(), EngineError> {
+        let path = self.archive_child_path(name)?;
+        self.modify_archive(self.active, Change::NewDir { path })
+    }
+
+    fn rename_in_archive(&mut self, entry: &Path, new_name: &str) -> Result<(), EngineError> {
+        let to = self.archive_child_path(new_name)?;
+        let from = self
+            .active_panel()
+            .archive
+            .as_ref()
+            .and_then(|view| {
+                let name = entry.file_name()?.to_string_lossy().into_owned();
+                Some(if view.inner.is_empty() {
+                    name
+                } else {
+                    format!("{}/{name}", view.inner)
+                })
+            })
+            .ok_or_else(|| EngineError("to nie jest archiwum".into()))?;
+        if from == to {
+            return Ok(());
+        }
+        self.modify_archive(self.active, Change::Rename { from, to })
+    }
+
     /// The entry a rename acts on: the one under the cursor, never `..`.
     fn entry_to_rename(&self) -> Result<PathBuf, EngineError> {
-        self.deny_in_archive("zmiana nazwy")?;
         self.active_panel()
             .current()
             .filter(|e| !is_parent_entry(e))
@@ -1410,6 +1572,9 @@ impl Session {
     }
 
     fn rename_entry(&mut self, path: &Path, new_name: &str) -> Result<(), EngineError> {
+        if self.active_panel().archive.is_some() {
+            return self.rename_in_archive(path, new_name);
+        }
         let renamed = ops::rename(path, new_name).map_err(|e| EngineError(e.to_string()))?;
         self.panels.iter_mut().for_each(Panel::reload);
         self.active_panel_mut().put_cursor_on(&renamed);
@@ -2404,45 +2569,159 @@ mod tests {
     }
 
     #[test]
-    fn an_archive_is_read_only() {
+    fn viewing_and_packing_stay_unavailable_inside_an_archive() {
         let (_tmp, mut s) = with_archives();
         enter_archive(&mut s, "box.zip");
         s.run_line("select top.txt").unwrap();
-        for command in [
-            "delete",
-            "move",
-            "mkdir",
-            "mkdir newdir",
-            "rename x",
-            "rename",
-            "edit",
-            "view",
-            "pack",
-        ] {
+        for command in ["move", "edit", "pack"] {
             let err = s.run_line(command).unwrap_err();
             assert!(!err.0.is_empty(), "{command}");
             assert!(s.pending.is_none(), "{command} must not open a dialog");
         }
-        let err = s.run_line("move").unwrap_err();
-        assert!(err.0.contains("tylko do odczytu"), "{err}");
+    }
+
+    /// Both panels in `left`; the right one (inactive) browses `name`, the left one is active.
+    fn archive_on_the_right(name: &str) -> (tempfile::TempDir, Session) {
+        let (tmp, mut s) = with_archives();
+        std::fs::write(tmp.path().join("left/plain.txt"), "plain").unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line(&format!("cd {}", tmp.path().join("left").display()))
+            .unwrap();
+        enter_archive(&mut s, name);
+        s.run_line("switch").unwrap();
+        s.run_line("refresh").unwrap();
+        (tmp, s)
+    }
+
+    fn archive_names(path: &Path, password: Option<&str>) -> Vec<String> {
+        bluepane_archive::list(path, password, &bluepane_ops::Progress::new())
+            .unwrap()
+            .entries
+            .iter()
+            .map(|e| e.path.clone())
+            .collect()
     }
 
     #[test]
-    fn copying_into_an_archive_is_refused() {
-        let (_tmp, mut s) = with_archives();
-        std::fs::write(_tmp.path().join("left/plain.txt"), "x").unwrap();
-        s.run_line("refresh").unwrap();
-        s.run_line("switch").unwrap();
-        s.run_line(&format!("cd {}", _tmp.path().join("left").display()))
-            .unwrap();
-        enter_archive(&mut s, "box.zip");
-        s.run_line("switch").unwrap();
-        s.run_line(&format!("cd {}", _tmp.path().join("left").display()))
-            .unwrap();
+    fn f5_into_an_archive_panel_adds_the_selection() {
+        let (tmp, mut s) = archive_on_the_right("box.zip");
         s.run_line("select plain.txt").unwrap();
-        let err = s.run_line("copy").unwrap_err();
-        assert!(err.0.contains("pack"), "{err}");
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(!s.status_is_error, "{}", s.status);
+        assert!(s.status.contains("dodano: 1"), "{}", s.status);
+        let names = archive_names(&tmp.path().join("left/box.zip"), None);
+        assert!(names.contains(&"plain.txt".to_string()), "{names:?}");
+        // The panel that shows the archive sees the new file without re-entering it.
+        assert!(s.panels[1].entries.iter().any(|e| e.name == "plain.txt"));
         assert!(s.run_line("move").is_err());
+    }
+
+    #[test]
+    fn adding_goes_into_the_directory_being_browsed() {
+        let (tmp, mut s) = archive_on_the_right("box.zip");
+        s.run_line("switch").unwrap();
+        s.run_line("select docs").unwrap();
+        s.run_line("enter").unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line("select plain.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        let names = archive_names(&tmp.path().join("left/box.zip"), None);
+        assert!(names.contains(&"docs/plain.txt".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn copying_from_one_archive_to_another_is_refused() {
+        let (_tmp, mut s) = archive_on_the_right("box.zip");
+        s.run_line("select locked.zip").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        s.run_line("select top.txt").unwrap();
+        let err = s.run_line("copy").unwrap_err();
+        assert!(err.0.contains("archiwum do archiwum"), "{err}");
+    }
+
+    #[test]
+    fn delete_in_an_archive_asks_and_removes_for_good() {
+        let (tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select top.txt").unwrap();
+        s.run_line("delete").unwrap();
+        assert!(matches!(s.pending, Some(Pending::ConfirmRemove { .. })));
+        assert!(s.status.contains("Nie trafią") || s.status.contains("Nie trafi"));
+        // Refusing changes nothing.
+        s.run_line("cancel").unwrap();
+        assert!(
+            archive_names(&tmp.path().join("left/box.zip"), None).contains(&"top.txt".to_string())
+        );
+
+        s.run_line("delete").unwrap();
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(!s.status_is_error, "{}", s.status);
+        assert!(s.status.contains("usunięto: 1"), "{}", s.status);
+        let names = archive_names(&tmp.path().join("left/box.zip"), None);
+        assert!(!names.contains(&"top.txt".to_string()), "{names:?}");
+        assert!(!rows(&s).contains(&"top.txt".to_string()));
+        assert!(
+            !tmp.path().join("left/.box.zip.bluepane-tmp").exists(),
+            "no temporary file is left behind"
+        );
+    }
+
+    #[test]
+    fn mkdir_and_rename_work_inside_an_archive() {
+        let (tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("mkdir fresh").unwrap();
+        assert!(s.wait_idle());
+        assert!(!s.status_is_error, "{}", s.status);
+        assert!(rows(&s).contains(&"fresh".to_string()), "{:?}", rows(&s));
+
+        s.run_line("select top.txt").unwrap();
+        s.run_line("cursor 0").unwrap();
+        let index = s
+            .active_panel()
+            .entries
+            .iter()
+            .position(|e| e.name == "top.txt")
+            .unwrap();
+        s.run_line(&format!("cursor {index}")).unwrap();
+        s.run_line("rename renamed.txt").unwrap();
+        assert!(s.wait_idle());
+        assert!(!s.status_is_error, "{}", s.status);
+        let names = archive_names(&tmp.path().join("left/box.zip"), None);
+        assert!(names.contains(&"renamed.txt".to_string()), "{names:?}");
+        assert!(names.contains(&"fresh".to_string()), "{names:?}");
+        assert!(!names.contains(&"top.txt".to_string()), "{names:?}");
+
+        // A name with a slash would silently move the entry elsewhere: refuse it.
+        assert!(s.run_line("mkdir a/b").is_err());
+        assert!(s.run_line("rename x/y").is_err());
+    }
+
+    #[test]
+    fn changing_an_encrypted_archive_asks_for_the_password_once() {
+        let (tmp, mut s) = archive_on_the_right("locked.zip");
+        s.run_line("select plain.txt").unwrap();
+        s.run_line("copy").unwrap();
+        s.wait_idle();
+        assert!(matches!(
+            s.pending,
+            Some(Pending::Input {
+                kind: InputKind::ArchivePassword,
+                ..
+            })
+        ));
+        if let Some(Pending::Input { text, .. }) = &mut s.pending {
+            *text = "pw".to_string();
+        }
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(!s.status_is_error, "{}", s.status);
+        let names = archive_names(&tmp.path().join("left/locked.zip"), Some("pw"));
+        assert!(names.contains(&"plain.txt".to_string()), "{names:?}");
     }
 
     #[test]

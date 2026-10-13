@@ -67,7 +67,8 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] Bezpieczeństwo: odrzucanie ścieżek wychodzących poza cel (zip-slip), pomijanie dowiązań i urządzeń, bez bitów setuid
 - [x] Zgodność sprawdzona z prawdziwymi narzędziami: 7-Zip (zwykły ZIP, AES-256, wolumeny), Info-ZIP (ZipCrypto), GNU tar
 - [x] 7z: odczyt i zapis (LZMA2, AES-256, szyfrowanie nagłówka, części `.7z.001`), zgodność z prawdziwym 7-Zip w obie strony (archiwa lite i nielite, wolumeny, hasła)
-- [ ] Nie ma: dodawania/usuwania plików w istniejącym archiwum, podglądu (F3) pliku wewnątrz archiwum (oba w planie), RAR (świadomie pominięty: wymaga kodu w C), BZip2/PPMd w 7z oraz LZMA/BZip2/Zstd w ZIP (czytelny błąd „nieobsługiwane”)
+- [x] Zmiany w istniejącym archiwum: dodawanie (F5), usuwanie (F8), zmiana nazwy (F2), nowy katalog (F7); przepisanie przez plik tymczasowy, ZIP bez dekompresji, TAR/TAR.GZ/7z w całości (z postępem i anulowaniem)
+- [ ] Nie ma: podglądu (F3) pliku wewnątrz archiwum (w planie), RAR (świadomie pominięty: wymaga kodu w C), BZip2/PPMd w 7z oraz LZMA/BZip2/Zstd w ZIP (czytelny błąd „nieobsługiwane”)
 - [ ] Do sprawdzenia ręcznie na Windows (testy kompilują się i przechodzą w CI, ale GUI i nazwy niedozwolone w Windows nie były oglądane)
 
 ### Etap 8: FTP/SFTP

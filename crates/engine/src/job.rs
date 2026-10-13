@@ -9,7 +9,8 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 
 use bluepane_archive::{
-    self as archive, ArchiveError, CreateOptions, Format, Level, Listing, Selection, VerifyReport,
+    self as archive, ArchiveError, Change, CreateOptions, Format, Level, Listing, ModifyReport,
+    Selection, VerifyReport,
 };
 use bluepane_ops::{self as ops, Conflict, OpError, Outcome, Progress, Resolution};
 
@@ -29,6 +30,8 @@ pub enum JobKind {
     Pack,
     /// Reads a whole archive to check it is intact.
     VerifyArchive,
+    /// Adds to, removes from or renames inside an existing archive.
+    ModifyArchive,
 }
 
 impl JobKind {
@@ -43,6 +46,7 @@ impl JobKind {
             JobKind::Extract => "Rozpakowywanie",
             JobKind::Pack => "Pakowanie",
             JobKind::VerifyArchive => "Sprawdzanie archiwum",
+            JobKind::ModifyArchive => "Zmiana archiwum",
         }
     }
 
@@ -57,6 +61,7 @@ impl JobKind {
             JobKind::Extract => "Rozpakowano",
             JobKind::Pack => "Spakowano",
             JobKind::VerifyArchive => "Sprawdzono",
+            JobKind::ModifyArchive => "Zmieniono archiwum",
         }
     }
 }
@@ -84,6 +89,8 @@ pub struct ArchiveJob {
     /// The archive's table of contents, when already known (gives the progress a total).
     pub listing: Option<Arc<Listing>>,
     pub pack: Option<PackOptions>,
+    /// Modify: what to do with the archive.
+    pub change: Option<Change>,
     /// Open: the side (0 or 1) that asked.
     pub side: usize,
 }
@@ -142,6 +149,8 @@ pub struct Report {
     pub left_out: u64,
     /// Verify: what the check found.
     pub verify: Option<VerifyReport>,
+    /// Modify: what was changed (the new table of contents is in `listing`).
+    pub modified: Option<ModifyReport>,
     /// Pack: the files that make up the new archive.
     pub created: Vec<PathBuf>,
     /// Extract / pack: files written.
@@ -335,6 +344,29 @@ fn run_archive(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Repor
             report.skipped += u64::from(created.skipped);
             Ok(())
         })(),
+        JobKind::ModifyArchive => (|| {
+            let change = job
+                .change
+                .as_ref()
+                .ok_or_else(|| ArchiveError::Op("brak opisu zmiany".into()))?;
+            let listing = job
+                .listing
+                .as_ref()
+                .ok_or_else(|| ArchiveError::Op("brak spisu archiwum".into()))?;
+            let done = archive::modify(
+                &source,
+                listing,
+                change,
+                job.password.as_deref(),
+                progress,
+                &mut host,
+            )?;
+            report.modified = Some(done);
+            // The panels show the new contents without another trip through the disk later.
+            let fresh = archive::list(&source, job.password.as_deref(), progress)?;
+            report.listing = Some(Arc::new(fresh));
+            Ok(())
+        })(),
         JobKind::VerifyArchive => {
             archive::verify(&source, job.password.as_deref(), progress).map(|checked| {
                 report.verify = Some(checked);
@@ -355,7 +387,11 @@ fn run_archive(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Repor
 fn run(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
     if matches!(
         spec.kind,
-        JobKind::OpenArchive | JobKind::Extract | JobKind::Pack | JobKind::VerifyArchive
+        JobKind::OpenArchive
+            | JobKind::Extract
+            | JobKind::Pack
+            | JobKind::VerifyArchive
+            | JobKind::ModifyArchive
     ) {
         return run_archive(spec, progress, tx);
     }
