@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use bluepane_engine::{
     format_modified, human_size, name_parts, Command, InputKind, Panel, Pending, Session, SortKey,
+    ViewMode,
 };
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
@@ -15,6 +16,8 @@ const CMD_LINE_ID: &str = "bluepane-command-line";
 /// F-key bar: (key, label, command line). Same bindings as the default key map.
 const FKEYS: &[(&str, &str, &str)] = &[
     ("F2", "Zmień nazwę", "rename"),
+    ("F3", "Podgląd", "view"),
+    ("F4", "Edycja", "edit"),
     ("F5", "Kopiuj", "copy"),
     ("F6", "Przenieś", "move"),
     ("F7", "Nowy katalog", "mkdir"),
@@ -65,11 +68,15 @@ impl BluepaneUi {
             self.bottom_bar(ui, cmd_id);
         });
         egui::CentralPanel::default_margins().show(ui, |ui| {
-            ui.columns(2, |columns| {
-                for (index, ui) in columns.iter_mut().enumerate() {
-                    self.panel_ui(ui, index);
-                }
-            });
+            if self.session.viewer.is_some() {
+                self.viewer_ui(ui);
+            } else {
+                ui.columns(2, |columns| {
+                    for (index, ui) in columns.iter_mut().enumerate() {
+                        self.panel_ui(ui, index);
+                    }
+                });
+            }
         });
         match &self.session.pending {
             Some(Pending::Input { .. }) => self.input_dialog(&ctx),
@@ -87,6 +94,7 @@ impl BluepaneUi {
         let title = match kind {
             InputKind::Mkdir => "Nowy katalog",
             InputKind::Rename(_) => "Zmień nazwę",
+            InputKind::ViewerFind => "Szukaj w pliku",
         };
         let (status, is_error) = (&session.status, session.status_is_error);
         let mut accepted = None;
@@ -190,6 +198,103 @@ impl BluepaneUi {
         }
     }
 
+    /// The file viewer (F3), drawn in place of the two panels.
+    fn viewer_ui(&mut self, ui: &mut egui::Ui) {
+        let font = FontId::monospace(13.0);
+        let glyph = ui
+            .painter()
+            .layout_no_wrap("M".to_string(), font.clone(), Color32::WHITE)
+            .size();
+        let Some(viewer) = self.session.viewer.as_mut() else {
+            return;
+        };
+        let name = viewer
+            .path()
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mode = match viewer.mode() {
+            ViewMode::Text => "tekst",
+            ViewMode::Hex => "hex",
+        };
+        ui.label(
+            RichText::new(format!(
+                "{name}   [{mode}]   bajt {} z {} ({})   {}%",
+                viewer.offset(),
+                viewer.size(),
+                human_size(viewer.size()),
+                viewer.percent()
+            ))
+            .strong(),
+        );
+        ui.label(RichText::new(viewer.message.clone()).weak());
+        ui.label(
+            RichText::new("Esc/Q zamknij · strzałki, PgUp, PgDn, Spacja, Home, End · H hex/tekst · / lub F7 szukaj · N dalej, Shift+N wstecz")
+                .weak(),
+        );
+        ui.separator();
+
+        let available = ui.available_size();
+        let rows = ((available.y - 4.0) / glyph.y).floor().max(1.0) as usize;
+        let cols = (available.x / glyph.x).floor().max(8.0) as usize;
+        viewer.set_viewport(rows, cols);
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(available.x, rows as f32 * glyph.y),
+            egui::Sense::hover(),
+        );
+        let hit = viewer.match_offset();
+        let shown = viewer.visible_rows();
+        // The row holding the last search hit is the last one that starts at or before it.
+        let hit_row = hit.and_then(|m| shown.iter().rposition(|r| r.offset <= m));
+        let painter = ui.painter_at(rect);
+        for (i, row) in shown.iter().enumerate() {
+            let top = rect.top() + i as f32 * glyph.y;
+            if hit_row == Some(i) {
+                let band = Rect::from_min_size(
+                    egui::pos2(rect.left(), top),
+                    egui::vec2(rect.width(), glyph.y),
+                );
+                painter.rect_filled(band, 0.0, ui.visuals().selection.bg_fill);
+            }
+            painter.text(
+                egui::pos2(rect.left() + 2.0, top),
+                Align2::LEFT_TOP,
+                &row.text,
+                font.clone(),
+                ui.visuals().text_color(),
+            );
+        }
+
+        // Mouse wheel: about three rows per notch, whatever unit the platform reports.
+        let wheel_rows: f32 = if response.hovered() {
+            ui.input(|i| {
+                i.events
+                    .iter()
+                    .filter_map(|event| match event {
+                        egui::Event::MouseWheel { unit, delta, .. } => Some(match unit {
+                            egui::MouseWheelUnit::Point => delta.y / glyph.y,
+                            egui::MouseWheelUnit::Line => delta.y * 3.0,
+                            egui::MouseWheelUnit::Page => delta.y * rows as f32,
+                        }),
+                        _ => None,
+                    })
+                    .sum()
+            })
+        } else {
+            0.0
+        };
+        if wheel_rows != 0.0 {
+            // Wheel up (positive) scrolls the content down, i.e. towards the file start.
+            let step = (-wheel_rows).round() as i64;
+            let step = if step == 0 {
+                -wheel_rows.signum() as i64
+            } else {
+                step
+            };
+            self.dispatch(&format!("viewer scroll {step}"));
+        }
+    }
+
     /// Progress of the running job with a cancel button.
     fn progress_ui(&mut self, ui: &mut egui::Ui) {
         let Some(job) = self.session.job_status() else {
@@ -268,6 +373,15 @@ impl BluepaneUi {
                     "Enter" => self.dispatch("confirm"),
                     "Escape" => self.dispatch("cancel"),
                     _ => {}
+                }
+            }
+            return;
+        }
+        if self.session.viewer.is_some() {
+            // The viewer has its own keys; typing must not start the panel filter.
+            for key in pressed {
+                if let Some(line) = self.session.keymap.lookup_viewer(&key).map(str::to_owned) {
+                    self.dispatch(&line);
                 }
             }
             return;

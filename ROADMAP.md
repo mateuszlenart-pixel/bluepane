@@ -11,7 +11,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 2 | Nawigacja | 🟡 | po dysku da się poruszać samym klawiaturą |
 | 3 | Zaznaczanie | ✅ | katalog z 100 tys. plików nie zacina się (cel) |
 | 4 | Operacje F5–F8 | ✅ | operacje w tle z postępem, dialog konfliktów, testy na katalogach tymczasowych |
-| 5 | Podgląd i edycja | ⬜ | duży plik otwiera się bez wczytywania całości do pamięci |
+| 5 | Podgląd i edycja | ✅ | duży plik otwiera się bez wczytywania całości do pamięci |
 | 6 | Archiwa | ⬜ | Enter wchodzi do archiwum, kopiowanie działa w obie strony |
 | 7 | Zaawansowane | ⬜ | synchronizacja pokazuje zmiany przed wykonaniem |
 | 8 | Sieć i wtyczki | ⬜ | SFTP działa jak katalog lokalny |
@@ -49,6 +49,15 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [ ] Do sprawdzenia ręcznie na Windows: długie ścieżki, pliki tylko do odczytu, symlinki (wymagają uprawnień). Kod tych ścieżek kompiluje się w CI, ale nie był uruchamiany.
 
 ## Notatki do późniejszych etapów
+
+### Etap 5: podgląd i edycja
+- [x] Podgląd (F3) oknami przez seek: plik 1 GB otwiera się od razu (proces ok. 110 MB, tyle co sam interfejs), linie ograniczone do 16 KiB, wykrywanie plików binarnych
+- [x] Tryby tekst / hex, przewijanie, skok na początek/koniec/procent (`viewer goto`), przesuwanie w bok
+- [x] Szukanie z podświetleniem trafienia; limit 256 MiB na wywołanie z wznawianiem (okno nie zamarza)
+- [x] Edycja (F4) w zewnętrznym edytorze (`BLUEPANE_EDITOR` albo domyślna aplikacja: `xdg-open` / `explorer`)
+- [ ] Wbudowany edytor tekstu. Świadomie poza etapem: `egui::TextEdit` wczytuje cały tekst do pamięci i nie nadaje się do plików wielogigabajtowych. Do decyzji: edytor tylko dla małych plików albo wyłącznie zewnętrzny.
+- [ ] Szukanie bez rozróżniania wielkości liter działa dla ASCII; inne kodowania niż UTF-8 (np. CP1250) pokazują się z znakami zastępczymi
+- [ ] Do sprawdzenia ręcznie na Windows: F4 przez `explorer`, wyszukiwanie w dużych plikach
 
 ### Etap 8: FTP/SFTP
 Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**:

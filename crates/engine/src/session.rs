@@ -7,7 +7,7 @@ use bluepane_ops::{self as ops, Conflict, Resolution};
 use bluepane_vfs::Volume;
 
 use crate::job::{Answer, Event, JobKind, JobSpec, Report, RunningJob};
-use crate::{is_parent_entry, Command, EngineError, Keymap, Mask, Panel};
+use crate::{is_parent_entry, Command, EngineError, Keymap, Mask, Panel, Viewer, ViewerAction};
 
 /// What a name dialog is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +16,8 @@ pub enum InputKind {
     Mkdir,
     /// New name for this entry.
     Rename(PathBuf),
+    /// Text to search for in the open viewer.
+    ViewerFind,
 }
 
 /// A file conflict the running job is waiting on.
@@ -95,6 +97,8 @@ pub struct Session {
     pub pending: Option<Pending>,
     /// Answer conflicts automatically instead of asking (scripts and the CLI).
     pub auto_resolve: Option<Resolution>,
+    /// The open file viewer (F3); while it is set the UI shows it instead of the panels.
+    pub viewer: Option<Viewer>,
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
 }
@@ -120,6 +124,7 @@ impl Session {
             volumes: bluepane_vfs::volumes(),
             pending: None,
             auto_resolve: None,
+            viewer: None,
             current: None,
             queue: VecDeque::new(),
         }
@@ -181,6 +186,9 @@ impl Session {
             Command::Cancel => self.cancel_question(),
             Command::Resolve(resolution, for_all) => self.resolve(resolution, for_all)?,
             Command::StopJob => self.stop_jobs(),
+            Command::View => self.open_viewer()?,
+            Command::Edit => self.edit_file()?,
+            Command::Viewer(action) => self.viewer_action(action)?,
             Command::SwitchPanel => self.active = 1 - self.active,
             Command::Up => {
                 let panel = self.active_panel_mut();
@@ -394,6 +402,9 @@ impl Session {
                 let result = match &kind {
                     InputKind::Mkdir => self.make_dir(&text),
                     InputKind::Rename(path) => self.rename_entry(path, &text),
+                    InputKind::ViewerFind => {
+                        self.viewer_action(ViewerAction::Find(Some(text.clone())))
+                    }
                 };
                 if let Err(err) = result {
                     // Keep the dialog open so the name can be corrected.
@@ -578,6 +589,81 @@ impl Session {
             }
             std::thread::sleep(Duration::from_millis(1));
         }
+    }
+
+    /// The file under the cursor, for view and edit: never `..`, never a directory.
+    fn entry_to_open(&self) -> Result<PathBuf, EngineError> {
+        let entry = self
+            .active_panel()
+            .current()
+            .filter(|e| !is_parent_entry(e))
+            .ok_or_else(|| EngineError("nic nie wskazano".into()))?;
+        if entry.is_dir() {
+            return Err(EngineError(format!("to katalog, nie plik: {}", entry.name)));
+        }
+        Ok(entry.path.clone())
+    }
+
+    /// F3: opens the built-in viewer on the file under the cursor.
+    fn open_viewer(&mut self) -> Result<(), EngineError> {
+        let path = self.entry_to_open()?;
+        let viewer = Viewer::open(&path)?;
+        self.status = format!(
+            "Podgląd: {}",
+            path.file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default()
+        );
+        self.viewer = Some(viewer);
+        Ok(())
+    }
+
+    /// F4: opens the file in `BLUEPANE_EDITOR`, or the system's default application.
+    fn edit_file(&mut self) -> Result<(), EngineError> {
+        let path = self.entry_to_open()?;
+        let editor = std::env::var("BLUEPANE_EDITOR").ok();
+        bluepane_vfs::open_external(&path, editor.as_deref())
+            .map_err(|e| EngineError(format!("nie udało się otworzyć edytora: {e}")))?;
+        self.status = format!(
+            "Otwarto w edytorze: {}",
+            path.file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default()
+        );
+        Ok(())
+    }
+
+    fn viewer_action(&mut self, action: ViewerAction) -> Result<(), EngineError> {
+        let Some(viewer) = self.viewer.as_mut() else {
+            return Err(EngineError("podgląd nie jest otwarty (F3)".into()));
+        };
+        match action {
+            ViewerAction::Scroll(rows) => viewer.scroll(rows),
+            ViewerAction::Page(pages) => viewer.page(pages),
+            ViewerAction::HScroll(columns) => viewer.scroll_columns(columns),
+            ViewerAction::Top => viewer.top(),
+            ViewerAction::Bottom => viewer.bottom(),
+            ViewerAction::Mode => viewer.toggle_mode(),
+            ViewerAction::Goto(spec) => viewer.goto(&spec)?,
+            ViewerAction::Find(Some(text)) => {
+                viewer.find(&text, true);
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::Find(None) => {
+                let text = viewer.last_search().unwrap_or_default().to_string();
+                self.status = "Szukaj w pliku (Enter = szukaj, Esc = anuluj)".into();
+                self.pending = Some(Pending::Input {
+                    kind: InputKind::ViewerFind,
+                    text,
+                });
+            }
+            ViewerAction::Next | ViewerAction::Prev => {
+                viewer.find_again(action == ViewerAction::Next);
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::Close => self.viewer = None,
+        }
+        Ok(())
     }
 
     fn make_dir(&mut self, name: &str) -> Result<(), EngineError> {
@@ -1159,5 +1245,77 @@ mod tests {
         assert_eq!(status.fraction(), Some(0.25));
         status.bytes_done = 500;
         assert_eq!(status.fraction(), Some(1.0));
+    }
+
+    #[test]
+    fn view_opens_the_file_under_the_cursor_and_close_leaves() {
+        let (_tmp, mut s) = two_dirs();
+        assert!(s.run_line("view").is_err(), "cursor is on ..");
+        s.run_line("cursor 1").unwrap();
+        s.run_line("view").unwrap();
+        let viewer = s.viewer.as_mut().expect("viewer is open");
+        viewer.set_viewport(5, 80);
+        assert_eq!(viewer.visible_rows()[0].text, "a");
+        assert!(s.status.contains("a.txt"));
+        s.run_line("viewer close").unwrap();
+        assert!(s.viewer.is_none());
+        assert!(
+            s.run_line("viewer scroll 1").is_err(),
+            "nothing is open any more"
+        );
+    }
+
+    #[test]
+    fn view_refuses_directories() {
+        let (_tmp, mut s) = two_dirs();
+        s.run_line("mkdir sub").unwrap();
+        s.run_line("select sub").unwrap();
+        let err = s.run_line("view").unwrap_err();
+        assert!(err.0.contains("katalog"), "{err}");
+        assert!(s.viewer.is_none());
+    }
+
+    #[test]
+    fn viewer_commands_navigate_and_search() {
+        let (tmp, mut s) = two_dirs();
+        let lines: String = (0..50).map(|i| format!("row {i}\n")).collect();
+        std::fs::write(tmp.path().join("left/long.txt"), lines).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select long.txt").unwrap();
+        s.run_line("view").unwrap();
+        s.viewer.as_mut().unwrap().set_viewport(5, 80);
+        s.run_line("viewer scroll 10").unwrap();
+        assert_eq!(s.viewer.as_mut().unwrap().visible_rows()[0].text, "row 10");
+        s.run_line("viewer goto 0").unwrap();
+        s.run_line("viewer find row 33").unwrap();
+        assert!(s.status.contains("znaleziono"), "{}", s.status);
+        assert_eq!(s.viewer.as_mut().unwrap().visible_rows()[0].text, "row 33");
+        s.run_line("viewer mode").unwrap();
+        assert_eq!(s.viewer.as_ref().unwrap().mode(), crate::ViewMode::Hex);
+        assert!(s.run_line("viewer goto nonsense").is_err());
+    }
+
+    #[test]
+    fn the_viewer_search_dialog_is_prefilled_with_the_last_search() {
+        let (_tmp, mut s) = two_dirs();
+        s.run_line("cursor 1").unwrap();
+        s.run_line("view").unwrap();
+        s.run_line("viewer find").unwrap();
+        type_into_dialog(&mut s, "a");
+        s.run_line("confirm").unwrap();
+        assert!(s.pending.is_none());
+        s.run_line("viewer find").unwrap();
+        match &s.pending {
+            Some(Pending::Input { text, kind }) => {
+                assert_eq!(text, "a");
+                assert_eq!(*kind, InputKind::ViewerFind);
+            }
+            other => panic!("{other:?}"),
+        }
+        s.run_line("cancel").unwrap();
+        assert!(
+            s.viewer.is_some(),
+            "cancelling the dialog keeps the viewer open"
+        );
     }
 }
