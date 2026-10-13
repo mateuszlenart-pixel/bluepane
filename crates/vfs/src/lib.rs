@@ -10,7 +10,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-pub use platform::{config_dir, home_dir, volumes};
+pub use platform::{config_dir, copy_symlink, extended_path, home_dir, make_writable, volumes};
 
 /// What a directory entry is, from the user's point of view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +111,34 @@ mod tests {
     fn missing_directory_is_an_error() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(list_dir(&tmp.path().join("nope")).is_err());
+    }
+
+    #[test]
+    fn normal_paths_are_not_extended() {
+        let path = Path::new("/tmp/short");
+        assert_eq!(extended_path(path), path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_recreated_with_the_same_target() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("target.txt");
+        std::fs::write(&target, "x").unwrap();
+        let link = tmp.path().join("link");
+        std::os::unix::fs::symlink("target.txt", &link).unwrap();
+        let copy = tmp.path().join("copy");
+        copy_symlink(&link, &copy).unwrap();
+        assert_eq!(std::fs::read_link(&copy).unwrap(), Path::new("target.txt"));
+    }
+
+    #[test]
+    fn make_writable_keeps_files_usable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("f");
+        std::fs::write(&file, "x").unwrap();
+        make_writable(&file).unwrap();
+        std::fs::write(&file, "y").unwrap();
     }
 
     #[test]

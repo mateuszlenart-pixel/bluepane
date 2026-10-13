@@ -1,14 +1,16 @@
 //! Platform-specific code. Exactly one of the two modules is compiled in.
 
+mod verbatim;
+
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::{is_hidden, volumes};
+pub use windows::{copy_symlink, extended_path, is_hidden, make_writable, volumes};
 
 #[cfg(not(windows))]
 mod linux;
 #[cfg(not(windows))]
-pub use linux::{is_hidden, volumes};
+pub use linux::{copy_symlink, extended_path, is_hidden, make_writable, volumes};
 
 use std::path::PathBuf;
 

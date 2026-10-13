@@ -1,5 +1,6 @@
-use std::fs::Metadata;
-use std::path::PathBuf;
+use std::fs::{self, Metadata};
+use std::io;
+use std::path::{Path, PathBuf};
 
 use crate::Volume;
 
@@ -33,4 +34,20 @@ pub fn volumes() -> Vec<Volume> {
         });
     }
     out
+}
+
+/// Linux has no path length limit worth working around: paths are used as they are.
+pub fn extended_path(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
+
+/// Replacing a file by renaming over it does not depend on the old file's mode, so there
+/// is nothing to prepare.
+pub fn make_writable(_path: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+/// Recreates the symlink `src` at `dst` with the same target.
+pub fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(fs::read_link(src)?, dst)
 }

@@ -1,7 +1,9 @@
-use std::fs::Metadata;
-use std::os::windows::fs::MetadataExt;
-use std::path::PathBuf;
+use std::fs::{self, Metadata};
+use std::io;
+use std::os::windows::fs::{symlink_dir, symlink_file, MetadataExt};
+use std::path::{Path, PathBuf};
 
+use super::verbatim::{to_verbatim, LONG_PATH_THRESHOLD};
 use crate::Volume;
 
 const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
@@ -23,4 +25,40 @@ pub fn volumes() -> Vec<Volume> {
             })
         })
         .collect()
+}
+
+/// Long paths (over about 240 characters) get the `\\?\` prefix so Windows accepts them;
+/// shorter ones are returned unchanged.
+pub fn extended_path(path: &Path) -> PathBuf {
+    if path.as_os_str().len() < LONG_PATH_THRESHOLD {
+        return path.to_path_buf();
+    }
+    let Ok(absolute) = std::path::absolute(path) else {
+        return path.to_path_buf();
+    };
+    absolute
+        .to_str()
+        .and_then(to_verbatim)
+        .map_or_else(|| path.to_path_buf(), PathBuf::from)
+}
+
+/// Clears the read-only attribute, which would make replacing the file fail.
+pub fn make_writable(path: &Path) -> io::Result<()> {
+    let mut permissions = fs::metadata(path)?.permissions();
+    if permissions.readonly() {
+        permissions.set_readonly(false);
+        fs::set_permissions(path, permissions)?;
+    }
+    Ok(())
+}
+
+/// Recreates the symlink `src` at `dst`. Needs the symlink privilege (or developer mode);
+/// the error is returned so the caller can fall back to copying the target.
+pub fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
+    let target = fs::read_link(src)?;
+    if fs::metadata(src).map(|m| m.is_dir()).unwrap_or(false) {
+        symlink_dir(target, dst)
+    } else {
+        symlink_file(target, dst)
+    }
 }
