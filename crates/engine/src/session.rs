@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::time::Duration;
 
 use bluepane_archive::{Change, Format, Level};
@@ -9,10 +10,11 @@ use bluepane_vfs::Volume;
 
 use crate::job::{
     Answer, ArchiveJob, Event, JobKind, JobSpec, PackOptions, PasswordProblem, Report, RunningJob,
+    SyncJob,
 };
 use crate::{
     is_parent_entry, name_parts, parse_size, Command, EngineError, Keymap, Mask, PackArgs, Panel,
-    TabAction, UnpackArgs, Viewer, ViewerAction,
+    SyncArgs, SyncFilter, SyncPreview, SyncSettings, TabAction, UnpackArgs, Viewer, ViewerAction,
 };
 
 /// What a name dialog is for.
@@ -218,6 +220,8 @@ pub struct Session {
     pub auto_resolve: Option<Resolution>,
     /// The open file viewer (F3); while it is set the UI shows it instead of the panels.
     pub viewer: Option<Viewer>,
+    /// The synchronization window (Alt+S); while it is set the UI shows it.
+    pub sync: Option<SyncView>,
     parked: [ParkedTabs; 2],
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
@@ -232,6 +236,21 @@ pub struct Session {
 /// A file inside an archive larger than this is not previewed (it would have to be extracted
 /// whole into a temporary directory first): the user extracts it with F5 instead.
 pub const VIEW_FROM_ARCHIVE_LIMIT: u64 = 256 * 1024 * 1024;
+
+/// The synchronization window: the two folders, the settings and what a run would do.
+#[derive(Debug, Clone)]
+pub struct SyncView {
+    pub left: PathBuf,
+    pub right: PathBuf,
+    pub settings: SyncSettings,
+    /// The filter patterns as typed (the compiled filter lives in `settings`).
+    pub include: String,
+    pub exclude: String,
+    /// `None` while the comparison is still running.
+    pub preview: Option<Arc<SyncPreview>>,
+    /// What the last run did, for the window to show.
+    pub summary: Option<String>,
+}
 
 /// Counter that keeps the temporary preview directories of one process apart.
 static PREVIEW_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -258,6 +277,7 @@ impl Session {
             pending: None,
             auto_resolve: None,
             viewer: None,
+            sync: None,
             parked: [ParkedTabs::default(), ParkedTabs::default()],
             current: None,
             queue: VecDeque::new(),
@@ -324,6 +344,10 @@ impl Session {
             Command::Cancel => self.cancel_question(),
             Command::Resolve(resolution, for_all) => self.resolve(resolution, for_all)?,
             Command::StopJob => self.stop_jobs(),
+            Command::Sync(args) => self.start_sync(args)?,
+            Command::SyncRun => self.run_sync()?,
+            Command::SyncSet(n, direction) => self.set_sync_direction(n, direction)?,
+            Command::SyncClose => self.sync = None,
             Command::Tab(action) => self.tab_action(action)?,
             Command::Pack(args) => self.pack(args)?,
             Command::Unpack(args) => self.unpack(&args)?,
@@ -761,7 +785,9 @@ impl Session {
             return;
         }
 
-        let (text, is_error) = if matches!(
+        let (text, is_error) = if matches!(spec.kind, JobKind::SyncCompare | JobKind::SyncApply) {
+            self.sync_result(&spec, report)
+        } else if matches!(
             spec.kind,
             JobKind::OpenArchive
                 | JobKind::Extract
@@ -841,6 +867,184 @@ impl Session {
         }
         self.enqueue(spec);
         Ok(())
+    }
+
+    fn sync_spec(view: &SyncView, kind: JobKind, plan: Option<Arc<SyncPreview>>) -> JobSpec {
+        JobSpec {
+            kind,
+            sources: Vec::new(),
+            dest: None,
+            archive: Some(ArchiveJob {
+                sync: Some(SyncJob {
+                    left: view.left.clone(),
+                    right: view.right.clone(),
+                    settings: view.settings.clone(),
+                    preview: plan,
+                }),
+                ..ArchiveJob::default()
+            }),
+        }
+    }
+
+    /// `sync`: compare the two panels' directories (nothing is written).
+    fn start_sync(&mut self, args: SyncArgs) -> Result<(), EngineError> {
+        if self.panels.iter().any(|p| p.archive.is_some()) {
+            return Err(EngineError(
+                "synchronizacja działa na katalogach, nie wewnątrz archiwum".into(),
+            ));
+        }
+        let (left, right) = (self.panels[0].cwd.clone(), self.panels[1].cwd.clone());
+        if left == right {
+            return Err(EngineError("oba panele wskazują ten sam katalog".into()));
+        }
+        if left.starts_with(&right) || right.starts_with(&left) {
+            return Err(EngineError(
+                "jeden folder leży w drugim: synchronizacja zapętliłaby się".into(),
+            ));
+        }
+        let mut view = match self.sync.take() {
+            Some(v) if v.left == left && v.right == right => v,
+            _ => SyncView {
+                left,
+                right,
+                settings: SyncSettings::default(),
+                include: String::new(),
+                exclude: String::new(),
+                preview: None,
+                summary: None,
+            },
+        };
+        if let Some(variant) = args.variant {
+            view.settings.variant = variant;
+        }
+        if let Some(compare) = args.compare {
+            view.settings.compare = compare;
+        }
+        if let Some(deletion) = args.deletion {
+            view.settings.deletion = deletion;
+        }
+        if let Some(include) = args.include {
+            view.include = include;
+        }
+        if let Some(exclude) = args.exclude {
+            view.exclude = exclude;
+        }
+        view.settings.filter = SyncFilter::new(&view.include, &view.exclude);
+        view.preview = None;
+        let spec = Self::sync_spec(&view, JobKind::SyncCompare, None);
+        self.sync = Some(view);
+        self.enqueue(spec);
+        Ok(())
+    }
+
+    /// `syncrun`: carry out the plan that is on the screen.
+    fn run_sync(&mut self) -> Result<(), EngineError> {
+        let Some(view) = &self.sync else {
+            return Err(EngineError("najpierw porównaj foldery (sync)".into()));
+        };
+        let Some(preview) = view.preview.clone() else {
+            return Err(EngineError("porównanie jeszcze trwa".into()));
+        };
+        if preview.plan.is_noop() {
+            return Err(EngineError("nie ma nic do zsynchronizowania".into()));
+        }
+        let spec = Self::sync_spec(view, JobKind::SyncApply, Some(preview));
+        self.enqueue(spec);
+        Ok(())
+    }
+
+    /// `syncset n right|left|skip`: change the direction of one row of the plan.
+    fn set_sync_direction(
+        &mut self,
+        n: usize,
+        direction: crate::SyncDirection,
+    ) -> Result<(), EngineError> {
+        let Some(preview) = self.sync.as_mut().and_then(|v| v.preview.as_mut()) else {
+            return Err(EngineError("nie ma porównania do zmiany".into()));
+        };
+        Arc::make_mut(preview)
+            .plan
+            .redirect(n - 1, direction)
+            .map_err(EngineError)
+    }
+
+    /// The status line for a finished synchronization job; keeps the window's data current.
+    fn sync_result(&mut self, spec: &JobSpec, report: &Report) -> (String, bool) {
+        if let Some(first) = report.failed.first() {
+            if let Some(view) = &mut self.sync {
+                view.summary = Some(format!("Błąd: {first}"));
+            }
+            return (format!("Błąd: {first}"), true);
+        }
+        if report.cancelled {
+            // A stopped run may have changed some files: show the real state again.
+            if spec.kind == JobKind::SyncApply {
+                if let Some(view) = &mut self.sync {
+                    let next = Self::sync_spec(view, JobKind::SyncCompare, None);
+                    view.preview = None;
+                    self.queue.push_front(next);
+                }
+            }
+            return ("Anulowano".into(), false);
+        }
+        match spec.kind {
+            JobKind::SyncCompare => {
+                let Some(preview) = report.sync_preview.clone() else {
+                    return ("Nie udało się porównać folderów".into(), true);
+                };
+                let plan = &preview.plan;
+                let mut text = if plan.actions.is_empty() {
+                    "Foldery są zsynchronizowane".to_string()
+                } else {
+                    format!(
+                        "Różnice: {} (kopiowanie: {}, usuwanie: {}, konflikty: {}), do skopiowania {}",
+                        plan.actions.len(),
+                        plan.copies(),
+                        plan.deletions(),
+                        plan.conflicts(),
+                        crate::human_size(plan.bytes())
+                    )
+                };
+                if !preview.unreadable.is_empty() {
+                    text.push_str(&format!(", nieczytelne: {}", preview.unreadable.len()));
+                }
+                if preview.skipped_links > 0 {
+                    text.push_str(&format!(
+                        ", pominięto dowiązania: {}",
+                        preview.skipped_links
+                    ));
+                }
+                let is_error = !preview.unreadable.is_empty();
+                if let Some(view) = &mut self.sync {
+                    view.preview = Some(preview);
+                }
+                (text, is_error)
+            }
+            _ => {
+                let Some(done) = &report.sync_done else {
+                    return ("Nie wykonano synchronizacji".into(), true);
+                };
+                let mut text = format!(
+                    "Zsynchronizowano: skopiowano {}, usunięto {}",
+                    done.copied, done.deleted
+                );
+                if done.left_alone > 0 {
+                    text.push_str(&format!(", pozostawiono: {}", done.left_alone));
+                }
+                let failed = !done.failed.is_empty();
+                if let Some(first) = done.failed.first() {
+                    text.push_str(&format!(", błędy: {} ({first})", done.failed.len()));
+                }
+                // Show what is left to do (conflicts, failures) without another click.
+                if let Some(view) = &mut self.sync {
+                    view.summary = Some(text.clone());
+                    let next = Self::sync_spec(view, JobKind::SyncCompare, None);
+                    view.preview = None;
+                    self.queue.push_front(next);
+                }
+                (text, failed)
+            }
+        }
     }
 
     /// The status line for a finished archive job (and, for "open", the panel switch).
@@ -3568,5 +3772,146 @@ mod tests {
         assert_eq!(output_name("data.7z", Format::SevenZ), "data.7z");
         assert_eq!(output_name("data.zip", Format::SevenZ), "data.7z");
         assert_eq!(output_name("data.7z", Format::Zip), "data.zip");
+    }
+
+    // ---- synchronization ------------------------------------------------------------
+
+    fn sync_dirs() -> (tempfile::TempDir, Session) {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("right/only_right.txt"), "r").unwrap();
+        s.run_line("refresh").unwrap();
+        (tmp, s)
+    }
+
+    fn versions(tmp: &tempfile::TempDir) -> String {
+        format!("-delete=versions:{}", tmp.path().join("versions").display())
+    }
+
+    fn plan_ops(s: &Session) -> Vec<(String, crate::SyncOp)> {
+        s.sync
+            .as_ref()
+            .and_then(|v| v.preview.as_ref())
+            .map(|p| {
+                p.plan
+                    .actions
+                    .iter()
+                    .map(|a| (a.path.clone(), a.op.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn sync_compares_without_writing_anything() {
+        let (tmp, mut s) = sync_dirs();
+        s.run_line("sync -mirror").unwrap();
+        assert!(s.wait_idle());
+        assert!(!s.status_is_error, "{}", s.status);
+        assert!(s.status.starts_with("Różnice: 3"), "{}", s.status);
+        let ops = plan_ops(&s);
+        assert!(ops.contains(&("a.txt".to_string(), crate::SyncOp::CopyToRight)));
+        assert!(ops.contains(&("only_right.txt".to_string(), crate::SyncOp::DeleteRight)));
+        assert!(!tmp.path().join("right/a.txt").exists());
+        assert!(tmp.path().join("right/only_right.txt").exists());
+    }
+
+    #[test]
+    fn syncrun_mirrors_and_then_shows_that_nothing_is_left() {
+        let (tmp, mut s) = sync_dirs();
+        s.run_line(&format!("sync -mirror {}", versions(&tmp)))
+            .unwrap();
+        assert!(s.wait_idle());
+        s.run_line("syncrun").unwrap();
+        assert!(s.wait_idle());
+        assert!(!s.status_is_error, "{}", s.status);
+        let right = tmp.path().join("right");
+        assert_eq!(std::fs::read_to_string(right.join("a.txt")).unwrap(), "a");
+        assert!(!right.join("only_right.txt").exists());
+        assert!(tmp.path().join("versions/only_right.txt").exists());
+        let view = s.sync.as_ref().unwrap();
+        assert!(view
+            .summary
+            .as_deref()
+            .unwrap()
+            .contains("skopiowano 2, usunięto 1"));
+        // The window was refreshed after the run: the folders are the same now.
+        assert!(view.preview.as_ref().unwrap().plan.actions.is_empty());
+        // Both panels show the new content.
+        assert!(s.panels[1].entries.iter().any(|e| e.name == "b.txt"));
+        assert!(s.run_line("syncrun").is_err(), "nothing left to do");
+    }
+
+    #[test]
+    fn a_row_can_be_redirected_before_running() {
+        let (tmp, mut s) = sync_dirs();
+        s.run_line("sync -update").unwrap();
+        assert!(s.wait_idle());
+        // Update skips right-only files; send this one to the left instead.
+        let row = plan_ops(&s)
+            .iter()
+            .position(|(p, _)| p == "only_right.txt")
+            .unwrap();
+        s.run_line(&format!("syncset {} left", row + 1)).unwrap();
+        s.run_line("syncrun").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("left/only_right.txt").exists());
+        assert!(tmp.path().join("right/a.txt").exists());
+        assert!(s.run_line("syncset 99 left").is_err());
+    }
+
+    #[test]
+    fn filters_and_comparison_options_reach_the_engine() {
+        let (tmp, mut s) = sync_dirs();
+        std::fs::write(tmp.path().join("left/skip.tmp"), "t").unwrap();
+        s.run_line("sync -update -x*.tmp -size").unwrap();
+        assert!(s.wait_idle());
+        assert!(!plan_ops(&s).iter().any(|(p, _)| p == "skip.tmp"));
+        // Later calls keep the earlier settings unless told otherwise.
+        s.run_line("sync -twoway").unwrap();
+        assert!(s.wait_idle());
+        let view = s.sync.as_ref().unwrap();
+        assert_eq!(view.exclude, "*.tmp");
+        assert_eq!(view.settings.compare, crate::CompareBy::Size);
+        assert!(!plan_ops(&s).iter().any(|(p, _)| p == "skip.tmp"));
+    }
+
+    #[test]
+    fn sync_refuses_unsafe_setups() {
+        let (tmp, mut s) = sync_dirs();
+        // Same directory in both panels.
+        s.run_line("switch").unwrap();
+        s.run_line(&format!("cd {}", tmp.path().join("left").display()))
+            .unwrap();
+        let err = s.run_line("sync").unwrap_err();
+        assert!(err.0.contains("ten sam katalog"), "{err}");
+        // One inside the other.
+        std::fs::create_dir(tmp.path().join("left/inner")).unwrap();
+        s.run_line(&format!("cd {}", tmp.path().join("left/inner").display()))
+            .unwrap();
+        s.run_line("switch").unwrap();
+        let err = s.run_line("sync").unwrap_err();
+        assert!(err.0.contains("w drugim"), "{err}");
+        assert!(s.sync.is_none());
+        assert!(s.run_line("syncrun").is_err());
+        assert!(s.run_line("syncset 1 left").is_err());
+    }
+
+    #[test]
+    fn sync_does_not_work_inside_an_archive() {
+        let (_tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        let err = s.run_line("sync").unwrap_err();
+        assert!(err.0.contains("archiwum"), "{err}");
+    }
+
+    #[test]
+    fn closing_the_sync_window_and_the_default_key() {
+        let (_tmp, mut s) = sync_dirs();
+        s.run_line("sync").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.sync.is_some());
+        s.run_line("syncclose").unwrap();
+        assert!(s.sync.is_none());
+        assert_eq!(s.keymap.lookup("Alt+S"), Some("sync"));
     }
 }

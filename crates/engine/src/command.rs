@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use bluepane_archive::{Format, Level};
 use bluepane_ops::Resolution;
+use bluepane_sync::{CompareBy, Deletion, Direction, Variant};
+use std::time::Duration;
 
 use crate::{EngineError, SortKey};
 
@@ -31,6 +33,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "unselectall",
     "invert",
     "sort",
+    "sync",
 ];
 
 /// What the open file viewer should do.
@@ -95,6 +98,23 @@ pub struct UnpackArgs {
     pub password: Option<String>,
     /// `-s`: extract into a subfolder named after the archive.
     pub subfolder: bool,
+}
+
+/// Settings given to `sync`; whatever is left out keeps its previous (or default) value.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SyncArgs {
+    /// `-twoway`, `-mirror`, `-update`.
+    pub variant: Option<Variant>,
+    /// `-time`, `-size`, `-content`.
+    pub compare: Option<CompareBy>,
+    /// `-tol=<seconds>`: how far apart two modification times may be and still count as equal.
+    pub tolerance: Option<u64>,
+    /// `-i<patterns>`: only these names take part (`;` separates patterns).
+    pub include: Option<String>,
+    /// `-x<patterns>`: these names never take part.
+    pub exclude: Option<String>,
+    /// `-delete=trash|permanent|versions:<folder>`.
+    pub deletion: Option<Deletion>,
 }
 
 /// One user action.
@@ -170,6 +190,15 @@ pub enum Command {
     Resolve(Resolution, bool),
     /// Cancel the running job and drop the queued ones.
     StopJob,
+    /// Compare the two panels' directories and show what a synchronization would do
+    /// (Alt+S). Nothing is changed.
+    Sync(SyncArgs),
+    /// Carry out the plan shown by `sync`.
+    SyncRun,
+    /// Override the direction of row `n` (1-based) of the plan: `right`, `left` or `skip`.
+    SyncSet(usize, Direction),
+    /// Close the synchronization view.
+    SyncClose,
 }
 
 impl Command {
@@ -216,6 +245,10 @@ impl Command {
             "mkdir" => Ok(Command::Mkdir(optional(rest))),
             "rename" => Ok(Command::Rename(optional(rest))),
             "stop" => Ok(Command::StopJob),
+            "sync" => parse_sync(rest).map(Command::Sync),
+            "syncrun" => Ok(Command::SyncRun),
+            "syncset" => parse_syncset(rest),
+            "syncclose" => Ok(Command::SyncClose),
             "view" | "f3" => Ok(Command::View),
             "edit" => Ok(Command::Edit),
             "viewer" => parse_viewer(rest).map(Command::Viewer),
@@ -402,6 +435,77 @@ fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {
 
 fn optional(text: &str) -> Option<String> {
     (!text.is_empty()).then(|| text.to_string())
+}
+
+fn parse_sync(args: &str) -> Result<SyncArgs, EngineError> {
+    let usage = |what: &str| {
+        EngineError(format!(
+            "sync: {what} (użycie: sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>])"
+        ))
+    };
+    let (words, switches) = split_switches(args);
+    if !words.is_empty() {
+        return Err(usage("foldery wskazują panele"));
+    }
+    let mut sync = SyncArgs::default();
+    for switch in switches {
+        match switch {
+            "-twoway" => sync.variant = Some(Variant::TwoWay),
+            "-mirror" => sync.variant = Some(Variant::Mirror),
+            "-update" => sync.variant = Some(Variant::Update),
+            "-time" => sync.compare = Some(CompareBy::default()),
+            "-size" => sync.compare = Some(CompareBy::Size),
+            "-content" => sync.compare = Some(CompareBy::Content),
+            "-delete=trash" => sync.deletion = Some(Deletion::Trash),
+            "-delete=permanent" => sync.deletion = Some(Deletion::Permanent),
+            _ => {
+                if let Some(secs) = switch.strip_prefix("-tol=") {
+                    sync.tolerance = Some(
+                        secs.parse()
+                            .map_err(|_| usage("tolerancja to liczba sekund"))?,
+                    );
+                } else if let Some(folder) = switch.strip_prefix("-delete=versions:") {
+                    if folder.is_empty() {
+                        return Err(usage("podaj katalog wersji"));
+                    }
+                    sync.deletion = Some(Deletion::Versioning(PathBuf::from(folder)));
+                } else if let Some(patterns) = switch.strip_prefix("-i") {
+                    sync.include = Some(patterns.to_string());
+                } else if let Some(patterns) = switch.strip_prefix("-x") {
+                    sync.exclude = Some(patterns.to_string());
+                } else {
+                    return Err(usage(&format!("nieznany przełącznik {switch}")));
+                }
+            }
+        }
+    }
+    if let Some(secs) = sync.tolerance {
+        match sync.compare {
+            None | Some(CompareBy::TimeAndSize { .. }) => {
+                sync.compare = Some(CompareBy::TimeAndSize {
+                    tolerance: Duration::from_secs(secs),
+                });
+            }
+            Some(_) => return Err(usage("-tol działa tylko z porównaniem po dacie")),
+        }
+    }
+    Ok(sync)
+}
+
+fn parse_syncset(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("syncset: użycie: syncset <numer> right|left|skip".into());
+    let mut words = args.split_whitespace();
+    let (Some(n), Some(way), None) = (words.next(), words.next(), words.next()) else {
+        return Err(usage());
+    };
+    let n: usize = n.parse().ok().filter(|n| *n >= 1).ok_or_else(usage)?;
+    let direction = match way.to_ascii_lowercase().as_str() {
+        "right" | "r" | "->" => Direction::ToRight,
+        "left" | "l" | "<-" => Direction::ToLeft,
+        "skip" | "s" | "none" => Direction::Skip,
+        _ => return Err(usage()),
+    };
+    Ok(Command::SyncSet(n, direction))
 }
 
 /// `overwrite`, `newer`, `skip`, `keepboth`, each optionally followed by `-all`.
@@ -641,6 +745,52 @@ mod tests {
         ] {
             assert!(Command::parse(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn parses_sync_switches_and_rows() {
+        use bluepane_sync::{CompareBy, Deletion, Direction, Variant};
+        assert_eq!(
+            Command::parse("sync"),
+            Ok(Command::Sync(SyncArgs::default()))
+        );
+        let Ok(Command::Sync(args)) =
+            Command::parse("sync -mirror -content -x*.tmp;cache/ -iDocs -delete=permanent")
+        else {
+            panic!("did not parse");
+        };
+        assert_eq!(args.variant, Some(Variant::Mirror));
+        assert_eq!(args.compare, Some(CompareBy::Content));
+        assert_eq!(args.exclude.as_deref(), Some("*.tmp;cache/"));
+        assert_eq!(args.include.as_deref(), Some("Docs"));
+        assert_eq!(args.deletion, Some(Deletion::Permanent));
+        let Ok(Command::Sync(args)) = Command::parse("sync -tol=5 -delete=versions:/tmp/v") else {
+            panic!("did not parse");
+        };
+        assert_eq!(
+            args.compare,
+            Some(CompareBy::TimeAndSize {
+                tolerance: Duration::from_secs(5)
+            })
+        );
+        assert_eq!(args.deletion, Some(Deletion::Versioning("/tmp/v".into())));
+        assert!(Command::parse("sync -size -tol=5").is_err());
+        assert!(Command::parse("sync -tol=x").is_err());
+        assert!(Command::parse("sync -nope").is_err());
+        assert!(Command::parse("sync /some/folder").is_err());
+        assert_eq!(
+            Command::parse("syncset 3 left"),
+            Ok(Command::SyncSet(3, Direction::ToLeft))
+        );
+        assert_eq!(
+            Command::parse("syncset 1 skip"),
+            Ok(Command::SyncSet(1, Direction::Skip))
+        );
+        assert!(Command::parse("syncset 0 left").is_err());
+        assert!(Command::parse("syncset 1 up").is_err());
+        assert!(Command::parse("syncset 1").is_err());
+        assert_eq!(Command::parse("syncrun"), Ok(Command::SyncRun));
+        assert_eq!(Command::parse("syncclose"), Ok(Command::SyncClose));
     }
 
     #[test]
