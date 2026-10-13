@@ -10,7 +10,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-pub use platform::{config_dir, copy_symlink, extended_path, home_dir, make_writable, volumes};
+pub use platform::{
+    config_dir, copy_symlink, extended_path, home_dir, make_writable, open_external, volumes,
+};
 
 /// What a directory entry is, from the user's point of view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

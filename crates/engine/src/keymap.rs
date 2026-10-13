@@ -9,6 +9,8 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct Keymap {
     bindings: HashMap<String, String>,
+    /// Keys while the file viewer is open.
+    viewer_bindings: HashMap<String, String>,
 }
 
 impl Default for Keymap {
@@ -26,6 +28,8 @@ impl Default for Keymap {
             ("F5", "copy"),
             ("F6", "move"),
             ("F2", "rename"),
+            ("F3", "view"),
+            ("F4", "edit"),
             ("F7", "mkdir"),
             ("F8", "delete"),
             ("F9", "refresh"),
@@ -52,11 +56,37 @@ impl Default for Keymap {
             ("Alt+Num8", "volume 8"),
             ("Alt+Num9", "volume 9"),
         ];
-        Self {
-            bindings: pairs
-                .into_iter()
+        let viewer_pairs = [
+            ("ArrowDown", "viewer scroll 1"),
+            ("ArrowUp", "viewer scroll -1"),
+            ("PageDown", "viewer page 1"),
+            ("PageUp", "viewer page -1"),
+            ("Space", "viewer page 1"),
+            ("Home", "viewer top"),
+            ("End", "viewer bottom"),
+            ("ArrowRight", "viewer hscroll 8"),
+            ("ArrowLeft", "viewer hscroll -8"),
+            ("H", "viewer mode"),
+            ("F4", "viewer mode"),
+            ("F7", "viewer find"),
+            ("Slash", "viewer find"),
+            ("Ctrl+F", "viewer find"),
+            ("N", "viewer next"),
+            ("F3", "viewer next"),
+            ("Shift+N", "viewer prev"),
+            ("Shift+F3", "viewer prev"),
+            ("Escape", "viewer close"),
+            ("Q", "viewer close"),
+        ];
+        let to_map = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+            pairs
+                .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
+                .collect()
+        };
+        Self {
+            bindings: to_map(&pairs),
+            viewer_bindings: to_map(&viewer_pairs),
         }
     }
 }
@@ -65,6 +95,11 @@ impl Keymap {
     /// The command line bound to a key, if any.
     pub fn lookup(&self, key: &str) -> Option<&str> {
         self.bindings.get(key).map(String::as_str)
+    }
+
+    /// The command line bound to a key while the file viewer is open.
+    pub fn lookup_viewer(&self, key: &str) -> Option<&str> {
+        self.viewer_bindings.get(key).map(String::as_str)
     }
 
     /// Binds (or rebinds) a key.
@@ -122,6 +157,37 @@ mod tests {
                 "{key} -> {line}"
             );
         }
+    }
+
+    #[test]
+    fn viewer_bindings_are_valid_commands() {
+        let map = Keymap::default();
+        for key in [
+            "ArrowDown",
+            "ArrowUp",
+            "PageDown",
+            "PageUp",
+            "Space",
+            "Home",
+            "End",
+            "ArrowLeft",
+            "ArrowRight",
+            "H",
+            "F4",
+            "F7",
+            "Slash",
+            "N",
+            "F3",
+            "Shift+N",
+            "Escape",
+            "Q",
+        ] {
+            let line = map.lookup_viewer(key).unwrap();
+            assert!(Command::parse(line).is_ok(), "{key} -> {line}");
+        }
+        assert_eq!(map.lookup("F3"), Some("view"));
+        assert_eq!(map.lookup("F4"), Some("edit"));
+        assert_eq!(map.lookup_viewer("F12"), None);
     }
 
     #[test]

@@ -65,3 +65,6 @@ pub fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
         symlink_file(target, dst)
     }
 }
+
+/// `explorer <file>` opens the file with its associated application.
+pub const DEFAULT_OPENER: (&str, &[&str]) = ("explorer", &[]);

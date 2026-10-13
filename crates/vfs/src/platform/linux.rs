@@ -51,3 +51,6 @@ pub fn make_writable(_path: &Path) -> io::Result<()> {
 pub fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(fs::read_link(src)?, dst)
 }
+
+/// Opens a file with the desktop's default application.
+pub const DEFAULT_OPENER: (&str, &[&str]) = ("xdg-open", &[]);

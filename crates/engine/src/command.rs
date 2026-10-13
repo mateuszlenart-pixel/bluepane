@@ -32,6 +32,29 @@ pub const COMMAND_NAMES: &[&str] = &[
     "sort",
 ];
 
+/// What the open file viewer should do.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ViewerAction {
+    /// Scroll by rows (negative = up).
+    Scroll(i64),
+    /// Scroll by pages (negative = up).
+    Page(i64),
+    /// Scroll sideways by characters.
+    HScroll(i64),
+    Top,
+    Bottom,
+    /// Switch between text and hex.
+    Mode,
+    /// Jump to a byte offset or a percentage such as `50%`.
+    Goto(String),
+    /// Search forward; without text a dialog asks for it.
+    Find(Option<String>),
+    /// Repeat the search forward / backward.
+    Next,
+    Prev,
+    Close,
+}
+
 /// One user action.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -82,6 +105,12 @@ pub enum Command {
     Move,
     /// Create a directory in the active panel (F7). Without a name a dialog asks for it.
     Mkdir(Option<String>),
+    /// Open the file under the cursor in the built-in viewer (F3).
+    View,
+    /// Open the file under the cursor in an external editor (F4).
+    Edit,
+    /// Control the open viewer (keys while it is open).
+    Viewer(ViewerAction),
     /// Rename the entry under the cursor (F2). Without a name a dialog asks for it.
     Rename(Option<String>),
     /// Move the selection to the trash (F8), after a confirmation.
@@ -136,6 +165,9 @@ impl Command {
             "mkdir" => Ok(Command::Mkdir(optional(rest))),
             "rename" => Ok(Command::Rename(optional(rest))),
             "stop" => Ok(Command::StopJob),
+            "view" | "f3" => Ok(Command::View),
+            "edit" => Ok(Command::Edit),
+            "viewer" => parse_viewer(rest).map(Command::Viewer),
             "select" => need_arg("nazwa").map(Command::Select),
             "cd" => need_arg("ścieżka").map(|p| Command::Cd(PathBuf::from(p))),
             other => parse_resolution(other)
@@ -143,6 +175,37 @@ impl Command {
                 .ok_or_else(|| EngineError(format!("nieznana komenda: {other}"))),
         }
     }
+}
+
+fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {
+    let usage = || {
+        EngineError(
+            "viewer: użycie: viewer <scroll n|page n|hscroll n|top|bottom|mode|goto x|find [tekst]|next|prev|close>"
+                .into(),
+        )
+    };
+    let (sub, rest) = match args.split_once(char::is_whitespace) {
+        Some((sub, rest)) => (sub, rest.trim()),
+        None => (args, ""),
+    };
+    let number = |default: Option<i64>| match (rest.is_empty(), default) {
+        (true, Some(n)) => Ok(n),
+        _ => rest.parse::<i64>().map_err(|_| usage()),
+    };
+    Ok(match sub.to_ascii_lowercase().as_str() {
+        "scroll" => ViewerAction::Scroll(number(None)?),
+        "page" => ViewerAction::Page(number(Some(1))?),
+        "hscroll" => ViewerAction::HScroll(number(None)?),
+        "top" => ViewerAction::Top,
+        "bottom" => ViewerAction::Bottom,
+        "mode" => ViewerAction::Mode,
+        "goto" if !rest.is_empty() => ViewerAction::Goto(rest.to_string()),
+        "find" => ViewerAction::Find(optional(rest)),
+        "next" => ViewerAction::Next,
+        "prev" => ViewerAction::Prev,
+        "close" => ViewerAction::Close,
+        _ => return Err(usage()),
+    })
 }
 
 fn optional(text: &str) -> Option<String> {
@@ -267,6 +330,46 @@ mod tests {
         );
         assert_eq!(Command::parse("stop"), Ok(Command::StopJob));
         assert!(Command::parse("skip-everything").is_err());
+    }
+
+    #[test]
+    fn parses_view_edit_and_viewer_actions() {
+        assert_eq!(Command::parse("view"), Ok(Command::View));
+        assert_eq!(Command::parse("edit"), Ok(Command::Edit));
+        let viewer = |text: &str| {
+            Command::parse(text).map(|c| match c {
+                Command::Viewer(action) => action,
+                other => panic!("{other:?}"),
+            })
+        };
+        assert_eq!(viewer("viewer scroll -3"), Ok(ViewerAction::Scroll(-3)));
+        assert_eq!(viewer("viewer page"), Ok(ViewerAction::Page(1)));
+        assert_eq!(viewer("viewer page -1"), Ok(ViewerAction::Page(-1)));
+        assert_eq!(viewer("viewer hscroll 8"), Ok(ViewerAction::HScroll(8)));
+        assert_eq!(viewer("viewer top"), Ok(ViewerAction::Top));
+        assert_eq!(viewer("viewer bottom"), Ok(ViewerAction::Bottom));
+        assert_eq!(viewer("viewer mode"), Ok(ViewerAction::Mode));
+        assert_eq!(
+            viewer("viewer goto 50%"),
+            Ok(ViewerAction::Goto("50%".into()))
+        );
+        assert_eq!(viewer("viewer find"), Ok(ViewerAction::Find(None)));
+        assert_eq!(
+            viewer("viewer find two words"),
+            Ok(ViewerAction::Find(Some("two words".into())))
+        );
+        assert_eq!(viewer("viewer next"), Ok(ViewerAction::Next));
+        assert_eq!(viewer("viewer prev"), Ok(ViewerAction::Prev));
+        assert_eq!(viewer("viewer close"), Ok(ViewerAction::Close));
+        for bad in [
+            "viewer",
+            "viewer scroll",
+            "viewer scroll x",
+            "viewer goto",
+            "viewer fly",
+        ] {
+            assert!(Command::parse(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
