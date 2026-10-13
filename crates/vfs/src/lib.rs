@@ -6,7 +6,6 @@
 
 mod platform;
 
-use std::cmp::Ordering;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -84,15 +83,10 @@ pub fn list_dir(path: &Path) -> io::Result<Vec<Entry>> {
             kind,
         });
     }
-    entries.sort_by(compare_entries);
+    // Cached keys: lower-casing once per entry instead of on every comparison matters
+    // for directories with 100k files.
+    entries.sort_by_cached_key(|e| (!e.is_dir(), e.name.to_lowercase(), e.name.clone()));
     Ok(entries)
-}
-
-fn compare_entries(a: &Entry, b: &Entry) -> Ordering {
-    b.is_dir()
-        .cmp(&a.is_dir())
-        .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-        .then_with(|| a.name.cmp(&b.name))
 }
 
 #[cfg(test)]

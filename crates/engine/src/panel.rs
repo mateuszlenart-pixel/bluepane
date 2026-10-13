@@ -1,9 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use bluepane_vfs::{Entry, EntryKind};
 
-use crate::EngineError;
+use crate::{EngineError, Mask};
 
 /// Name of the synthetic row that leads to the parent directory.
 pub const PARENT_NAME: &str = "..";
@@ -11,9 +12,40 @@ pub const PARENT_NAME: &str = "..";
 /// How many visited directories each panel remembers.
 const HISTORY_LIMIT: usize = 100;
 
+fn extension_of(entry: &Entry) -> &str {
+    crate::name_parts(&entry.name, entry.is_dir()).1
+}
+
 /// True for the synthetic `..` row (no real entry can have this name).
 pub fn is_parent_entry(entry: &Entry) -> bool {
     entry.name == PARENT_NAME
+}
+
+/// What the listing is ordered by. Directories always come first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortKey {
+    Name,
+    Ext,
+    Size,
+    Date,
+}
+
+impl SortKey {
+    pub fn parse(text: &str) -> Option<SortKey> {
+        match text.to_ascii_lowercase().as_str() {
+            "name" => Some(SortKey::Name),
+            "ext" => Some(SortKey::Ext),
+            "size" => Some(SortKey::Size),
+            "date" => Some(SortKey::Date),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sort {
+    pub key: SortKey,
+    pub descending: bool,
 }
 
 /// One of the two file panels.
@@ -28,6 +60,7 @@ pub struct Panel {
     pub selected: BTreeSet<PathBuf>,
     /// Quick filter: only entries whose name contains this text (case-insensitive) are shown.
     pub filter: String,
+    pub sort: Sort,
     /// Set when the current directory could not be listed.
     pub error: Option<String>,
     /// The whole directory listing, before filtering and without the `..` row.
@@ -47,6 +80,10 @@ impl Panel {
             cursor: 0,
             selected: BTreeSet::new(),
             filter: String::new(),
+            sort: Sort {
+                key: SortKey::Name,
+                descending: false,
+            },
             error: None,
             listing: Vec::new(),
         };
@@ -59,6 +96,7 @@ impl Panel {
         match bluepane_vfs::list_dir(&self.cwd) {
             Ok(entries) => {
                 self.listing = entries;
+                self.sort_listing();
                 self.error = None;
             }
             Err(err) => {
@@ -66,10 +104,112 @@ impl Panel {
                 self.error = Some(err.to_string());
             }
         }
+        let present: HashSet<&Path> = self.listing.iter().map(|e| e.path.as_path()).collect();
         self.selected
-            .retain(|path| self.listing.iter().any(|e| &e.path == path));
+            .retain(|path| present.contains(path.as_path()));
         let keep = self.current().map(|e| e.path.clone());
         self.rebuild(keep.as_deref());
+    }
+
+    /// Orders `listing` by the current sort: directories first, then by key (reversed when
+    /// descending), ties always by name ascending.
+    fn sort_listing(&mut self) {
+        let (key, descending) = (self.sort.key, self.sort.descending);
+        // Keys are computed once per entry: lower-casing inside the comparator would
+        // allocate on every comparison, which matters at 100k entries.
+        let mut keyed: Vec<_> = std::mem::take(&mut self.listing)
+            .into_iter()
+            .map(|e| {
+                let lname = e.name.to_lowercase();
+                let primary = match key {
+                    SortKey::Name => lname.clone(),
+                    SortKey::Ext => extension_of(&e).to_lowercase(),
+                    SortKey::Size | SortKey::Date => String::new(),
+                };
+                let number = match key {
+                    // Directories have no size, so they stay ordered by name.
+                    SortKey::Size if e.is_dir() => 0,
+                    SortKey::Size => u128::from(e.size),
+                    SortKey::Date => e
+                        .modified
+                        .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
+                        .map_or(0, |d| d.as_nanos()),
+                    _ => 0,
+                };
+                ((!e.is_dir(), primary, number, lname), e)
+            })
+            .collect();
+        keyed.sort_by(|(a, ea), (b, eb)| {
+            a.0.cmp(&b.0)
+                .then_with(|| {
+                    let order = a.1.cmp(&b.1).then_with(|| a.2.cmp(&b.2));
+                    if descending {
+                        order.reverse()
+                    } else {
+                        order
+                    }
+                })
+                .then_with(|| a.3.cmp(&b.3))
+                .then_with(|| ea.name.cmp(&eb.name))
+        });
+        self.listing = keyed.into_iter().map(|(_, e)| e).collect();
+    }
+
+    /// Changes the sort order. Without an explicit direction, choosing the current key
+    /// again flips the direction and a new key starts ascending.
+    pub fn set_sort(&mut self, key: SortKey, descending: Option<bool>) {
+        let descending = descending.unwrap_or(key == self.sort.key && !self.sort.descending);
+        self.sort = Sort { key, descending };
+        let keep = self.current().map(|e| e.path.clone());
+        self.sort_listing();
+        self.rebuild(keep.as_deref());
+    }
+
+    /// Visible entries other than the `..` row.
+    fn real_entries(&self) -> impl Iterator<Item = &Entry> {
+        self.entries.iter().filter(|e| !is_parent_entry(e))
+    }
+
+    /// Selects (or unselects) the visible entries whose name matches the mask.
+    /// Returns how many entries matched.
+    pub fn select_matching(&mut self, mask: &Mask, select: bool) -> usize {
+        let matched: Vec<PathBuf> = self
+            .real_entries()
+            .filter(|e| mask.matches(&e.name))
+            .map(|e| e.path.clone())
+            .collect();
+        let count = matched.len();
+        for path in matched {
+            if select {
+                self.selected.insert(path);
+            } else {
+                self.selected.remove(&path);
+            }
+        }
+        count
+    }
+
+    /// Selects every visible entry (not `..`).
+    pub fn select_all(&mut self) -> usize {
+        let paths: Vec<PathBuf> = self.real_entries().map(|e| e.path.clone()).collect();
+        let count = paths.len();
+        self.selected.extend(paths);
+        count
+    }
+
+    /// Clears the selection, including entries currently hidden by the filter.
+    pub fn unselect_all(&mut self) {
+        self.selected.clear();
+    }
+
+    /// Inverts the selection of the visible entries (not `..`).
+    pub fn invert_selection(&mut self) {
+        let paths: Vec<PathBuf> = self.real_entries().map(|e| e.path.clone()).collect();
+        for path in paths {
+            if !self.selected.remove(&path) {
+                self.selected.insert(path);
+            }
+        }
     }
 
     /// Recomputes `entries` from the listing and the filter and puts the cursor on `keep`
@@ -259,6 +399,7 @@ impl Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bluepane_vfs::EntryKind;
 
     /// Panel on a temp dir holding `dir/`, `a.txt`, `b.txt`, `Alpha.md`.
     /// Rows: `..`, `dir`, `a.txt`, `Alpha.md`, `b.txt`.
@@ -440,6 +581,190 @@ mod tests {
         let err = panel.back().unwrap_err();
         assert!(err.0.contains("nie istnieje"));
         assert_eq!(panel.cwd, tmp.path());
+    }
+
+    fn fake(name: &str, size: u64, secs: u64, dir: bool) -> Entry {
+        Entry {
+            name: name.to_string(),
+            path: PathBuf::from("/synthetic").join(name),
+            kind: if dir { EntryKind::Dir } else { EntryKind::File },
+            size,
+            modified: Some(UNIX_EPOCH + std::time::Duration::from_secs(secs)),
+            hidden: false,
+        }
+    }
+
+    /// Panel over an in-memory listing (no file system access).
+    fn synthetic(entries: Vec<Entry>) -> Panel {
+        let mut panel = Panel::new("/synthetic");
+        panel.listing = entries;
+        panel.sort_listing();
+        panel.rebuild(None);
+        panel
+    }
+
+    fn mixed() -> Panel {
+        synthetic(vec![
+            fake("b.txt", 30, 300, false),
+            fake("A.md", 10, 500, false),
+            fake("c.txt", 20, 100, false),
+            fake("zdir", 0, 200, true),
+            fake("adir", 0, 400, true),
+            fake("noext", 5, 50, false),
+        ])
+    }
+
+    #[test]
+    fn sorts_by_each_key_with_directories_first() {
+        let mut p = mixed();
+        assert_eq!(
+            names(&p),
+            ["..", "adir", "zdir", "A.md", "b.txt", "c.txt", "noext"]
+        );
+        p.set_sort(SortKey::Size, None);
+        assert_eq!(
+            names(&p),
+            ["..", "adir", "zdir", "noext", "A.md", "c.txt", "b.txt"]
+        );
+        p.set_sort(SortKey::Date, None);
+        assert_eq!(
+            names(&p),
+            ["..", "zdir", "adir", "noext", "c.txt", "b.txt", "A.md"]
+        );
+        p.set_sort(SortKey::Ext, None);
+        assert_eq!(
+            names(&p),
+            ["..", "adir", "zdir", "noext", "A.md", "b.txt", "c.txt"]
+        );
+    }
+
+    #[test]
+    fn repeating_a_key_flips_the_direction_but_keeps_directories_on_top() {
+        let mut p = mixed();
+        p.set_sort(SortKey::Size, None);
+        p.set_sort(SortKey::Size, None);
+        assert!(p.sort.descending);
+        assert_eq!(
+            names(&p),
+            ["..", "adir", "zdir", "b.txt", "c.txt", "A.md", "noext"]
+        );
+        // A different key starts ascending again; an explicit direction wins.
+        p.set_sort(SortKey::Name, None);
+        assert!(!p.sort.descending);
+        p.set_sort(SortKey::Name, Some(true));
+        assert_eq!(
+            names(&p),
+            ["..", "zdir", "adir", "noext", "c.txt", "b.txt", "A.md"]
+        );
+    }
+
+    #[test]
+    fn ties_stay_in_name_order_when_descending() {
+        let mut p = synthetic(vec![
+            fake("b", 7, 1, false),
+            fake("a", 7, 1, false),
+            fake("c", 9, 1, false),
+        ]);
+        p.set_sort(SortKey::Size, Some(true));
+        assert_eq!(names(&p), ["..", "c", "a", "b"]);
+    }
+
+    #[test]
+    fn sorting_keeps_the_cursor_on_the_same_entry() {
+        let mut p = mixed();
+        p.cursor = p.entries.iter().position(|e| e.name == "b.txt").unwrap();
+        p.set_sort(SortKey::Size, Some(true));
+        assert_eq!(p.current().unwrap().name, "b.txt");
+    }
+
+    #[test]
+    fn mask_selection_and_unselection() {
+        let mut p = mixed();
+        let count = p.select_matching(&Mask::parse("*.txt").unwrap(), true);
+        assert_eq!(count, 2);
+        assert_eq!(p.selected.len(), 2);
+        p.select_matching(&Mask::parse("c.*").unwrap(), false);
+        assert_eq!(p.selected.len(), 1);
+        assert!(p.selected.contains(&PathBuf::from("/synthetic/b.txt")));
+    }
+
+    #[test]
+    fn select_all_invert_and_unselect_skip_the_parent_row() {
+        let mut p = mixed();
+        assert_eq!(p.select_all(), 6);
+        assert_eq!(p.selected.len(), 6);
+        p.invert_selection();
+        assert!(p.selected.is_empty());
+        p.selected.insert(PathBuf::from("/synthetic/noext"));
+        p.invert_selection();
+        assert_eq!(p.selected.len(), 5);
+        assert!(!p.selected.contains(&PathBuf::from("/synthetic/noext")));
+        assert!(!p.selected.contains(&p.entries[0].path));
+        p.unselect_all();
+        assert!(p.selected.is_empty());
+    }
+
+    #[test]
+    fn selection_commands_only_touch_visible_entries() {
+        let mut p = mixed();
+        p.set_filter("txt");
+        assert_eq!(p.select_all(), 2);
+        p.set_filter("");
+        assert_eq!(p.selected.len(), 2);
+        p.set_filter("md");
+        p.invert_selection();
+        assert_eq!(p.selected.len(), 3);
+    }
+
+    /// Stage 3 goal: a directory with 100k files must not make the UI stall. The listing
+    /// is synthetic so the test does not depend on disk speed; the bound is deliberately
+    /// generous for debug builds on slow CI machines.
+    #[test]
+    fn hundred_thousand_entries_stay_responsive() {
+        let entries: Vec<Entry> = (0..100_000u64)
+            .map(|i| {
+                fake(
+                    &format!("File{:06}.dat", (i * 7919) % 100_000),
+                    i % 977,
+                    i,
+                    false,
+                )
+            })
+            .collect();
+        let started = std::time::Instant::now();
+        let mut p = synthetic(entries);
+        p.set_sort(SortKey::Size, Some(true));
+        p.set_filter("99");
+        p.set_filter("");
+        assert_eq!(p.select_all(), 100_000);
+        p.invert_selection();
+        p.select_matching(&Mask::parse("*7*.dat").unwrap(), true);
+        assert!(!p.targets().is_empty());
+        p.reload(); // exercises the selection clean-up for a large selection
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < std::time::Duration::from_secs(20),
+            "100k entries took {elapsed:?}"
+        );
+    }
+
+    /// Same with real files; slow to set up, so run it by hand:
+    /// `cargo test -p bluepane-engine --release -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn hundred_thousand_real_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        for i in 0..100_000 {
+            std::fs::write(tmp.path().join(format!("f{i:06}.txt")), "").unwrap();
+        }
+        let started = std::time::Instant::now();
+        let mut panel = Panel::new(tmp.path());
+        let listed = started.elapsed();
+        panel.select_all();
+        panel.reload();
+        panel.set_sort(SortKey::Date, None);
+        println!("list: {listed:?}, everything: {:?}", started.elapsed());
+        assert_eq!(panel.entries.len(), 100_001);
     }
 
     impl Panel {

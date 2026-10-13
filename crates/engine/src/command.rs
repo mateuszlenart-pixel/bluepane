@@ -1,11 +1,33 @@
 use std::path::PathBuf;
 
-use crate::EngineError;
+use crate::{EngineError, SortKey};
 
 /// Names accepted at the command line (aliases excluded).
 pub const COMMAND_NAMES: &[&str] = &[
-    "switch", "up", "enter", "cursor", "toggle", "select", "cd", "back", "forward", "volume",
-    "filter", "refresh", "copy", "move", "mkdir", "delete", "confirm", "cancel",
+    "switch",
+    "up",
+    "enter",
+    "cursor",
+    "toggle",
+    "select",
+    "cd",
+    "back",
+    "forward",
+    "volume",
+    "filter",
+    "refresh",
+    "copy",
+    "move",
+    "mkdir",
+    "delete",
+    "confirm",
+    "cancel",
+    "selmask",
+    "unselmask",
+    "selectall",
+    "unselectall",
+    "invert",
+    "sort",
 ];
 
 /// One user action.
@@ -38,6 +60,18 @@ pub enum Command {
     /// Copy the selection (or the entry under the cursor) to the other panel (F5).
     /// When both panels show the same directory this proposes duplicates instead.
     Copy,
+    /// Select the visible entries matching a mask such as `*.txt;*.md` (Ctrl+M).
+    SelectMask(String),
+    /// Unselect the visible entries matching a mask (Ctrl+Shift+M).
+    UnselectMask(String),
+    /// Select every visible entry (Ctrl+A).
+    SelectAll,
+    /// Clear the selection (Ctrl+Shift+A).
+    UnselectAll,
+    /// Invert the selection of the visible entries (Ctrl+I).
+    InvertSelection,
+    /// Order the active panel; `None` direction flips on a repeated key (Ctrl+F3..F6).
+    Sort(SortKey, Option<bool>),
     /// Accept the pending proposal (Enter while a question is shown).
     Confirm,
     /// Reject the pending proposal (Escape while a question is shown).
@@ -71,6 +105,12 @@ impl Command {
             "up" => Ok(Command::Up),
             "enter" => Ok(Command::Enter),
             "toggle" => Ok(Command::ToggleSelect),
+            "selmask" => need_arg("maska, np. *.txt").map(Command::SelectMask),
+            "unselmask" => need_arg("maska, np. *.txt").map(Command::UnselectMask),
+            "selectall" => Ok(Command::SelectAll),
+            "unselectall" => Ok(Command::UnselectAll),
+            "invert" => Ok(Command::InvertSelection),
+            "sort" => parse_sort(rest),
             "confirm" | "yes" => Ok(Command::Confirm),
             "cancel" | "no" => Ok(Command::Cancel),
             "back" => Ok(Command::Back),
@@ -91,6 +131,22 @@ impl Command {
             other => Err(EngineError(format!("nieznana komenda: {other}"))),
         }
     }
+}
+
+fn parse_sort(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("sort: użycie: sort <name|ext|size|date> [asc|desc]".into());
+    let mut words = args.split_whitespace();
+    let key = words.next().and_then(SortKey::parse).ok_or_else(usage)?;
+    let descending = match words.next().map(str::to_ascii_lowercase).as_deref() {
+        None => None,
+        Some("asc") => Some(false),
+        Some("desc") => Some(true),
+        Some(_) => return Err(usage()),
+    };
+    if words.next().is_some() {
+        return Err(usage());
+    }
+    Ok(Command::Sort(key, descending))
 }
 
 #[cfg(test)]
@@ -120,6 +176,29 @@ mod tests {
             Command::parse("filter my file"),
             Ok(Command::Filter("my file".into()))
         );
+    }
+
+    #[test]
+    fn parses_selection_and_sort_commands() {
+        assert_eq!(
+            Command::parse("selmask *.txt;*.md"),
+            Ok(Command::SelectMask("*.txt;*.md".into()))
+        );
+        assert_eq!(Command::parse("selectall"), Ok(Command::SelectAll));
+        assert_eq!(Command::parse("invert"), Ok(Command::InvertSelection));
+        assert_eq!(
+            Command::parse("sort size"),
+            Ok(Command::Sort(SortKey::Size, None))
+        );
+        assert_eq!(
+            Command::parse("sort DATE desc"),
+            Ok(Command::Sort(SortKey::Date, Some(true)))
+        );
+        assert!(Command::parse("selmask").is_err());
+        assert!(Command::parse("sort").is_err());
+        assert!(Command::parse("sort color").is_err());
+        assert!(Command::parse("sort name up").is_err());
+        assert!(Command::parse("sort name asc extra").is_err());
     }
 
     #[test]

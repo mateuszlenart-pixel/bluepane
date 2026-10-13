@@ -3,10 +3,8 @@
 //! The UI only translates input into command lines and draws the engine's state.
 //! It contains no file system logic.
 
-use std::time::{Duration, SystemTime};
-
-use bluepane_engine::{Command, Panel, Session};
-use egui::{Color32, RichText};
+use bluepane_engine::{format_modified, human_size, name_parts, Command, Panel, Session, SortKey};
+use egui::{Align2, Color32, FontId, Rect, RichText};
 
 const CMD_LINE_ID: &str = "bluepane-command-line";
 
@@ -252,8 +250,56 @@ impl BluepaneUi {
         let row_height = ui.spacing().interact_size.y;
         let stride = row_height + ui.spacing().item_spacing.y;
         let cursor = panel.cursor;
+        let sort = panel.sort;
         let mut clicked = None;
         let mut entered = None;
+        let mut sort_by = None;
+
+        // Column header: click to sort by that column, click again to flip the direction.
+        let (header_rect, _) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), row_height),
+            egui::Sense::hover(),
+        );
+        let columns = Columns::split(header_rect);
+        let font = FontId::monospace(13.0);
+        for (rect, key, label) in [
+            (columns.name, SortKey::Name, "Nazwa"),
+            (columns.ext, SortKey::Ext, "Typ"),
+            (columns.size, SortKey::Size, "Rozmiar"),
+            (columns.date, SortKey::Date, "Data"),
+        ] {
+            let response = ui.interact(
+                rect,
+                ui.id().with(("sort", index, label)),
+                egui::Sense::click(),
+            );
+            let arrow = match (sort.key == key, sort.descending) {
+                (false, _) => "",
+                (true, false) => " ▲",
+                (true, true) => " ▼",
+            };
+            let color = if response.hovered() {
+                ui.visuals().strong_text_color()
+            } else {
+                ui.visuals().weak_text_color()
+            };
+            let (pos, align) = if key == SortKey::Size {
+                (
+                    egui::pos2(rect.right() - COLUMN_PAD, rect.center().y),
+                    Align2::RIGHT_CENTER,
+                )
+            } else {
+                (
+                    egui::pos2(rect.left() + COLUMN_PAD, rect.center().y),
+                    Align2::LEFT_CENTER,
+                )
+            };
+            ui.painter()
+                .text(pos, align, format!("{label}{arrow}"), font.clone(), color);
+            if response.clicked() {
+                sort_by = Some(key);
+            }
+        }
 
         egui::ScrollArea::vertical()
             .id_salt(("panel", index))
@@ -263,7 +309,7 @@ impl BluepaneUi {
                     let y =
                         ui.min_rect().min.y + cursor.saturating_sub(range.start) as f32 * stride;
                     if cursor < range.start || cursor >= range.end {
-                        let rect = egui::Rect::from_min_size(
+                        let rect = Rect::from_min_size(
                             egui::pos2(ui.min_rect().min.x, y),
                             egui::vec2(1.0, row_height),
                         );
@@ -272,32 +318,69 @@ impl BluepaneUi {
                 }
                 for row in range {
                     let entry = &panel.entries[row];
-                    let marker = if panel.selected.contains(&entry.path) {
-                        "*"
+                    let (rect, response) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), row_height),
+                        egui::Sense::click(),
+                    );
+                    let is_selected = panel.selected.contains(&entry.path);
+                    if row == cursor {
+                        let fill = if is_active {
+                            ui.visuals().selection.bg_fill
+                        } else {
+                            ui.visuals().widgets.inactive.weak_bg_fill
+                        };
+                        ui.painter().rect_filled(rect, 2.0, fill);
+                    } else if response.hovered() {
+                        ui.painter().rect_filled(
+                            rect,
+                            2.0,
+                            ui.visuals().widgets.hovered.weak_bg_fill,
+                        );
+                    }
+                    let color = if is_selected {
+                        Color32::YELLOW
+                    } else if entry.hidden {
+                        ui.visuals().weak_text_color()
                     } else {
-                        " "
+                        ui.visuals().text_color()
                     };
+                    let cols = Columns::split(rect);
+                    let (stem, ext) = name_parts(&entry.name, entry.is_dir());
                     let name = if entry.is_dir() {
-                        format!("[{}]", entry.name)
+                        format!("[{stem}]")
                     } else {
-                        entry.name.clone()
+                        stem.to_string()
                     };
                     let size = if entry.is_dir() {
                         "<DIR>".to_string()
                     } else {
                         human_size(entry.size)
                     };
-                    let text = format!(
-                        "{marker}{name:<42} {size:>10}  {}",
-                        format_age(entry.modified)
+                    let painter = ui.painter();
+                    let y = rect.center().y;
+                    // Each text is clipped to its own column so long names do not spill over.
+                    let cell = |col: Rect, align: Align2, text: String| {
+                        let x = if align == Align2::RIGHT_CENTER {
+                            col.right() - COLUMN_PAD
+                        } else {
+                            col.left() + COLUMN_PAD
+                        };
+                        painter.with_clip_rect(col).text(
+                            egui::pos2(x, y),
+                            align,
+                            text,
+                            font.clone(),
+                            color,
+                        );
+                    };
+                    cell(cols.name, Align2::LEFT_CENTER, name);
+                    cell(cols.ext, Align2::LEFT_CENTER, ext.to_string());
+                    cell(cols.size, Align2::RIGHT_CENTER, size);
+                    cell(
+                        cols.date,
+                        Align2::LEFT_CENTER,
+                        format_modified(entry.modified),
                     );
-                    let mut rich = RichText::new(text).monospace();
-                    if panel.selected.contains(&entry.path) {
-                        rich = rich.color(Color32::YELLOW);
-                    } else if entry.hidden {
-                        rich = rich.color(ui.visuals().weak_text_color());
-                    }
-                    let response = ui.selectable_label(is_active && row == cursor, rich);
                     if response.clicked() {
                         clicked = Some(row);
                     }
@@ -313,6 +396,41 @@ impl BluepaneUi {
         }
         if entered.is_some() {
             self.session.panels[index].enter();
+        }
+        if let Some(key) = sort_by {
+            self.session.active = index;
+            self.last_error = self.session.execute(Command::Sort(key, None)).is_err();
+        }
+    }
+}
+
+const COLUMN_PAD: f32 = 6.0;
+
+/// Horizontal layout of a panel row: a flexible name column and fixed columns on the right.
+struct Columns {
+    name: Rect,
+    ext: Rect,
+    size: Rect,
+    date: Rect,
+}
+
+impl Columns {
+    const EXT: f32 = 56.0;
+    const SIZE: f32 = 80.0;
+    const DATE: f32 = 128.0;
+
+    fn split(row: Rect) -> Columns {
+        let date_left = row.right() - Self::DATE;
+        let size_left = date_left - Self::SIZE;
+        let ext_left = size_left - Self::EXT;
+        let cut = |left: f32, right: f32| {
+            Rect::from_min_max(egui::pos2(left, row.top()), egui::pos2(right, row.bottom()))
+        };
+        Columns {
+            name: cut(row.left(), ext_left.max(row.left())),
+            ext: cut(ext_left.max(row.left()), size_left.max(row.left())),
+            size: cut(size_left.max(row.left()), date_left.max(row.left())),
+            date: cut(date_left.max(row.left()), row.right()),
         }
     }
 }
@@ -333,38 +451,6 @@ fn key_name(key: egui::Key, modifiers: egui::Modifiers) -> String {
     name
 }
 
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} B")
-    } else {
-        format!("{value:.1} {}", UNITS[unit])
-    }
-}
-
-/// Coarse "how long ago" text; real date formatting arrives with the columns work (stage 3).
-fn format_age(modified: Option<SystemTime>) -> String {
-    let Some(modified) = modified else {
-        return String::new();
-    };
-    let age = SystemTime::now()
-        .duration_since(modified)
-        .unwrap_or(Duration::ZERO)
-        .as_secs();
-    match age {
-        0..=59 => "teraz".to_string(),
-        60..=3599 => format!("{} min temu", age / 60),
-        3600..=86_399 => format!("{} godz. temu", age / 3600),
-        _ => format!("{} dni temu", age / 86_400),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,16 +467,22 @@ mod tests {
     }
 
     #[test]
-    fn sizes_are_human_readable() {
-        assert_eq!(human_size(0), "0 B");
-        assert_eq!(human_size(1023), "1023 B");
-        assert_eq!(human_size(1536), "1.5 KB");
-        assert_eq!(human_size(5 * 1024 * 1024), "5.0 MB");
+    fn columns_tile_the_row_without_overlap() {
+        let row = Rect::from_min_max(egui::pos2(10.0, 0.0), egui::pos2(500.0, 20.0));
+        let c = Columns::split(row);
+        assert_eq!(c.name.left(), 10.0);
+        assert_eq!(c.name.right(), c.ext.left());
+        assert_eq!(c.ext.right(), c.size.left());
+        assert_eq!(c.size.right(), c.date.left());
+        assert_eq!(c.date.right(), 500.0);
     }
 
     #[test]
-    fn age_buckets() {
-        assert_eq!(format_age(None), "");
-        assert_eq!(format_age(Some(SystemTime::now())), "teraz");
+    fn narrow_rows_do_not_produce_inverted_columns() {
+        let row = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 20.0));
+        let c = Columns::split(row);
+        for rect in [c.name, c.ext, c.size, c.date] {
+            assert!(rect.width() >= 0.0);
+        }
     }
 }
