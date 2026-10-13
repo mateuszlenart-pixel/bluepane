@@ -5,7 +5,7 @@ use crate::EngineError;
 /// Names accepted at the command line (aliases excluded).
 pub const COMMAND_NAMES: &[&str] = &[
     "switch", "up", "enter", "cursor", "toggle", "select", "cd", "back", "forward", "volume",
-    "filter", "refresh", "copy", "move", "mkdir", "delete",
+    "filter", "refresh", "copy", "move", "mkdir", "delete", "confirm", "cancel",
 ];
 
 /// One user action.
@@ -36,7 +36,12 @@ pub enum Command {
     Filter(String),
     Refresh,
     /// Copy the selection (or the entry under the cursor) to the other panel (F5).
+    /// When both panels show the same directory this proposes duplicates instead.
     Copy,
+    /// Accept the pending proposal (Enter while a question is shown).
+    Confirm,
+    /// Reject the pending proposal (Escape while a question is shown).
+    Cancel,
     /// Move the selection to the other panel (F6).
     Move,
     /// Create a directory in the active panel (F7).
@@ -66,6 +71,8 @@ impl Command {
             "up" => Ok(Command::Up),
             "enter" => Ok(Command::Enter),
             "toggle" => Ok(Command::ToggleSelect),
+            "confirm" | "yes" => Ok(Command::Confirm),
+            "cancel" | "no" => Ok(Command::Cancel),
             "back" => Ok(Command::Back),
             "forward" => Ok(Command::Forward),
             "refresh" => Ok(Command::Refresh),
@@ -113,6 +120,13 @@ mod tests {
             Command::parse("filter my file"),
             Ok(Command::Filter("my file".into()))
         );
+    }
+
+    #[test]
+    fn parses_confirm_and_cancel() {
+        assert_eq!(Command::parse("confirm"), Ok(Command::Confirm));
+        assert_eq!(Command::parse("yes"), Ok(Command::Confirm));
+        assert_eq!(Command::parse("cancel"), Ok(Command::Cancel));
     }
 
     #[test]

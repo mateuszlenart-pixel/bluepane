@@ -30,7 +30,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Alt+1 … Alt+9 | skok aktywnego panelu do wolumenu o tym numerze |
 | Ctrl+L | wiersz poleceń z `cd ` (przejście do wpisanej ścieżki) |
 | Spacja, Insert | zaznacz i przejdź niżej |
-| F5 / F6 | kopiuj / przenieś do drugiego panelu |
+| F5 / F6 | kopiuj / przenieś do drugiego panelu; F5 przy tym samym katalogu w obu panelach proponuje kopię „nazwa (kopia).ext” (Enter = tak, Esc = nie) |
 | F7 | nowy katalog (wpisz nazwę w wierszu poleceń) |
 | F8 | do kosza |
 | F9 | odśwież |
@@ -39,7 +39,7 @@ Nad każdym panelem jest lista wolumenów i edytowalny pasek ścieżki (Enter wy
 
 Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `forward`,
 `volume <numer|nazwa>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
-`select <nazwa>`, `cursor <n>`, `refresh`.
+`select <nazwa>`, `cursor <n>`, `confirm` / `cancel` (odpowiedź na pytanie), `refresh`.
 
 ## Bez okna
 

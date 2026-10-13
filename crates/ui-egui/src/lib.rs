@@ -96,6 +96,17 @@ impl BluepaneUi {
             }
             (pressed, typed)
         });
+        if self.session.pending.is_some() {
+            // A question is open: only the answer keys count.
+            for key in pressed {
+                match key.as_str() {
+                    "Enter" => self.dispatch("confirm"),
+                    "Escape" => self.dispatch("cancel"),
+                    _ => {}
+                }
+            }
+            return;
+        }
         for key in pressed {
             if let Some(line) = self.session.keymap.lookup(&key).map(str::to_owned) {
                 self.dispatch(&line);
@@ -123,7 +134,19 @@ impl BluepaneUi {
         } else {
             ui.visuals().weak_text_color()
         };
-        ui.label(RichText::new(&self.session.status).color(status_color));
+        if self.session.pending.is_some() {
+            ui.label(RichText::new(&self.session.status).color(Color32::YELLOW));
+            ui.horizontal(|ui| {
+                if ui.button("Tak (Enter)").clicked() {
+                    self.dispatch("confirm");
+                }
+                if ui.button("Nie (Esc)").clicked() {
+                    self.dispatch("cancel");
+                }
+            });
+        } else {
+            ui.label(RichText::new(&self.session.status).color(status_color));
+        }
 
         ui.horizontal(|ui| {
             ui.label(RichText::new(">").monospace());

@@ -47,6 +47,14 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [ ] Potwierdzenie przed usunięciem
 - [ ] Windows: długie ścieżki (`\\?\`), atrybuty tylko do odczytu; Linux: symlinki, uprawnienia
 
+## Notatki do późniejszych etapów
+
+### Etap 8: FTP/SFTP
+Wymaganie od właściciela projektu: funkcjonalność na wzór **FileZilli**, czyli m.in.
+(moja interpretacja, do potwierdzenia z właścicielem): menedżer witryn (zapisane połączenia), FTP, FTPS i SFTP, kolejka transferów z
+postępem, wznawianie przerwanych transferów i dialog konfliktów. Zakres do dopracowania
+przy starcie etapu.
+
 ## Znane uproszczenia szkieletu
 - Operacje na plikach działają synchronicznie w wątku UI (duże kopie zamrożą okno do etapu 4).
 - Kopiowanie symlinków podąża za celem (`fs::copy`), nie odtwarza dowiązania.
