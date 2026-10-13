@@ -555,6 +555,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bluepane-sync"
+version = "0.1.0"
+dependencies = [
+ "bluepane-ops",
+ "tempfile",
+]
+
+[[package]]
 name = "bluepane-ui-egui"
 version = "0.1.0"
 dependencies = [
