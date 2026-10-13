@@ -187,7 +187,7 @@ impl Sink for ZipSink<'_> {
 /// Where a tar stream goes: plain, or through gzip.
 enum TarOut {
     Plain(File),
-    Gz(GzEncoder<File>),
+    Gz(Box<GzEncoder<File>>),
 }
 
 impl Write for TarOut {
@@ -225,7 +225,7 @@ impl<'a> TarSink<'a> {
                 Level::Normal => Compression::default(),
                 Level::Maximum => Compression::best(),
             };
-            TarOut::Gz(GzEncoder::new(file, level))
+            TarOut::Gz(Box::new(GzEncoder::new(file, level)))
         } else {
             TarOut::Plain(file)
         };
