@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use bluepane_ops::Resolution;
+
 use crate::{EngineError, SortKey};
 
 /// Names accepted at the command line (aliases excluded).
@@ -78,10 +80,16 @@ pub enum Command {
     Cancel,
     /// Move the selection to the other panel (F6).
     Move,
-    /// Create a directory in the active panel (F7).
-    Mkdir(String),
-    /// Move the selection to the trash (F8).
+    /// Create a directory in the active panel (F7). Without a name a dialog asks for it.
+    Mkdir(Option<String>),
+    /// Rename the entry under the cursor (F2). Without a name a dialog asks for it.
+    Rename(Option<String>),
+    /// Move the selection to the trash (F8), after a confirmation.
     Delete,
+    /// Answer a file conflict; the flag applies the answer to every later conflict of the job.
+    Resolve(Resolution, bool),
+    /// Cancel the running job and drop the queued ones.
+    StopJob,
 }
 
 impl Command {
@@ -125,12 +133,36 @@ impl Command {
                 .parse::<i32>()
                 .map(Command::Cursor)
                 .map_err(|_| EngineError("cursor: oczekiwano liczby, np. cursor -1".into())),
-            "mkdir" => need_arg("nazwa katalogu").map(Command::Mkdir),
+            "mkdir" => Ok(Command::Mkdir(optional(rest))),
+            "rename" => Ok(Command::Rename(optional(rest))),
+            "stop" => Ok(Command::StopJob),
             "select" => need_arg("nazwa").map(Command::Select),
             "cd" => need_arg("ścieżka").map(|p| Command::Cd(PathBuf::from(p))),
-            other => Err(EngineError(format!("nieznana komenda: {other}"))),
+            other => parse_resolution(other)
+                .map(|(resolution, all)| Command::Resolve(resolution, all))
+                .ok_or_else(|| EngineError(format!("nieznana komenda: {other}"))),
         }
     }
+}
+
+fn optional(text: &str) -> Option<String> {
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// `overwrite`, `newer`, `skip`, `keepboth`, each optionally followed by `-all`.
+fn parse_resolution(word: &str) -> Option<(Resolution, bool)> {
+    let (base, all) = match word.strip_suffix("-all") {
+        Some(base) => (base, true),
+        None => (word, false),
+    };
+    let resolution = match base {
+        "overwrite" => Resolution::Overwrite,
+        "newer" => Resolution::OverwriteOlder,
+        "skip" => Resolution::Skip,
+        "keepboth" => Resolution::KeepBoth,
+        _ => return None,
+    };
+    Some((resolution, all))
 }
 
 fn parse_sort(args: &str) -> Result<Command, EngineError> {
@@ -165,7 +197,7 @@ mod tests {
     fn parses_commands_with_arguments() {
         assert_eq!(
             Command::parse("mkdir New folder"),
-            Ok(Command::Mkdir("New folder".into()))
+            Ok(Command::Mkdir(Some("New folder".into())))
         );
         assert_eq!(
             Command::parse("cd /tmp"),
@@ -202,6 +234,42 @@ mod tests {
     }
 
     #[test]
+    fn mkdir_and_rename_take_an_optional_name() {
+        assert_eq!(Command::parse("mkdir"), Ok(Command::Mkdir(None)));
+        assert_eq!(
+            Command::parse("mkdir New folder"),
+            Ok(Command::Mkdir(Some("New folder".into())))
+        );
+        assert_eq!(Command::parse("rename"), Ok(Command::Rename(None)));
+        assert_eq!(
+            Command::parse("rename b.txt"),
+            Ok(Command::Rename(Some("b.txt".into())))
+        );
+    }
+
+    #[test]
+    fn parses_conflict_answers() {
+        assert_eq!(
+            Command::parse("overwrite"),
+            Ok(Command::Resolve(Resolution::Overwrite, false))
+        );
+        assert_eq!(
+            Command::parse("newer-all"),
+            Ok(Command::Resolve(Resolution::OverwriteOlder, true))
+        );
+        assert_eq!(
+            Command::parse("SKIP"),
+            Ok(Command::Resolve(Resolution::Skip, false))
+        );
+        assert_eq!(
+            Command::parse("keepboth-all"),
+            Ok(Command::Resolve(Resolution::KeepBoth, true))
+        );
+        assert_eq!(Command::parse("stop"), Ok(Command::StopJob));
+        assert!(Command::parse("skip-everything").is_err());
+    }
+
+    #[test]
     fn parses_confirm_and_cancel() {
         assert_eq!(Command::parse("confirm"), Ok(Command::Confirm));
         assert_eq!(Command::parse("yes"), Ok(Command::Confirm));
@@ -219,7 +287,6 @@ mod tests {
     #[test]
     fn rejects_bad_input() {
         assert!(Command::parse("").is_err());
-        assert!(Command::parse("mkdir").is_err());
         assert!(Command::parse("cursor x").is_err());
         assert!(Command::parse("frobnicate").is_err());
     }

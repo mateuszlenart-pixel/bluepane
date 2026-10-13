@@ -1,17 +1,82 @@
-use std::path::PathBuf;
+use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
+use std::time::Duration;
 
-use std::path::Path;
-
-use bluepane_ops::{self as ops, Progress};
+use bluepane_ops::{self as ops, Conflict, Resolution};
 use bluepane_vfs::Volume;
 
+use crate::job::{Answer, Event, JobKind, JobSpec, Report, RunningJob};
 use crate::{is_parent_entry, Command, EngineError, Keymap, Mask, Panel};
 
-/// A question waiting for the user's answer (`confirm` or `cancel`).
+/// What a name dialog is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InputKind {
+    /// Name of a new directory in the active panel.
+    Mkdir,
+    /// New name for this entry.
+    Rename(PathBuf),
+}
+
+/// A file conflict the running job is waiting on.
+#[derive(Debug, Clone)]
+pub struct ConflictPrompt {
+    pub conflict: Conflict,
+    reply: Sender<Answer>,
+}
+
+impl ConflictPrompt {
+    fn answer(&self, resolution: Option<Resolution>, for_all: bool) {
+        // The worker may already be gone (cancelled elsewhere); nothing to do then.
+        let _ = self.reply.send(Answer {
+            resolution,
+            for_all,
+        });
+    }
+}
+
+/// A question waiting for the user's answer. `confirm` accepts it and `cancel` rejects it,
+/// except for conflicts, which are answered with `overwrite`, `newer`, `skip`, `keepboth`
+/// (each also as `...-all`) or `cancel` (stops the job).
+#[derive(Debug, Clone)]
 pub enum Pending {
     /// Both panels show the same directory: make copies of these paths next to the originals.
     Duplicate(Vec<PathBuf>),
+    /// Move these paths to the trash.
+    ConfirmDelete(Vec<PathBuf>),
+    /// A name is being typed; the UI edits `text` and `confirm` uses it.
+    Input { kind: InputKind, text: String },
+    /// An existing file stands in the way of the running copy or move.
+    Conflict(ConflictPrompt),
+}
+
+/// What the progress bar shows about the running job.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobStatus {
+    pub label: &'static str,
+    pub current: String,
+    pub bytes_done: u64,
+    pub bytes_total: u64,
+    pub items_done: u64,
+    pub items_total: u64,
+    /// Jobs waiting behind this one.
+    pub queued: usize,
+    /// The job is blocked on a conflict question.
+    pub waiting_for_answer: bool,
+}
+
+impl JobStatus {
+    /// Completed share between 0 and 1, or `None` while the total is still being counted.
+    pub fn fraction(&self) -> Option<f32> {
+        let (done, total) = if self.bytes_total > 0 {
+            (self.bytes_done, self.bytes_total)
+        } else if self.items_total > 0 {
+            (self.items_done, self.items_total)
+        } else {
+            return None;
+        };
+        Some((done as f64 / total as f64).clamp(0.0, 1.0) as f32)
+    }
 }
 
 /// The whole application state except the UI: two panels, which one is active,
@@ -22,10 +87,16 @@ pub struct Session {
     pub active: usize,
     pub keymap: Keymap,
     pub status: String,
+    /// True when `status` reports a problem (the UI shows it in red).
+    pub status_is_error: bool,
     /// Mounted volumes, re-read on `refresh`.
     pub volumes: Vec<Volume>,
     /// Set while the user is asked a question; the question text is in `status`.
     pub pending: Option<Pending>,
+    /// Answer conflicts automatically instead of asking (scripts and the CLI).
+    pub auto_resolve: Option<Resolution>,
+    current: Option<RunningJob>,
+    queue: VecDeque<JobSpec>,
 }
 
 /// Index of the volume that contains `cwd` (the one with the longest matching path).
@@ -45,8 +116,12 @@ impl Session {
             active: 0,
             keymap: Keymap::default(),
             status: String::new(),
+            status_is_error: false,
             volumes: bluepane_vfs::volumes(),
             pending: None,
+            auto_resolve: None,
+            current: None,
+            queue: VecDeque::new(),
         }
     }
 
@@ -65,25 +140,47 @@ impl Session {
 
     /// Parses and executes a command line. On error the message is also put in `status`.
     pub fn run_line(&mut self, line: &str) -> Result<(), EngineError> {
-        let result = Command::parse(line).and_then(|cmd| self.execute(cmd));
-        if let Err(err) = &result {
-            self.status = err.0.clone();
+        match Command::parse(line) {
+            Ok(command) => self.execute(command),
+            Err(err) => {
+                self.status = err.0.clone();
+                self.status_is_error = true;
+                Err(err)
+            }
+        }
+    }
+
+    /// Executes a command. Long operations are queued as background jobs: call [`poll`]
+    /// regularly (every frame) to collect their progress and results.
+    ///
+    /// [`poll`]: Session::poll
+    pub fn execute(&mut self, command: Command) -> Result<(), EngineError> {
+        let result = self.execute_inner(command);
+        match &result {
+            Ok(()) => self.status_is_error = false,
+            Err(err) => {
+                self.status = err.0.clone();
+                self.status_is_error = true;
+            }
         }
         result
     }
 
-    pub fn execute(&mut self, command: Command) -> Result<(), EngineError> {
-        // Any command other than the answer drops an unanswered question.
-        if !matches!(command, Command::Confirm | Command::Cancel) {
+    fn execute_inner(&mut self, command: Command) -> Result<(), EngineError> {
+        // Any other command drops an unanswered question, except a conflict: the worker
+        // thread is blocked on it and only an answer (or `stop`) may release it.
+        let answers = matches!(
+            command,
+            Command::Confirm | Command::Cancel | Command::Resolve(..) | Command::StopJob
+        );
+        if !answers && !matches!(self.pending, Some(Pending::Conflict(_))) {
             self.pending = None;
         }
         match command {
             Command::Confirm => self.confirm()?,
-            Command::Cancel => {
-                if self.pending.take().is_some() {
-                    self.status = "Anulowano".into();
-                }
-            }
+            Command::Cancel => self.cancel_question(),
+            Command::Resolve(resolution, for_all) => self.resolve(resolution, for_all)?,
+            Command::StopJob => self.stop_jobs(),
             Command::SwitchPanel => self.active = 1 - self.active,
             Command::Up => {
                 let panel = self.active_panel_mut();
@@ -143,13 +240,31 @@ impl Session {
             }
             Command::Copy => self.transfer(false)?,
             Command::Move => self.transfer(true)?,
-            Command::Mkdir(name) => {
-                let cwd = self.active_panel().cwd.clone();
-                ops::mkdir(&cwd, &name).map_err(|e| EngineError(e.to_string()))?;
-                self.panels.iter_mut().for_each(Panel::reload);
-                self.status = format!("Utworzono katalog {name}");
+            Command::Mkdir(Some(name)) => self.make_dir(&name)?,
+            Command::Mkdir(None) => {
+                self.status = "Nazwa nowego katalogu (Enter = utwórz, Esc = anuluj)".into();
+                self.pending = Some(Pending::Input {
+                    kind: InputKind::Mkdir,
+                    text: String::new(),
+                });
             }
-            Command::Delete => self.delete()?,
+            Command::Rename(Some(name)) => {
+                let path = self.entry_to_rename()?;
+                self.rename_entry(&path, &name)?;
+            }
+            Command::Rename(None) => {
+                let path = self.entry_to_rename()?;
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.status = "Nowa nazwa (Enter = zmień, Esc = anuluj)".into();
+                self.pending = Some(Pending::Input {
+                    kind: InputKind::Rename(path),
+                    text: name,
+                });
+            }
+            Command::Delete => self.propose_delete()?,
         }
         Ok(())
     }
@@ -208,39 +323,17 @@ impl Session {
             }
             return self.propose_duplicates(targets);
         }
-        let progress = Progress::new();
-        let mut done = 0;
-        let mut first_error = None;
-        for target in &targets {
-            let result = if remove_source {
-                ops::move_to(target, &dest, &progress)
-            } else {
-                ops::copy(target, &dest, &progress)
-            };
-            match result {
-                Ok(_) => done += 1,
-                Err(e) => {
-                    first_error.get_or_insert(e.to_string());
-                }
-            }
-        }
-        self.active_panel_mut().selected.clear();
-        self.panels.iter_mut().for_each(Panel::reload);
-        let verb = if remove_source {
-            "Przeniesiono"
+        let kind = if remove_source {
+            JobKind::Move
         } else {
-            "Skopiowano"
+            JobKind::Copy
         };
-        match first_error {
-            None => {
-                self.status = format!("{verb}: {done}");
-                Ok(())
-            }
-            Some(msg) => Err(EngineError(format!(
-                "{verb}: {done} z {}, błąd: {msg}",
-                targets.len()
-            ))),
-        }
+        self.enqueue(JobSpec {
+            kind,
+            sources: targets,
+            dest: Some(dest),
+        });
+        Ok(())
     }
 
     /// F5 with the same directory in both panels: ask before making `(kopia)` duplicates.
@@ -262,62 +355,255 @@ impl Session {
         Ok(())
     }
 
-    fn confirm(&mut self) -> Result<(), EngineError> {
-        let Some(Pending::Duplicate(targets)) = self.pending.take() else {
-            return Err(EngineError("nie ma o co pytać".into()));
-        };
-        let progress = Progress::new();
-        let mut done = 0;
-        let mut first_error = None;
-        for target in &targets {
-            match ops::duplicate(target, &progress) {
-                Ok(_) => done += 1,
-                Err(e) => {
-                    first_error.get_or_insert(e.to_string());
-                }
-            }
-        }
-        self.active_panel_mut().selected.clear();
-        self.panels.iter_mut().for_each(Panel::reload);
-        match first_error {
-            None => {
-                self.status = format!("Utworzono kopie: {done}");
-                Ok(())
-            }
-            Some(msg) => Err(EngineError(format!(
-                "Utworzono kopie: {done} z {}, błąd: {msg}",
-                targets.len()
-            ))),
-        }
-    }
-
-    fn delete(&mut self) -> Result<(), EngineError> {
+    /// F8: ask first, then move to the trash.
+    fn propose_delete(&mut self) -> Result<(), EngineError> {
         let targets = self.active_panel().targets();
         if targets.is_empty() {
             return Err(EngineError("nic nie zaznaczono".into()));
         }
-        let mut done = 0;
-        let mut first_error = None;
-        for target in &targets {
-            match ops::delete_to_trash(target) {
-                Ok(()) => done += 1,
-                Err(e) => {
-                    first_error.get_or_insert(e.to_string());
+        self.status = if let [only] = targets.as_slice() {
+            let name = only
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            format!("Przenieść do kosza „{name}”? (Enter = tak, Esc = nie)")
+        } else {
+            format!(
+                "Przenieść do kosza zaznaczone elementy ({})? (Enter = tak, Esc = nie)",
+                targets.len()
+            )
+        };
+        self.pending = Some(Pending::ConfirmDelete(targets));
+        Ok(())
+    }
+
+    /// Accepts the open question (`confirm`, Enter).
+    fn confirm(&mut self) -> Result<(), EngineError> {
+        match self.pending.take() {
+            Some(Pending::Duplicate(sources)) => self.enqueue(JobSpec {
+                kind: JobKind::Duplicate,
+                sources,
+                dest: None,
+            }),
+            Some(Pending::ConfirmDelete(sources)) => self.enqueue(JobSpec {
+                kind: JobKind::Delete,
+                sources,
+                dest: None,
+            }),
+            Some(Pending::Input { kind, text }) => {
+                let result = match &kind {
+                    InputKind::Mkdir => self.make_dir(&text),
+                    InputKind::Rename(path) => self.rename_entry(path, &text),
+                };
+                if let Err(err) = result {
+                    // Keep the dialog open so the name can be corrected.
+                    self.pending = Some(Pending::Input { kind, text });
+                    return Err(err);
                 }
             }
+            Some(conflict @ Pending::Conflict(_)) => {
+                self.pending = Some(conflict);
+                return Err(EngineError(
+                    "plik już istnieje: wybierz nadpisz, nadpisz starsze, pomiń, zachowaj oba lub anuluj"
+                        .into(),
+                ));
+            }
+            None => return Err(EngineError("nie ma o co pytać".into())),
         }
-        self.active_panel_mut().selected.clear();
-        self.panels.iter_mut().for_each(Panel::reload);
-        match first_error {
-            None => {
-                self.status = format!("Do kosza: {done}");
+        Ok(())
+    }
+
+    /// Rejects the open question (`cancel`, Escape). For a conflict this stops the job.
+    fn cancel_question(&mut self) {
+        match self.pending.take() {
+            Some(Pending::Conflict(prompt)) => {
+                prompt.answer(None, false);
+                self.queue.clear();
+                self.status = "Anulowanie zadania…".into();
+            }
+            Some(_) => self.status = "Anulowano".into(),
+            None => {}
+        }
+    }
+
+    fn resolve(&mut self, resolution: Resolution, for_all: bool) -> Result<(), EngineError> {
+        match self.pending.take() {
+            Some(Pending::Conflict(prompt)) => {
+                prompt.answer(Some(resolution), for_all);
+                self.status = format!("{}…", self.current_label());
                 Ok(())
             }
-            Some(msg) => Err(EngineError(format!(
-                "Do kosza: {done} z {}, błąd: {msg}",
-                targets.len()
-            ))),
+            other => {
+                self.pending = other;
+                Err(EngineError("nie ma konfliktu do rozstrzygnięcia".into()))
+            }
         }
+    }
+
+    fn current_label(&self) -> &'static str {
+        self.current
+            .as_ref()
+            .map_or("Gotowe", |job| job.spec.kind.label())
+    }
+
+    fn stop_jobs(&mut self) {
+        self.queue.clear();
+        let Some(job) = &self.current else {
+            self.status = "Nic się nie wykonuje".into();
+            return;
+        };
+        job.progress.cancel();
+        if let Some(Pending::Conflict(prompt)) = self.pending.take() {
+            prompt.answer(None, false);
+        }
+        self.status = "Zatrzymywanie…".into();
+    }
+
+    /// Runs the job now, or queues it behind the running one.
+    fn enqueue(&mut self, spec: JobSpec) {
+        self.active_panel_mut().selected.clear();
+        if self.current.is_none() {
+            self.start(spec);
+        } else {
+            self.queue.push_back(spec);
+            self.status = format!("W kolejce: {}", self.queue.len());
+        }
+    }
+
+    fn start(&mut self, spec: JobSpec) {
+        self.status = format!("{}…", spec.kind.label());
+        self.status_is_error = false;
+        self.current = Some(RunningJob::start(spec));
+    }
+
+    /// True while a job runs or waits in the queue.
+    pub fn is_busy(&self) -> bool {
+        self.current.is_some() || !self.queue.is_empty()
+    }
+
+    /// Progress of the running job, for the progress bar.
+    pub fn job_status(&self) -> Option<JobStatus> {
+        let job = self.current.as_ref()?;
+        let progress = &job.progress;
+        Some(JobStatus {
+            label: job.spec.kind.label(),
+            current: progress.current(),
+            bytes_done: progress.bytes_done(),
+            bytes_total: progress.bytes_total(),
+            items_done: progress.items_done(),
+            items_total: progress.items_total(),
+            queued: self.queue.len(),
+            waiting_for_answer: matches!(self.pending, Some(Pending::Conflict(_))),
+        })
+    }
+
+    /// Collects what the background job reported since the last call: conflicts to ask
+    /// about and the final result. Cheap; call it every frame.
+    pub fn poll(&mut self) {
+        loop {
+            let Some(job) = &self.current else { return };
+            match job.try_event() {
+                Ok(None) => return,
+                Ok(Some(Event::Conflict { conflict, reply })) => {
+                    let prompt = ConflictPrompt { conflict, reply };
+                    if let Some(resolution) = self.auto_resolve {
+                        prompt.answer(Some(resolution), true);
+                        continue;
+                    }
+                    let name = prompt
+                        .conflict
+                        .dst
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    self.status = format!("Plik już istnieje: {name}");
+                    self.status_is_error = false;
+                    self.pending = Some(Pending::Conflict(prompt));
+                    return;
+                }
+                Ok(Some(Event::Finished(report))) => self.finish_job(&report),
+                Err(_) => self.finish_job(&Report {
+                    failed: vec!["zadanie przerwane nieoczekiwanie".into()],
+                    ..Report::default()
+                }),
+            }
+        }
+    }
+
+    fn finish_job(&mut self, report: &Report) {
+        let Some(mut job) = self.current.take() else {
+            return;
+        };
+        job.join();
+        let (kind, total) = (job.spec.kind, job.spec.sources.len());
+        self.pending = None;
+        self.panels.iter_mut().for_each(Panel::reload);
+
+        let verb = kind.verb();
+        let mut text = match report.failed.first() {
+            Some(first) => format!("{verb}: {} z {total}, błąd: {first}", report.done),
+            None => format!("{verb}: {}", report.done),
+        };
+        if report.skipped > 0 {
+            text.push_str(&format!(", pominięto: {}", report.skipped));
+        }
+        if report.cancelled {
+            text = format!("Anulowano. {text}");
+        }
+        self.status = text;
+        self.status_is_error = !report.failed.is_empty();
+
+        if let Some(next) = self.queue.pop_front() {
+            let message = std::mem::take(&mut self.status);
+            let was_error = self.status_is_error;
+            self.start(next);
+            // Keep the result of the finished job visible until the next one says something.
+            if was_error {
+                self.status = message;
+                self.status_is_error = true;
+            }
+        }
+    }
+
+    /// Blocks until every job has finished. Returns false when it stopped because a
+    /// conflict needs an answer (answer it, then call this again). For scripts and tests.
+    pub fn wait_idle(&mut self) -> bool {
+        loop {
+            self.poll();
+            if !self.is_busy() {
+                return true;
+            }
+            if matches!(self.pending, Some(Pending::Conflict(_))) {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    fn make_dir(&mut self, name: &str) -> Result<(), EngineError> {
+        let cwd = self.active_panel().cwd.clone();
+        let created = ops::mkdir(&cwd, name).map_err(|e| EngineError(e.to_string()))?;
+        self.panels.iter_mut().for_each(Panel::reload);
+        self.active_panel_mut().put_cursor_on(&created);
+        self.status = format!("Utworzono katalog {}", name.trim());
+        Ok(())
+    }
+
+    /// The entry a rename acts on: the one under the cursor, never `..`.
+    fn entry_to_rename(&self) -> Result<PathBuf, EngineError> {
+        self.active_panel()
+            .current()
+            .filter(|e| !is_parent_entry(e))
+            .map(|e| e.path.clone())
+            .ok_or_else(|| EngineError("nic nie wskazano".into()))
+    }
+
+    fn rename_entry(&mut self, path: &Path, new_name: &str) -> Result<(), EngineError> {
+        let renamed = ops::rename(path, new_name).map_err(|e| EngineError(e.to_string()))?;
+        self.panels.iter_mut().for_each(Panel::reload);
+        self.active_panel_mut().put_cursor_on(&renamed);
+        self.status = format!("Zmieniono nazwę na {}", new_name.trim());
+        Ok(())
     }
 }
 
@@ -342,6 +628,7 @@ mod tests {
         let (tmp, mut s) = two_dirs();
         s.run_line("select a.txt").unwrap();
         s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
         assert!(tmp.path().join("right/a.txt").exists());
         assert!(tmp.path().join("left/a.txt").exists());
         assert_eq!(s.panels[1].entries.len(), 2); // ".." and a.txt
@@ -353,6 +640,7 @@ mod tests {
         let (tmp, mut s) = two_dirs();
         s.run_line("cursor 1").unwrap();
         s.run_line("move").unwrap();
+        assert!(s.wait_idle());
         assert!(!tmp.path().join("left/a.txt").exists());
         assert!(tmp.path().join("right/a.txt").exists());
     }
@@ -380,12 +668,14 @@ mod tests {
     fn copy_in_the_same_directory_asks_before_duplicating() {
         let (tmp, mut s) = same_dir();
         s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
         assert!(s.pending.is_some());
         assert!(s.status.contains("a (kopia).txt"), "{}", s.status);
         // Nothing is created until the user answers.
         assert!(!tmp.path().join("left/a (kopia).txt").exists());
 
         s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
         assert!(s.pending.is_none());
         assert_eq!(
             std::fs::read_to_string(tmp.path().join("left/a (kopia).txt")).unwrap(),
@@ -407,6 +697,7 @@ mod tests {
     fn declining_creates_nothing() {
         let (tmp, mut s) = same_dir();
         s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
         s.run_line("cancel").unwrap();
         assert!(s.pending.is_none());
         assert_eq!(s.status, "Anulowano");
@@ -418,6 +709,7 @@ mod tests {
     fn any_other_command_drops_the_question() {
         let (tmp, mut s) = same_dir();
         s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
         s.run_line("cursor 1").unwrap();
         assert!(s.pending.is_none());
         assert!(s.run_line("confirm").is_err());
@@ -432,7 +724,9 @@ mod tests {
         s.run_line("select a.txt").unwrap();
         s.run_line("select b.txt").unwrap();
         s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
         s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
         assert_eq!(
             std::fs::read_to_string(tmp.path().join("left/a (kopia).txt")).unwrap(),
             "old"
@@ -509,7 +803,8 @@ mod tests {
         let (tmp, mut s) = two_dirs();
         s.run_line("select a.txt").unwrap();
         s.run_line("filter b").unwrap();
-        s.run_line("copy").unwrap(); // acts on b.txt under the cursor, not on hidden a.txt
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle()); // acts on b.txt under the cursor, not on hidden a.txt
         assert!(tmp.path().join("right/b.txt").exists());
         assert!(!tmp.path().join("right/a.txt").exists());
     }
@@ -584,6 +879,7 @@ mod tests {
         s.run_line("refresh").unwrap();
         s.run_line("selmask *.txt").unwrap();
         s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
         assert!(tmp.path().join("right/a.txt").exists());
         assert!(tmp.path().join("right/b.txt").exists());
         assert!(!tmp.path().join("right/c.md").exists());
@@ -603,5 +899,265 @@ mod tests {
         assert_eq!(names, ["..", "big.bin", "a.txt", "b.txt"]);
         assert_eq!(s.panels[1].sort.key, crate::SortKey::Name);
         assert!(s.run_line("sort bogus").is_err());
+    }
+
+    fn read(path: std::path::PathBuf) -> String {
+        std::fs::read_to_string(path).unwrap()
+    }
+
+    /// Both dirs hold `a.txt`: "a" on the left, "old" on the right; a.txt is selected.
+    fn clash() -> (tempfile::TempDir, Session) {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("right/a.txt"), "old").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select a.txt").unwrap();
+        (tmp, s)
+    }
+
+    fn set_mtime(path: std::path::PathBuf, secs: u64) {
+        let time = std::time::UNIX_EPOCH + Duration::from_secs(secs);
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(time)
+            .unwrap();
+    }
+
+    #[test]
+    fn an_existing_target_asks_and_overwrite_replaces_it() {
+        let (tmp, mut s) = clash();
+        s.run_line("copy").unwrap();
+        assert!(!s.wait_idle(), "must stop at the conflict");
+        assert!(matches!(s.pending, Some(Pending::Conflict(_))));
+        assert!(s.status.contains("a.txt"));
+        assert_eq!(read(tmp.path().join("right/a.txt")), "old");
+        let job = s.job_status().unwrap();
+        assert!(job.waiting_for_answer);
+
+        s.run_line("overwrite").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(read(tmp.path().join("right/a.txt")), "a");
+        assert!(s.pending.is_none());
+        assert!(!s.status_is_error);
+    }
+
+    #[test]
+    fn skip_keeps_the_target_and_says_so() {
+        let (tmp, mut s) = clash();
+        s.run_line("copy").unwrap();
+        s.wait_idle();
+        s.run_line("skip").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(read(tmp.path().join("right/a.txt")), "old");
+        assert!(s.status.contains("pominięto: 1"), "{}", s.status);
+    }
+
+    #[test]
+    fn keep_both_writes_a_second_copy() {
+        let (tmp, mut s) = clash();
+        s.run_line("copy").unwrap();
+        s.wait_idle();
+        s.run_line("keepboth").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(read(tmp.path().join("right/a.txt")), "old");
+        assert_eq!(read(tmp.path().join("right/a (kopia).txt")), "a");
+    }
+
+    #[test]
+    fn newer_overwrites_only_older_targets_and_all_answers_once() {
+        let (tmp, mut s) = two_dirs();
+        for name in ["a.txt", "b.txt"] {
+            std::fs::write(tmp.path().join("right").join(name), "old").unwrap();
+        }
+        set_mtime(tmp.path().join("left/a.txt"), 2_000); // newer than the target
+        set_mtime(tmp.path().join("right/a.txt"), 1_000);
+        set_mtime(tmp.path().join("left/b.txt"), 1_000); // older than the target
+        set_mtime(tmp.path().join("right/b.txt"), 2_000);
+        s.run_line("refresh").unwrap();
+        s.run_line("selmask *.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(!s.wait_idle());
+        s.run_line("newer-all").unwrap();
+        assert!(s.wait_idle(), "one answer covers both conflicts");
+        assert_eq!(read(tmp.path().join("right/a.txt")), "a");
+        assert_eq!(read(tmp.path().join("right/b.txt")), "old");
+        assert!(s.status.contains("pominięto: 1"), "{}", s.status);
+    }
+
+    #[test]
+    fn other_commands_do_not_release_a_conflict_but_stop_does() {
+        let (tmp, mut s) = clash();
+        s.run_line("copy").unwrap();
+        s.wait_idle();
+        s.run_line("cursor 1").unwrap();
+        assert!(matches!(s.pending, Some(Pending::Conflict(_))));
+        assert!(
+            s.run_line("confirm").is_err(),
+            "Enter must not answer a conflict"
+        );
+
+        s.run_line("stop").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.pending.is_none());
+        assert!(s.status.starts_with("Anulowano"), "{}", s.status);
+        assert_eq!(read(tmp.path().join("right/a.txt")), "old");
+    }
+
+    #[test]
+    fn cancel_on_a_conflict_cancels_the_job_and_the_queue() {
+        let (tmp, mut s) = clash();
+        s.run_line("copy").unwrap();
+        s.wait_idle();
+        s.run_line("select b.txt").unwrap();
+        s.run_line("copy").unwrap(); // queued behind the blocked job
+        assert!(s.status.contains("W kolejce"));
+        s.run_line("cancel").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            !tmp.path().join("right/b.txt").exists(),
+            "queue was dropped"
+        );
+        assert_eq!(read(tmp.path().join("right/a.txt")), "old");
+    }
+
+    #[test]
+    fn answers_without_a_question_are_errors() {
+        let (_tmp, mut s) = two_dirs();
+        assert!(s.run_line("overwrite").is_err());
+        assert!(s.run_line("confirm").is_err());
+        assert!(s.status_is_error);
+        s.run_line("stop").unwrap();
+        assert_eq!(s.status, "Nic się nie wykonuje");
+    }
+
+    #[test]
+    fn auto_resolve_answers_conflicts_without_asking() {
+        let (tmp, mut s) = clash();
+        s.auto_resolve = Some(Resolution::Skip);
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(read(tmp.path().join("right/a.txt")), "old");
+        assert!(s.pending.is_none());
+    }
+
+    #[test]
+    fn jobs_run_one_after_another() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("copy").unwrap();
+        s.run_line("select b.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("right/a.txt").exists());
+        assert!(tmp.path().join("right/b.txt").exists());
+        assert!(!s.is_busy());
+        assert!(s.job_status().is_none());
+    }
+
+    #[test]
+    fn delete_asks_first_and_cancel_keeps_the_file() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("delete").unwrap();
+        assert!(matches!(s.pending, Some(Pending::ConfirmDelete(_))));
+        assert!(s.status.contains("kosza"));
+        assert!(s.wait_idle(), "nothing was started");
+        assert!(tmp.path().join("left/a.txt").exists());
+        s.run_line("cancel").unwrap();
+        assert!(s.pending.is_none());
+        assert!(tmp.path().join("left/a.txt").exists());
+        // Cancelling keeps the selection; with nothing selected and the cursor on ".."
+        // there is nothing to delete.
+        s.run_line("unselectall").unwrap();
+        s.run_line("cursor -5").unwrap();
+        assert!(s.run_line("delete").is_err());
+    }
+
+    fn type_into_dialog(s: &mut Session, text: &str) {
+        match &mut s.pending {
+            Some(Pending::Input { text: field, .. }) => *field = text.to_string(),
+            other => panic!("no name dialog open: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn mkdir_without_a_name_opens_a_dialog() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir").unwrap();
+        type_into_dialog(&mut s, "Reports");
+        s.run_line("confirm").unwrap();
+        assert!(tmp.path().join("left/Reports").is_dir());
+        assert!(s.pending.is_none());
+        assert_eq!(s.active_panel().current().unwrap().name, "Reports");
+    }
+
+    #[test]
+    fn a_bad_name_keeps_the_dialog_open_for_correction() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("mkdir").unwrap();
+        type_into_dialog(&mut s, "a/b");
+        assert!(s.run_line("confirm").is_err());
+        assert!(s.status_is_error);
+        assert!(matches!(s.pending, Some(Pending::Input { .. })));
+        type_into_dialog(&mut s, "fixed");
+        s.run_line("confirm").unwrap();
+        assert!(tmp.path().join("left/fixed").is_dir());
+        s.run_line("mkdir").unwrap();
+        s.run_line("cancel").unwrap();
+        assert!(s.pending.is_none());
+    }
+
+    #[test]
+    fn rename_dialog_is_prefilled_and_renames_the_entry_under_the_cursor() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("cursor 1").unwrap();
+        s.run_line("rename").unwrap();
+        match &s.pending {
+            Some(Pending::Input { text, kind }) => {
+                assert_eq!(text, "a.txt");
+                assert_eq!(*kind, InputKind::Rename(tmp.path().join("left/a.txt")));
+            }
+            other => panic!("{other:?}"),
+        }
+        type_into_dialog(&mut s, "renamed.txt");
+        s.run_line("confirm").unwrap();
+        assert!(!tmp.path().join("left/a.txt").exists());
+        assert_eq!(read(tmp.path().join("left/renamed.txt")), "a");
+        assert_eq!(s.active_panel().current().unwrap().name, "renamed.txt");
+    }
+
+    #[test]
+    fn rename_refuses_existing_names_and_the_parent_row() {
+        let (tmp, mut s) = two_dirs();
+        assert!(s.run_line("rename x").is_err(), "cursor is on ..");
+        s.run_line("cursor 1").unwrap();
+        assert!(s.run_line("rename b.txt").is_err());
+        assert_eq!(read(tmp.path().join("left/b.txt")), "b");
+        s.run_line("rename c.txt").unwrap();
+        assert!(tmp.path().join("left/c.txt").exists());
+    }
+
+    #[test]
+    fn progress_fraction_prefers_bytes_then_items() {
+        let mut status = JobStatus {
+            label: "Kopiowanie",
+            current: String::new(),
+            bytes_done: 0,
+            bytes_total: 0,
+            items_done: 0,
+            items_total: 0,
+            queued: 0,
+            waiting_for_answer: false,
+        };
+        assert_eq!(status.fraction(), None);
+        status.items_total = 4;
+        status.items_done = 1;
+        assert_eq!(status.fraction(), Some(0.25));
+        status.bytes_total = 200;
+        status.bytes_done = 50;
+        assert_eq!(status.fraction(), Some(0.25));
+        status.bytes_done = 500;
+        assert_eq!(status.fraction(), Some(1.0));
     }
 }
