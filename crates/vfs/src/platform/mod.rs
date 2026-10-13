@@ -5,12 +5,18 @@ mod verbatim;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use windows::{copy_symlink, extended_path, is_hidden, make_writable, volumes, DEFAULT_OPENER};
+pub use windows::{
+    copy_symlink, extended_path, file_mode, is_hidden, make_writable, set_mode, volumes,
+    DEFAULT_OPENER,
+};
 
 #[cfg(not(windows))]
 mod linux;
 #[cfg(not(windows))]
-pub use linux::{copy_symlink, extended_path, is_hidden, make_writable, volumes, DEFAULT_OPENER};
+pub use linux::{
+    copy_symlink, extended_path, file_mode, is_hidden, make_writable, set_mode, volumes,
+    DEFAULT_OPENER,
+};
 
 use std::ffi::OsString;
 use std::io;

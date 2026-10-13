@@ -14,7 +14,11 @@ use std::process::{Command, ExitCode};
 const ALLOWED: &[(&str, &[&str])] = &[
     ("bluepane-vfs", &[]),
     ("bluepane-ops", &[]),
-    ("bluepane-engine", &["bluepane-vfs", "bluepane-ops"]),
+    ("bluepane-archive", &["bluepane-ops"]),
+    (
+        "bluepane-engine",
+        &["bluepane-vfs", "bluepane-ops", "bluepane-archive"],
+    ),
     ("bluepane-ui-egui", &["bluepane-engine"]),
     ("bluepane", &["bluepane-engine", "bluepane-ui-egui"]),
     ("bluepane-cli", &["bluepane-engine", "bluepane-vfs"]),

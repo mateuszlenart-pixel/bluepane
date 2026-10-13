@@ -1,0 +1,20 @@
+[package]
+name = "bluepane-archive"
+description = "ZIP, TAR and TAR.GZ: listing, extracting, creating, split volumes and passwords"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bluepane-ops.workspace = true
+zip.workspace = true
+tar.workspace = true
+flate2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,5 +1,6 @@
 use std::fs::{self, Metadata};
 use std::io;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::Volume;
@@ -54,3 +55,16 @@ pub fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
 
 /// Opens a file with the desktop's default application.
 pub const DEFAULT_OPENER: (&str, &[&str]) = ("xdg-open", &[]);
+
+/// The permission bits of a file (`rwx` for user, group and other).
+pub fn file_mode(path: &Path) -> Option<u32> {
+    fs::metadata(path)
+        .ok()
+        .map(|m| m.permissions().mode() & 0o777)
+}
+
+/// Sets the permission bits. setuid, setgid and the sticky bit are never set from outside
+/// (an archive must not be able to create a privileged program).
+pub fn set_mode(path: &Path, mode: u32) -> io::Result<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(mode & 0o777))
+}

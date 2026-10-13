@@ -68,3 +68,13 @@ pub fn copy_symlink(src: &Path, dst: &Path) -> io::Result<()> {
 
 /// `explorer <file>` opens the file with its associated application.
 pub const DEFAULT_OPENER: (&str, &[&str]) = ("explorer", &[]);
+
+/// Windows has no Unix permission bits.
+pub fn file_mode(_path: &Path) -> Option<u32> {
+    None
+}
+
+/// Windows has no Unix permission bits: nothing to set.
+pub fn set_mode(_path: &Path, _mode: u32) -> io::Result<()> {
+    Ok(())
+}

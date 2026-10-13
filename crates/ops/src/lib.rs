@@ -113,7 +113,8 @@ impl Progress {
         }
     }
 
-    fn add(&self, bytes: u64) {
+    /// Counts bytes as processed (for operations implemented outside this crate).
+    pub fn add(&self, bytes: u64) {
         self.bytes_done.fetch_add(bytes, Ordering::Relaxed);
     }
 
@@ -121,7 +122,8 @@ impl Progress {
         self.items_done.fetch_add(1, Ordering::Relaxed);
     }
 
-    fn check(&self) -> Result<(), OpError> {
+    /// Fails with [`OpError::Cancelled`] once the operation was cancelled.
+    pub fn check(&self) -> Result<(), OpError> {
         if self.is_cancelled() {
             Err(OpError::Cancelled)
         } else {
@@ -168,6 +170,16 @@ pub trait Host {
     /// link is followed and the target's content is copied instead.
     fn copy_symlink(&self, _src: &Path, _dst: &Path) -> io::Result<()> {
         Err(io::Error::from(io::ErrorKind::Unsupported))
+    }
+
+    /// Sets Unix permission bits on an extracted file or directory (a no-op where the
+    /// platform has none).
+    fn set_mode(&self, _path: &Path, _mode: u32) {}
+
+    /// Unix permission bits of a file, to store them in an archive (`None` where the
+    /// platform has none).
+    fn file_mode(&self, _path: &Path) -> Option<u32> {
+        None
     }
 
     /// Called after every copied chunk.
@@ -284,8 +296,9 @@ enum Target {
 fn resolve_target(
     ctx: &mut Ctx<'_>,
     src: &Path,
+    src_size: u64,
+    src_modified: Option<SystemTime>,
     dst: &Path,
-    src_meta: &fs::Metadata,
 ) -> Result<Target, OpError> {
     let dst_meta = match fs::symlink_metadata(dst) {
         Ok(meta) => meta,
@@ -303,9 +316,9 @@ fn resolve_target(
     let conflict = Conflict {
         src: src.to_path_buf(),
         dst: dst.to_path_buf(),
-        src_size: src_meta.len(),
+        src_size,
         dst_size: dst_meta.len(),
-        src_modified: src_meta.modified().ok(),
+        src_modified,
         dst_modified: dst_meta.modified().ok(),
     };
     let resolution = match ctx.host.conflict(&conflict)? {
@@ -318,7 +331,7 @@ fn resolve_target(
     match resolution {
         Resolution::Skip => {
             ctx.outcome.skipped += 1;
-            ctx.progress.add(src_meta.len());
+            ctx.progress.add(src_size);
             ctx.progress.finish_item();
             Ok(Target::Skip)
         }
@@ -335,7 +348,7 @@ fn copy_link(
     dst: &Path,
     meta: &fs::Metadata,
 ) -> Result<(), OpError> {
-    let target = match resolve_target(ctx, src, dst, meta)? {
+    let target = match resolve_target(ctx, src, meta.len(), meta.modified().ok(), dst)? {
         Target::Skip => return Ok(()),
         Target::Write(path) => path,
         Target::Replace(path) => {
@@ -354,7 +367,15 @@ fn copy_link(
     if followed.is_dir() {
         copy_dir(ctx, src, &target, &followed)
     } else {
-        copy_stream_item(ctx, src, &target, &followed)
+        let mut input = File::open(src)?;
+        write_stream(
+            ctx,
+            src,
+            &mut input,
+            followed.len(),
+            &target,
+            Finish::Copy(&followed),
+        )
     }
 }
 
@@ -385,13 +406,47 @@ fn copy_file(
     dst: &Path,
     meta: &fs::Metadata,
 ) -> Result<(), OpError> {
-    match resolve_target(ctx, src, dst, meta)? {
+    let mut input = File::open(src)?;
+    store_file(
+        ctx,
+        src,
+        &mut input,
+        meta.len(),
+        meta.modified().ok(),
+        dst,
+        Finish::Copy(meta),
+    )
+}
+
+/// How a written file gets its permissions and time once it is complete.
+#[derive(Clone, Copy)]
+enum Finish<'a> {
+    /// A copy of a file: take the permissions of the original.
+    Copy(&'a fs::Metadata),
+    /// A stream (an archive entry): set the modification time and Unix mode if known.
+    Stream {
+        mode: Option<u32>,
+        modified: Option<SystemTime>,
+    },
+}
+
+/// Writes `reader` to `dst` after settling what to do if `dst` exists. A replaced file is
+/// written next to the old one first, so a failure or a cancel leaves the old one intact.
+fn store_file(
+    ctx: &mut Ctx<'_>,
+    label: &Path,
+    reader: &mut dyn Read,
+    size: u64,
+    modified: Option<SystemTime>,
+    dst: &Path,
+    finish: Finish<'_>,
+) -> Result<(), OpError> {
+    match resolve_target(ctx, label, size, modified, dst)? {
         Target::Skip => Ok(()),
-        Target::Write(path) => copy_stream_item(ctx, src, &path, meta),
+        Target::Write(path) => write_stream(ctx, label, reader, size, &path, finish),
         Target::Replace(path) => {
-            // Write next to the old file first, so a failure or a cancel leaves it intact.
             let temp = temp_sibling(&path);
-            copy_stream_item(ctx, src, &temp, meta)?;
+            write_stream(ctx, label, reader, size, &temp, finish)?;
             ctx.host.make_writable(&path);
             if let Err(e) = fs::rename(&temp, &path) {
                 let _ = fs::remove_file(&temp);
@@ -410,28 +465,42 @@ fn temp_sibling(path: &Path) -> PathBuf {
     path.with_file_name(format!(".{name}.bluepane-tmp"))
 }
 
-/// Copies one file's content in chunks and counts it as an item. A partial file is removed
-/// when the copy fails or is cancelled.
-fn copy_stream_item(
+/// Copies one stream into a new file in chunks and counts it as an item. A partial file is
+/// removed when the copy fails or is cancelled.
+fn write_stream(
     ctx: &mut Ctx<'_>,
-    src: &Path,
+    label: &Path,
+    reader: &mut dyn Read,
+    size: u64,
     dst: &Path,
-    meta: &fs::Metadata,
+    finish: Finish<'_>,
 ) -> Result<(), OpError> {
     ctx.progress
-        .set_current(&src.file_name().unwrap_or_default().to_string_lossy());
-    let mut input = File::open(src)?;
+        .set_current(&label.file_name().unwrap_or_default().to_string_lossy());
     let mut output = OpenOptions::new().write(true).create_new(true).open(dst)?;
-    let result = pump(ctx, &mut input, &mut output, meta.len());
-    drop(output);
+    let result = pump(ctx, reader, &mut output, size);
     match result {
         Ok(()) => {
-            let _ = fs::set_permissions(dst, meta.permissions());
+            match finish {
+                Finish::Copy(meta) => {
+                    let _ = output.set_permissions(meta.permissions());
+                }
+                Finish::Stream { mode, modified } => {
+                    if let Some(time) = modified {
+                        let _ = output.set_modified(time);
+                    }
+                    drop(output);
+                    if let Some(mode) = mode {
+                        ctx.host.set_mode(dst, mode);
+                    }
+                }
+            }
             ctx.outcome.files += 1;
             ctx.progress.finish_item();
             Ok(())
         }
         Err(e) => {
+            drop(output);
             let _ = fs::remove_file(dst);
             Err(e)
         }
@@ -440,7 +509,7 @@ fn copy_stream_item(
 
 fn pump(
     ctx: &mut Ctx<'_>,
-    input: &mut File,
+    input: &mut dyn Read,
     output: &mut File,
     size_hint: u64,
 ) -> Result<(), OpError> {
@@ -458,6 +527,86 @@ fn pump(
         output.write_all(&buffer[..read])?;
         ctx.progress.add(read as u64);
         ctx.host.tick(ctx.progress);
+    }
+}
+
+/// Writes files that do not come from the file system (entries of an archive) with the same
+/// conflict handling, chunking, progress and cleanup as a file copy.
+pub struct Writer<'a> {
+    ctx: Ctx<'a>,
+    dir_modes: Vec<(PathBuf, u32)>,
+}
+
+impl<'a> Writer<'a> {
+    pub fn new(progress: &'a Progress, host: &'a mut dyn Host) -> Writer<'a> {
+        Writer {
+            ctx: Ctx {
+                progress,
+                host,
+                outcome: Outcome::default(),
+            },
+            dir_modes: Vec::new(),
+        }
+    }
+
+    /// Writes `reader` (`size` bytes) to `dst`. `label` names the source in conflict
+    /// questions. An existing target is resolved through the host.
+    pub fn write_file(
+        &mut self,
+        label: &Path,
+        reader: &mut dyn Read,
+        size: u64,
+        modified: Option<SystemTime>,
+        mode: Option<u32>,
+        dst: &Path,
+    ) -> Result<(), OpError> {
+        self.ctx.progress.check()?;
+        store_file(
+            &mut self.ctx,
+            label,
+            reader,
+            size,
+            modified,
+            dst,
+            Finish::Stream { mode, modified },
+        )
+    }
+
+    /// Creates a directory (and missing parents). An existing directory is merged into.
+    /// Its mode is applied by [`Writer::finish`], so a read-only directory does not block
+    /// writing its content.
+    pub fn make_dir(&mut self, dst: &Path, mode: Option<u32>) -> Result<(), OpError> {
+        self.ctx.progress.check()?;
+        match fs::symlink_metadata(dst) {
+            Ok(existing) if existing.is_dir() => {}
+            Ok(_) => {
+                return Err(invalid_input(format!(
+                    "cel jest plikiem, a źródło katalogiem: {}",
+                    dst.display()
+                )))
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => fs::create_dir_all(dst)?,
+            Err(e) => return Err(e.into()),
+        }
+        if let Some(mode) = mode {
+            self.dir_modes.push((dst.to_path_buf(), mode));
+        }
+        Ok(())
+    }
+
+    /// Counts a file that was left out on purpose (for the progress bar).
+    pub fn note_skipped(&mut self, size: u64) {
+        self.ctx.outcome.skipped += 1;
+        self.ctx.progress.add(size);
+        self.ctx.progress.finish_item();
+    }
+
+    /// Applies directory modes and returns what was done.
+    pub fn finish(self) -> Outcome {
+        for (path, mode) in self.dir_modes.iter().rev() {
+            self.ctx.host.set_mode(path, *mode);
+        }
+        self.ctx.outcome
     }
 }
 
@@ -1100,5 +1249,167 @@ mod tests {
         .unwrap();
         assert!(tmp.path().join("src/a.txt").exists());
         assert_eq!(text(tmp.path().join("dst/a.txt")), "old");
+    }
+
+    /// A host that records the modes it was asked to set.
+    #[derive(Default)]
+    struct ModeHost {
+        script: Script,
+        modes: std::cell::RefCell<Vec<(PathBuf, u32)>>,
+    }
+
+    impl Host for ModeHost {
+        fn conflict(&mut self, conflict: &Conflict) -> Result<Resolution, OpError> {
+            self.script.conflict(conflict)
+        }
+
+        fn set_mode(&self, path: &Path, mode: u32) {
+            self.modes.borrow_mut().push((path.to_path_buf(), mode));
+        }
+
+        fn tick(&mut self, progress: &Progress) {
+            self.script.tick(progress);
+        }
+    }
+
+    #[test]
+    fn writer_stores_a_stream_with_its_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = ModeHost::default();
+        let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+        let mut writer = Writer::new(&progress, &mut host);
+        let mut data: &[u8] = b"streamed";
+        writer
+            .write_file(
+                Path::new("in.zip/a.txt"),
+                &mut data,
+                8,
+                Some(stamp),
+                None,
+                &tmp.path().join("a.txt"),
+            )
+            .unwrap();
+        let out = writer.finish();
+        assert_eq!(
+            out,
+            Outcome {
+                files: 1,
+                skipped: 0
+            }
+        );
+        assert_eq!(text(tmp.path().join("a.txt")), "streamed");
+        assert_eq!(
+            fs::metadata(tmp.path().join("a.txt"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            stamp
+        );
+        assert_eq!(progress.bytes_done(), 8);
+        assert_eq!(progress.current(), "a.txt");
+    }
+
+    #[test]
+    fn writer_asks_about_existing_files_like_a_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("a.txt"), "old").unwrap();
+        let progress = Progress::new();
+        let mut host = ModeHost {
+            script: Script::answering(vec![Resolution::KeepBoth, Resolution::Skip]),
+            ..ModeHost::default()
+        };
+        let mut writer = Writer::new(&progress, &mut host);
+        for _ in 0..2 {
+            let mut data: &[u8] = b"new";
+            writer
+                .write_file(
+                    Path::new("x/a.txt"),
+                    &mut data,
+                    3,
+                    None,
+                    None,
+                    &tmp.path().join("a.txt"),
+                )
+                .unwrap();
+        }
+        let out = writer.finish();
+        assert_eq!(
+            out,
+            Outcome {
+                files: 1,
+                skipped: 1
+            }
+        );
+        assert_eq!(text(tmp.path().join("a.txt")), "old");
+        assert_eq!(text(tmp.path().join("a (kopia).txt")), "new");
+    }
+
+    #[test]
+    fn writer_removes_a_partial_file_when_the_stream_fails() {
+        struct Failing(usize);
+        impl Read for Failing {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                if self.0 == 0 {
+                    return Err(io::Error::other("corrupt data"));
+                }
+                self.0 -= 1;
+                buf[..4].copy_from_slice(b"data");
+                Ok(4)
+            }
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = FailOnConflict;
+        let mut writer = Writer::new(&progress, &mut host);
+        let res = writer.write_file(
+            Path::new("x/f"),
+            &mut Failing(3),
+            100,
+            None,
+            None,
+            &tmp.path().join("f"),
+        );
+        assert!(matches!(res, Err(OpError::Io(_))));
+        assert!(!tmp.path().join("f").exists());
+    }
+
+    #[test]
+    fn writer_makes_directories_and_merges_existing_ones() {
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = FailOnConflict;
+        let mut writer = Writer::new(&progress, &mut host);
+        writer
+            .make_dir(&tmp.path().join("a/b"), Some(0o755))
+            .unwrap();
+        writer.make_dir(&tmp.path().join("a/b"), None).unwrap();
+        assert!(tmp.path().join("a/b").is_dir());
+        fs::write(tmp.path().join("file"), "x").unwrap();
+        assert!(writer.make_dir(&tmp.path().join("file"), None).is_err());
+        writer.finish();
+    }
+
+    #[test]
+    fn writer_counts_skipped_entries_and_honours_cancel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = FailOnConflict;
+        let mut writer = Writer::new(&progress, &mut host);
+        writer.note_skipped(40);
+        progress.cancel();
+        let mut data: &[u8] = b"x";
+        let res = writer.write_file(
+            Path::new("x/a"),
+            &mut data,
+            1,
+            None,
+            None,
+            &tmp.path().join("a"),
+        );
+        assert!(matches!(res, Err(OpError::Cancelled)));
+        let out = writer.finish();
+        assert_eq!(out.skipped, 1);
+        assert_eq!(progress.bytes_done(), 40);
     }
 }
