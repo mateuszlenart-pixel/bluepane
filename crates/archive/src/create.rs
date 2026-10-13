@@ -230,7 +230,11 @@ fn write_zip(
             file_options = file_options.last_modified_time(stamp);
         }
         if let Some(mode) = item.mode {
-            file_options = file_options.unix_permissions(mode);
+            // The zip crate stores DOS attributes on Windows unless told otherwise, which
+            // would lose the Unix mode that was asked for.
+            file_options = file_options
+                .unix_permissions(mode)
+                .system(zip::System::Unix);
         }
         match item.kind {
             Kind::Dir => {
