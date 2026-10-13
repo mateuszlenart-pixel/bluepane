@@ -66,7 +66,8 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] Podział na części (`nazwa.zip.001`, ...) i odczyt wieloczęściowych; `testarchive`; konflikty jak przy kopiowaniu
 - [x] Bezpieczeństwo: odrzucanie ścieżek wychodzących poza cel (zip-slip), pomijanie dowiązań i urządzeń, bez bitów setuid
 - [x] Zgodność sprawdzona z prawdziwymi narzędziami: 7-Zip (zwykły ZIP, AES-256, wolumeny), Info-ZIP (ZipCrypto), GNU tar
-- [ ] Nie ma: dodawania/usuwania plików w istniejącym archiwum, podglądu (F3) pliku wewnątrz archiwum, 7z/RAR, kompresji w ZIP innej niż deflate przy odczycie (LZMA/BZip2 dają czytelny błąd „nieobsługiwane”), szyfrowania nazw plików (ZIP tego nie potrafi)
+- [x] Podgląd (F3) pliku z archiwum: rozpakowanie do katalogu tymczasowego, sprzątanie przy zamknięciu podglądu i programu; limit 256 MB (większe: F5)
+- [ ] Nie ma: dodawania/usuwania plików w istniejącym archiwum, 7z/RAR, kompresji w ZIP innej niż deflate przy odczycie (LZMA/BZip2 dają czytelny błąd „nieobsługiwane”), szyfrowania nazw plików (ZIP tego nie potrafi)
 - [ ] Do sprawdzenia ręcznie na Windows (testy kompilują się i przechodzą w CI, ale GUI i nazwy niedozwolone w Windows nie były oglądane)
 
 ### Etap 8: FTP/SFTP

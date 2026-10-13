@@ -84,6 +84,8 @@ pub struct ArchiveJob {
     pub pack: Option<PackOptions>,
     /// Open: the side (0 or 1) that asked.
     pub side: usize,
+    /// Extract: this is a preview (F3), so show the file in the viewer once it is out.
+    pub view: bool,
 }
 
 /// What a job should do. `dest` is the target directory for copy, move, extract and pack;

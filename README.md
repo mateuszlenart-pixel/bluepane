@@ -29,6 +29,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | litery | szybki filtr listy (nazwa zawiera wpisany tekst); Backspace skraca filtr, Esc czyści |
 | Enter na archiwum | wejdź do archiwum (zip, tar, tar.gz, tgz, `*.zip.001`); `..` na górze wychodzi |
 | F5 w archiwum | rozpakuj zaznaczone do katalogu drugiego panelu |
+| F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | Alt+F5 / Alt+F9 | pakuj (okno) / rozpakuj archiwum pod kursorem lub otwarte |
 | Ctrl+T / Ctrl+W | nowa zakładka (ten sam katalog) / zamknij zakładkę |
 | Ctrl+↑ | katalog pod kursorem w nowej zakładce |
