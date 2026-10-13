@@ -17,8 +17,9 @@ pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
 pub use bluepane_ops::Resolution;
 pub use bluepane_sync::{
     Action as SyncAction, Category as SyncCategory, CompareBy, Deletion as SyncDeletion,
-    Direction as SyncDirection, ExecReport as SyncReport, Filter as SyncFilter, Op as SyncOp,
-    Preview as SyncPreview, Settings as SyncSettings, Variant as SyncVariant,
+    Direction as SyncDirection, ExecReport as SyncReport, Filter as SyncFilter, Kind as SyncKind,
+    Node as SyncNode, Op as SyncOp, Preview as SyncPreview, Settings as SyncSettings,
+    Variant as SyncVariant,
 };
 pub use command::{
     parse_size, Command, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,

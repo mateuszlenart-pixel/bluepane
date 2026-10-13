@@ -3,6 +3,8 @@
 //! The UI only translates input into command lines and draws the engine's state.
 //! It contains no file system logic.
 
+mod sync_ui;
+
 use std::time::Duration;
 
 use bluepane_engine::{
@@ -24,6 +26,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("F8", "Do kosza", "delete"),
     ("Alt+F5", "Pakuj", "pack"),
     ("Alt+F9", "Rozpakuj", "unpack"),
+    ("Alt+S", "Synchronizuj", "sync"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -37,6 +40,8 @@ pub struct BluepaneUi {
     pack_focused: bool,
     /// Editable text of each panel's path bar (resynced from the panel while not focused).
     path_text: [String; 2],
+    /// Settings being edited in the synchronization window.
+    sync_form: Option<sync_ui::SyncForm>,
 }
 
 impl BluepaneUi {
@@ -48,6 +53,7 @@ impl BluepaneUi {
             apply_to_all: false,
             pack_focused: false,
             path_text: [String::new(), String::new()],
+            sync_form: None,
         }
     }
 
@@ -75,6 +81,8 @@ impl BluepaneUi {
         egui::CentralPanel::default_margins().show(ui, |ui| {
             if self.session.viewer.is_some() {
                 self.viewer_ui(ui);
+            } else if self.session.sync.is_some() {
+                self.sync_ui(ui);
             } else {
                 ui.columns(2, |columns| {
                     for (index, ui) in columns.iter_mut().enumerate() {
@@ -540,6 +548,20 @@ impl BluepaneUi {
             for key in pressed {
                 if let Some(line) = self.session.keymap.lookup_viewer(&key).map(str::to_owned) {
                     self.dispatch(&line);
+                }
+            }
+            return;
+        }
+        if self.session.sync.is_some() {
+            // The synchronization window has few keys; typing must not start the panel filter.
+            let dirty = self.sync_form_is_dirty();
+            for key in pressed {
+                match key.as_str() {
+                    "Escape" => self.dispatch("syncclose"),
+                    // Running needs the settings on screen to be the ones compared.
+                    "F5" if !dirty => self.dispatch("syncrun"),
+                    "F9" => self.sync_compare_now(),
+                    _ => {}
                 }
             }
             return;
