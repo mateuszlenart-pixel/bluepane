@@ -27,6 +27,10 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Enter / Backspace | wejdź do katalogu / w górę (wiersz `..` też wychodzi w górę) |
 | Alt+← / Alt+→ | historia katalogów: wstecz / naprzód (osobna dla każdego panelu) |
 | litery | szybki filtr listy (nazwa zawiera wpisany tekst); Backspace skraca filtr, Esc czyści |
+| Ctrl+T / Ctrl+W | nowa zakładka (ten sam katalog) / zamknij zakładkę |
+| Ctrl+↑ | katalog pod kursorem w nowej zakładce |
+| Ctrl+Tab, Ctrl+PgDn / Ctrl+Shift+Tab, Ctrl+PgUp | następna / poprzednia zakładka |
+| Ctrl+1 … Ctrl+9 | przejdź do zakładki o tym numerze |
 | Alt+1 … Alt+9 | skok aktywnego panelu do wolumenu o tym numerze |
 | Ctrl+A / Ctrl+Shift+A | zaznacz wszystko / odznacz wszystko |
 | Ctrl+I | odwróć zaznaczenie |
@@ -42,10 +46,10 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F8 | do kosza (po potwierdzeniu: Enter = tak, Esc = nie) |
 | F9 | odśwież |
 
-Nad każdym panelem jest lista wolumenów i edytowalny pasek ścieżki (Enter wykonuje `cd`).
+Każdy panel ma własny rząd zakładek (klik przełącza, × albo środkowy przycisk zamyka, + dodaje); zakładka pamięta katalog, historię, sortowanie, filtr i zaznaczenie. Nad każdym panelem jest lista wolumenów i edytowalny pasek ścieżki (Enter wykonuje `cd`).
 
 Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `forward`,
-`volume <numer|nazwa>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
+`volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;

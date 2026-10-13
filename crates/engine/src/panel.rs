@@ -91,6 +91,25 @@ impl Panel {
         panel
     }
 
+    /// An empty placeholder used while tabs are swapped; it is never shown.
+    pub(crate) fn blank() -> Panel {
+        Panel {
+            cwd: PathBuf::new(),
+            entries: Vec::new(),
+            cursor: 0,
+            selected: BTreeSet::new(),
+            filter: String::new(),
+            sort: Sort {
+                key: SortKey::Name,
+                descending: false,
+            },
+            error: None,
+            listing: Vec::new(),
+            history: Vec::new(),
+            history_index: 0,
+        }
+    }
+
     /// Re-reads the directory, keeping the cursor entry and the still-valid selection.
     pub fn reload(&mut self) {
         match bluepane_vfs::list_dir(&self.cwd) {

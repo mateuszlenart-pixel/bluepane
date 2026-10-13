@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use bluepane_engine::{
     format_modified, human_size, name_parts, Command, InputKind, Panel, Pending, Session, SortKey,
-    ViewMode,
+    TabAction, ViewMode,
 };
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
@@ -462,6 +462,62 @@ impl BluepaneUi {
         });
     }
 
+    /// The tab row above a panel: click to switch, × or middle-click to close, + for a new tab.
+    fn tabs_ui(&mut self, ui: &mut egui::Ui, index: usize) {
+        let strip = self.session.tab_strip(index);
+        let several = strip.titles.len() > 1;
+        let side_is_active = self.session.active == index;
+        let (mut switch_to, mut close, mut new_tab) = (None, None, false);
+        ui.horizontal_wrapped(|ui| {
+            for (i, title) in strip.titles.iter().enumerate() {
+                let selected = i == strip.active;
+                let label: String = if title.chars().count() > 18 {
+                    format!("{}…", title.chars().take(17).collect::<String>())
+                } else {
+                    title.clone()
+                };
+                let response = ui
+                    .selectable_label(selected && (side_is_active || !several), label)
+                    .on_hover_text(strip.paths[i].display().to_string());
+                if response.clicked() {
+                    switch_to = Some(i);
+                }
+                if several && response.middle_clicked() {
+                    close = Some(i);
+                }
+                if several
+                    && ui
+                        .small_button("×")
+                        .on_hover_text("Zamknij zakładkę")
+                        .clicked()
+                {
+                    close = Some(i);
+                }
+                ui.add_space(4.0);
+            }
+            if ui
+                .small_button("+")
+                .on_hover_text("Nowa zakładka (Ctrl+T)")
+                .clicked()
+            {
+                new_tab = true;
+            }
+        });
+        let action = match (close, switch_to, new_tab) {
+            (Some(i), _, _) => Some(TabAction::Close(Some(i + 1))),
+            (None, Some(i), _) if i != strip.active => Some(TabAction::Goto(i + 1)),
+            (None, _, true) => Some(TabAction::New),
+            _ => None,
+        };
+        // Clicking anywhere in a panel's tab row also makes that side the active one.
+        if close.is_some() || switch_to.is_some() || new_tab {
+            self.session.active = index;
+        }
+        if let Some(action) = action {
+            let _ = self.session.execute(Command::Tab(action));
+        }
+    }
+
     /// Volume picker and editable path bar of one panel.
     fn header_ui(&mut self, ui: &mut egui::Ui, index: usize) {
         let is_active = self.session.active == index;
@@ -517,6 +573,7 @@ impl BluepaneUi {
 
     fn panel_ui(&mut self, ui: &mut egui::Ui, index: usize) {
         let is_active = self.session.active == index;
+        self.tabs_ui(ui, index);
         self.header_ui(ui, index);
         let panel: &Panel = &self.session.panels[index];
 

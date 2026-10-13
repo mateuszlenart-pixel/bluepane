@@ -55,6 +55,21 @@ pub enum ViewerAction {
     Close,
 }
 
+/// What to do with the active side's tabs. Numbers are 1-based.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabAction {
+    /// New tab showing the same directory (Ctrl+T).
+    New,
+    /// New tab showing the directory under the cursor (Ctrl+Up).
+    Open,
+    /// Close a tab; the active one without a number (Ctrl+W).
+    Close(Option<usize>),
+    Next,
+    Prev,
+    /// Switch to tab number n (Ctrl+1 ... Ctrl+9).
+    Goto(usize),
+}
+
 /// One user action.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -105,6 +120,8 @@ pub enum Command {
     Move,
     /// Create a directory in the active panel (F7). Without a name a dialog asks for it.
     Mkdir(Option<String>),
+    /// Open, close or switch tabs of the active panel.
+    Tab(TabAction),
     /// Open the file under the cursor in the built-in viewer (F3).
     View,
     /// Open the file under the cursor in an external editor (F4).
@@ -168,6 +185,7 @@ impl Command {
             "view" | "f3" => Ok(Command::View),
             "edit" => Ok(Command::Edit),
             "viewer" => parse_viewer(rest).map(Command::Viewer),
+            "tab" => parse_tab(rest).map(Command::Tab),
             "select" => need_arg("nazwa").map(Command::Select),
             "cd" => need_arg("ścieżka").map(|p| Command::Cd(PathBuf::from(p))),
             other => parse_resolution(other)
@@ -175,6 +193,32 @@ impl Command {
                 .ok_or_else(|| EngineError(format!("nieznana komenda: {other}"))),
         }
     }
+}
+
+fn parse_tab(args: &str) -> Result<TabAction, EngineError> {
+    let usage = || EngineError("tab: użycie: tab <new|open|close [n]|next|prev|n>".into());
+    let mut words = args.split_whitespace();
+    let sub = words.next().ok_or_else(usage)?.to_ascii_lowercase();
+    let number = |word: Option<&str>| -> Result<usize, EngineError> {
+        word.and_then(|w| w.parse::<usize>().ok())
+            .filter(|&n| n >= 1)
+            .ok_or_else(usage)
+    };
+    let action = match sub.as_str() {
+        "new" => TabAction::New,
+        "open" => TabAction::Open,
+        "close" => TabAction::Close(match words.next() {
+            Some(word) => Some(number(Some(word))?),
+            None => None,
+        }),
+        "next" => TabAction::Next,
+        "prev" => TabAction::Prev,
+        digits => TabAction::Goto(number(Some(digits))?),
+    };
+    if words.next().is_some() {
+        return Err(usage());
+    }
+    Ok(action)
 }
 
 fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {
@@ -369,6 +413,31 @@ mod tests {
             "viewer fly",
         ] {
             assert!(Command::parse(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn parses_tab_commands() {
+        let tab = |text: &str| Command::parse(text);
+        assert_eq!(tab("tab new"), Ok(Command::Tab(TabAction::New)));
+        assert_eq!(tab("tab open"), Ok(Command::Tab(TabAction::Open)));
+        assert_eq!(tab("tab close"), Ok(Command::Tab(TabAction::Close(None))));
+        assert_eq!(
+            tab("tab close 2"),
+            Ok(Command::Tab(TabAction::Close(Some(2))))
+        );
+        assert_eq!(tab("TAB next"), Ok(Command::Tab(TabAction::Next)));
+        assert_eq!(tab("tab prev"), Ok(Command::Tab(TabAction::Prev)));
+        assert_eq!(tab("tab 3"), Ok(Command::Tab(TabAction::Goto(3))));
+        for bad in [
+            "tab",
+            "tab 0",
+            "tab close x",
+            "tab new now",
+            "tab sideways",
+            "tab -1",
+        ] {
+            assert!(tab(bad).is_err(), "{bad}");
         }
     }
 
