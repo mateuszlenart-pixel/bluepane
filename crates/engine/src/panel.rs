@@ -239,6 +239,13 @@ impl Panel {
         self.cursor = self.cursor.min(self.entries.len().saturating_sub(1));
     }
 
+    /// Puts the cursor on the entry with this path, if it is visible.
+    pub fn put_cursor_on(&mut self, path: &Path) {
+        if let Some(index) = self.entries.iter().position(|e| e.path == path) {
+            self.cursor = index;
+        }
+    }
+
     /// The entry under the cursor.
     pub fn current(&self) -> Option<&Entry> {
         self.entries.get(self.cursor)
