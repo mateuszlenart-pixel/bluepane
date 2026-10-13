@@ -28,9 +28,13 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Alt+← / Alt+→ | historia katalogów: wstecz / naprzód (osobna dla każdego panelu) |
 | litery | szybki filtr listy (nazwa zawiera wpisany tekst); Backspace skraca filtr, Esc czyści |
 | Alt+1 … Alt+9 | skok aktywnego panelu do wolumenu o tym numerze |
+| Ctrl+A / Ctrl+Shift+A | zaznacz wszystko / odznacz wszystko |
+| Ctrl+I | odwróć zaznaczenie |
+| Ctrl+M / Ctrl+Shift+M | zaznacz / odznacz po masce (np. `*.txt;*.md`, `?` = jeden znak) |
+| Ctrl+F3 … F6 | sortuj po nazwie / rozszerzeniu / dacie / rozmiarze (drugi raz = odwrotnie); klik w nagłówek kolumny też |
 | Ctrl+L | wiersz poleceń z `cd ` (przejście do wpisanej ścieżki) |
 | Spacja, Insert | zaznacz i przejdź niżej |
-| F5 / F6 | kopiuj / przenieś do drugiego panelu |
+| F5 / F6 | kopiuj / przenieś do drugiego panelu; F5 przy tym samym katalogu w obu panelach proponuje kopię „nazwa (kopia).ext” (Enter = tak, Esc = nie) |
 | F7 | nowy katalog (wpisz nazwę w wierszu poleceń) |
 | F8 | do kosza |
 | F9 | odśwież |
@@ -39,7 +43,8 @@ Nad każdym panelem jest lista wolumenów i edytowalny pasek ścieżki (Enter wy
 
 Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `forward`,
 `volume <numer|nazwa>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
-`select <nazwa>`, `cursor <n>`, `refresh`.
+`selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
+`sort <name|ext|size|date> [asc|desc]`, `select <nazwa>`, `cursor <n>`, `confirm` / `cancel` (odpowiedź na pytanie), `refresh`.
 
 ## Bez okna
 

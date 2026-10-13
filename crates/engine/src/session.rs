@@ -5,7 +5,14 @@ use std::path::Path;
 use bluepane_ops::{self as ops, Progress};
 use bluepane_vfs::Volume;
 
-use crate::{is_parent_entry, Command, EngineError, Keymap, Panel};
+use crate::{is_parent_entry, Command, EngineError, Keymap, Mask, Panel};
+
+/// A question waiting for the user's answer (`confirm` or `cancel`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pending {
+    /// Both panels show the same directory: make copies of these paths next to the originals.
+    Duplicate(Vec<PathBuf>),
+}
 
 /// The whole application state except the UI: two panels, which one is active,
 /// the key map and the last status message.
@@ -17,6 +24,8 @@ pub struct Session {
     pub status: String,
     /// Mounted volumes, re-read on `refresh`.
     pub volumes: Vec<Volume>,
+    /// Set while the user is asked a question; the question text is in `status`.
+    pub pending: Option<Pending>,
 }
 
 /// Index of the volume that contains `cwd` (the one with the longest matching path).
@@ -37,6 +46,7 @@ impl Session {
             keymap: Keymap::default(),
             status: String::new(),
             volumes: bluepane_vfs::volumes(),
+            pending: None,
         }
     }
 
@@ -63,7 +73,17 @@ impl Session {
     }
 
     pub fn execute(&mut self, command: Command) -> Result<(), EngineError> {
+        // Any command other than the answer drops an unanswered question.
+        if !matches!(command, Command::Confirm | Command::Cancel) {
+            self.pending = None;
+        }
         match command {
+            Command::Confirm => self.confirm()?,
+            Command::Cancel => {
+                if self.pending.take().is_some() {
+                    self.status = "Anulowano".into();
+                }
+            }
             Command::SwitchPanel => self.active = 1 - self.active,
             Command::Up => {
                 let panel = self.active_panel_mut();
@@ -80,6 +100,21 @@ impl Session {
             }
             Command::Back => self.active_panel_mut().back()?,
             Command::Forward => self.active_panel_mut().forward()?,
+            Command::SelectMask(text) => self.select_by_mask(&text, true)?,
+            Command::UnselectMask(text) => self.select_by_mask(&text, false)?,
+            Command::SelectAll => {
+                let count = self.active_panel_mut().select_all();
+                self.status = format!("Zaznaczono: {count}");
+            }
+            Command::UnselectAll => {
+                self.active_panel_mut().unselect_all();
+                self.status = "Odznaczono wszystko".into();
+            }
+            Command::InvertSelection => {
+                self.active_panel_mut().invert_selection();
+                self.status = format!("Zaznaczono: {}", self.active_panel().selected.len());
+            }
+            Command::Sort(key, descending) => self.active_panel_mut().set_sort(key, descending),
             Command::Filter(text) => self.active_panel_mut().set_filter(&text),
             Command::Volume(which) => self.go_to_volume(&which)?,
             Command::Select(name) => {
@@ -119,6 +154,14 @@ impl Session {
         Ok(())
     }
 
+    fn select_by_mask(&mut self, text: &str, select: bool) -> Result<(), EngineError> {
+        let mask = Mask::parse(text).ok_or_else(|| EngineError("pusta maska".into()))?;
+        let count = self.active_panel_mut().select_matching(&mask, select);
+        let verb = if select { "Zaznaczono" } else { "Odznaczono" };
+        self.status = format!("{verb}: {count} ({text})");
+        Ok(())
+    }
+
     /// Jumps the active panel to a volume given as a 1-based number or a name.
     fn go_to_volume(&mut self, which: &str) -> Result<(), EngineError> {
         let found = match which.parse::<usize>() {
@@ -155,12 +198,15 @@ impl Session {
     fn transfer(&mut self, remove_source: bool) -> Result<(), EngineError> {
         let source = self.active_panel();
         let dest = self.panels[1 - self.active].cwd.clone();
-        if dest == source.cwd {
-            return Err(EngineError("oba panele wskazują ten sam katalog".into()));
-        }
         let targets = source.targets();
         if targets.is_empty() {
             return Err(EngineError("nic nie zaznaczono".into()));
+        }
+        if dest == source.cwd {
+            if remove_source {
+                return Err(EngineError("oba panele wskazują ten sam katalog".into()));
+            }
+            return self.propose_duplicates(targets);
         }
         let progress = Progress::new();
         let mut done = 0;
@@ -192,6 +238,54 @@ impl Session {
             }
             Some(msg) => Err(EngineError(format!(
                 "{verb}: {done} z {}, błąd: {msg}",
+                targets.len()
+            ))),
+        }
+    }
+
+    /// F5 with the same directory in both panels: ask before making `(kopia)` duplicates.
+    fn propose_duplicates(&mut self, targets: Vec<PathBuf>) -> Result<(), EngineError> {
+        let first = ops::duplicate_path(&targets[0]).map_err(|e| EngineError(e.to_string()))?;
+        let first_name = first
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.status = if targets.len() == 1 {
+            format!("Oba panele pokazują ten sam katalog. Utworzyć kopię „{first_name}”? (Enter = tak, Esc = nie)")
+        } else {
+            format!(
+                "Oba panele pokazują ten sam katalog. Utworzyć kopie ({}) z dopiskiem „(kopia)”, np. „{first_name}”? (Enter = tak, Esc = nie)",
+                targets.len()
+            )
+        };
+        self.pending = Some(Pending::Duplicate(targets));
+        Ok(())
+    }
+
+    fn confirm(&mut self) -> Result<(), EngineError> {
+        let Some(Pending::Duplicate(targets)) = self.pending.take() else {
+            return Err(EngineError("nie ma o co pytać".into()));
+        };
+        let progress = Progress::new();
+        let mut done = 0;
+        let mut first_error = None;
+        for target in &targets {
+            match ops::duplicate(target, &progress) {
+                Ok(_) => done += 1,
+                Err(e) => {
+                    first_error.get_or_insert(e.to_string());
+                }
+            }
+        }
+        self.active_panel_mut().selected.clear();
+        self.panels.iter_mut().for_each(Panel::reload);
+        match first_error {
+            None => {
+                self.status = format!("Utworzono kopie: {done}");
+                Ok(())
+            }
+            Some(msg) => Err(EngineError(format!(
+                "Utworzono kopie: {done} z {}, błąd: {msg}",
                 targets.len()
             ))),
         }
@@ -263,16 +357,96 @@ mod tests {
         assert!(tmp.path().join("right/a.txt").exists());
     }
 
-    #[test]
-    fn same_directory_is_rejected() {
+    /// Both panels on `left`, cursor on a.txt.
+    fn same_dir() -> (tempfile::TempDir, Session) {
         let (tmp, mut s) = two_dirs();
-        s.run_line(&format!("cd {}", tmp.path().join("left").display()))
-            .unwrap();
         s.run_line("switch").unwrap();
         s.run_line(&format!("cd {}", tmp.path().join("left").display()))
             .unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line("cursor 1").unwrap();
+        (tmp, s)
+    }
+
+    #[test]
+    fn move_in_the_same_directory_is_rejected() {
+        let (_tmp, mut s) = same_dir();
+        assert!(s.run_line("move").is_err());
+        assert!(s.status.contains("ten sam katalog"));
+        assert!(s.pending.is_none());
+    }
+
+    #[test]
+    fn copy_in_the_same_directory_asks_before_duplicating() {
+        let (tmp, mut s) = same_dir();
+        s.run_line("copy").unwrap();
+        assert!(s.pending.is_some());
+        assert!(s.status.contains("a (kopia).txt"), "{}", s.status);
+        // Nothing is created until the user answers.
+        assert!(!tmp.path().join("left/a (kopia).txt").exists());
+
+        s.run_line("confirm").unwrap();
+        assert!(s.pending.is_none());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("left/a (kopia).txt")).unwrap(),
+            "a"
+        );
+        assert!(tmp.path().join("left/a.txt").exists());
+        // Both panels were reloaded.
+        assert!(s.panels[0]
+            .entries
+            .iter()
+            .any(|e| e.name == "a (kopia).txt"));
+        assert!(s.panels[1]
+            .entries
+            .iter()
+            .any(|e| e.name == "a (kopia).txt"));
+    }
+
+    #[test]
+    fn declining_creates_nothing() {
+        let (tmp, mut s) = same_dir();
+        s.run_line("copy").unwrap();
+        s.run_line("cancel").unwrap();
+        assert!(s.pending.is_none());
+        assert_eq!(s.status, "Anulowano");
+        assert!(!tmp.path().join("left/a (kopia).txt").exists());
+        assert!(s.run_line("confirm").is_err());
+    }
+
+    #[test]
+    fn any_other_command_drops_the_question() {
+        let (tmp, mut s) = same_dir();
+        s.run_line("copy").unwrap();
+        s.run_line("cursor 1").unwrap();
+        assert!(s.pending.is_none());
+        assert!(s.run_line("confirm").is_err());
+        assert!(!tmp.path().join("left/a (kopia).txt").exists());
+    }
+
+    #[test]
+    fn duplicates_every_selected_entry_and_never_overwrites() {
+        let (tmp, mut s) = same_dir();
+        std::fs::write(tmp.path().join("left/a (kopia).txt"), "old").unwrap();
+        s.run_line("cursor -1").unwrap();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("select b.txt").unwrap();
+        s.run_line("copy").unwrap();
+        s.run_line("confirm").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("left/a (kopia).txt")).unwrap(),
+            "old"
+        );
+        assert!(tmp.path().join("left/a (kopia 2).txt").exists());
+        assert!(tmp.path().join("left/b (kopia).txt").exists());
+    }
+
+    #[test]
+    fn copy_with_nothing_to_copy_does_not_ask() {
+        let (_tmp, mut s) = same_dir();
+        s.run_line("cursor -1").unwrap(); // on ".."
         assert!(s.run_line("copy").is_err());
-        assert!(!s.status.is_empty());
+        assert!(s.pending.is_none());
     }
 
     #[test]
@@ -383,5 +557,51 @@ mod tests {
         assert_eq!(volume_index(&volumes, Path::new("/a/b/c")), Some(1));
         assert_eq!(volume_index(&volumes, Path::new("/a/x")), Some(0));
         assert_eq!(volume_index(&volumes, Path::new("/z")), None);
+    }
+
+    #[test]
+    fn selection_commands_report_in_status() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("left/c.md"), "c").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("selmask *.txt").unwrap();
+        assert!(s.status.contains("Zaznaczono: 2"), "{}", s.status);
+        s.run_line("unselmask b*").unwrap();
+        assert_eq!(s.active_panel().selected.len(), 1);
+        s.run_line("invert").unwrap();
+        assert_eq!(s.active_panel().selected.len(), 2);
+        s.run_line("selectall").unwrap();
+        assert!(s.status.contains("Zaznaczono: 3"));
+        s.run_line("unselectall").unwrap();
+        assert!(s.active_panel().selected.is_empty());
+        assert!(s.run_line("selmask ;").is_err());
+    }
+
+    #[test]
+    fn copy_acts_on_the_mask_selection() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("left/c.md"), "c").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("selmask *.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(tmp.path().join("right/a.txt").exists());
+        assert!(tmp.path().join("right/b.txt").exists());
+        assert!(!tmp.path().join("right/c.md").exists());
+    }
+
+    #[test]
+    fn sort_command_reorders_the_active_panel_only() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("left/big.bin"), vec![0u8; 100]).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("sort size desc").unwrap();
+        let names: Vec<_> = s.panels[0]
+            .entries
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect();
+        assert_eq!(names, ["..", "big.bin", "a.txt", "b.txt"]);
+        assert_eq!(s.panels[1].sort.key, crate::SortKey::Name);
+        assert!(s.run_line("sort bogus").is_err());
     }
 }

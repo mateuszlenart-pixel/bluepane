@@ -5,14 +5,18 @@
 //! without a window.
 
 mod command;
+mod format;
 mod keymap;
+mod mask;
 mod panel;
 mod session;
 
 pub use command::{Command, COMMAND_NAMES};
+pub use format::{format_modified, human_size, name_parts};
 pub use keymap::Keymap;
-pub use panel::{is_parent_entry, Panel, PARENT_NAME};
-pub use session::Session;
+pub use mask::Mask;
+pub use panel::{is_parent_entry, Panel, Sort, SortKey, PARENT_NAME};
+pub use session::{Pending, Session};
 
 use std::fmt;
 

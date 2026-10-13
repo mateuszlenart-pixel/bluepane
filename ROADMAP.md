@@ -9,7 +9,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | --- | --- | --- | --- |
 | 1 | Fundament | ✅ | workspace, CLAUDE.md, CI na obu systemach, okno z dwoma panelami pokazującymi pliki |
 | 2 | Nawigacja | 🟡 | po dysku da się poruszać samym klawiaturą |
-| 3 | Zaznaczanie | 🟡 | katalog z 100 tys. plików nie zacina się (cel) |
+| 3 | Zaznaczanie | ✅ | katalog z 100 tys. plików nie zacina się (cel) |
 | 4 | Operacje F5–F8 | 🟡 | operacje w tle z postępem, dialog konfliktów, testy na katalogach tymczasowych |
 | 5 | Podgląd i edycja | ⬜ | duży plik otwiera się bez wczytywania całości do pamięci |
 | 6 | Archiwa | ⬜ | Enter wchodzi do archiwum, kopiowanie działa w obie strony |
@@ -34,10 +34,10 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] Wpis `..` na górze listy (nie jest celem operacji, nie da się go zaznaczyć)
 
 ### Etap 3: zaznaczanie
-- [ ] `+` i `-` (zaznacz/odznacz po masce), Ctrl+A, odwrócenie zaznaczenia
-- [ ] Sortowanie po nazwie, rozszerzeniu, rozmiarze, dacie; klik w nagłówek kolumny
-- [ ] Prawdziwe kolumny (zamiast tekstu monospace) i formatowanie dat
-- [ ] Test wydajności: katalog ze 100 tys. plików
+- [x] Zaznacz/odznacz po masce (`selmask`/`unselmask`, Ctrl+M / Ctrl+Shift+M zamiast klawiszy `+`/`-`, bo litery i znaki idą do szybkiego filtra), Ctrl+A, odwrócenie zaznaczenia
+- [x] Sortowanie po nazwie, rozszerzeniu, rozmiarze, dacie (Ctrl+F3..F6); klik w nagłówek kolumny
+- [x] Prawdziwe kolumny (nazwa, typ, rozmiar, data) i daty w czasie lokalnym (`chrono`)
+- [x] Test wydajności: 100 tys. wpisów (test w CI na liście w pamięci; ręczny `--ignored` na 100 tys. prawdziwych plików: listing ok. 1 s, razem z zaznaczeniem i sortowaniem ok. 2,7 s w release)
 
 ### Etap 4: operacje
 - [ ] Wykonywanie w wątku w tle (`Session` dostaje kolejkę zadań), pasek postępu, przycisk Anuluj
@@ -46,6 +46,16 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [ ] F2 zmiana nazwy, F7 jako okno dialogowe
 - [ ] Potwierdzenie przed usunięciem
 - [ ] Windows: długie ścieżki (`\\?\`), atrybuty tylko do odczytu; Linux: symlinki, uprawnienia
+
+## Notatki do późniejszych etapów
+
+### Etap 8: FTP/SFTP
+Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**:
+- menedżer witryn z zapisanymi połączeniami, w tym rozbudowany wybór i konfiguracja
+  połączenia (protokół FTP / FTPS / SFTP, host, port, tryb logowania, dane uwierzytelniające,
+  katalog startowy; szczegóły do dopracowania przy starcie etapu),
+- kolejka transferów z postępem, wznawianie przerwanych transferów,
+- dialog konfliktów (nadpisz / pomiń / zmień nazwę).
 
 ## Znane uproszczenia szkieletu
 - Operacje na plikach działają synchronicznie w wątku UI (duże kopie zamrożą okno do etapu 4).

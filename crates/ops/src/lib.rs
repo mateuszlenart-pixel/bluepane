@@ -93,14 +93,53 @@ fn target_for(src: &Path, dst_dir: &Path) -> Result<PathBuf, OpError> {
 /// Returns the path of the copy.
 pub fn copy(src: &Path, dst_dir: &Path, progress: &Progress) -> Result<PathBuf, OpError> {
     let target = target_for(src, dst_dir)?;
+    copy_to(src, &target, progress)
+}
+
+/// Copies a file or a directory tree to the exact path `target` (which must not exist).
+/// Returns `target`.
+pub fn copy_to(src: &Path, target: &Path, progress: &Progress) -> Result<PathBuf, OpError> {
+    if target.exists() {
+        return Err(OpError::Exists(target.to_path_buf()));
+    }
     if src.is_dir() && target.starts_with(src) {
         return Err(OpError::Io(io::Error::new(
             io::ErrorKind::InvalidInput,
             "nie można kopiować katalogu do jego wnętrza",
         )));
     }
-    copy_recursive(src, &target, progress)?;
-    Ok(target)
+    copy_recursive(src, target, progress)?;
+    Ok(target.to_path_buf())
+}
+
+/// Name for a duplicate of `src` placed next to it: `report.txt` becomes
+/// `report (kopia).txt`, then `report (kopia 2).txt` and so on. The suffix goes before the
+/// extension of files; directories and dot-files get it at the end.
+pub fn duplicate_path(src: &Path) -> Result<PathBuf, OpError> {
+    let invalid = || OpError::InvalidName(src.display().to_string());
+    let dir = src.parent().ok_or_else(invalid)?;
+    let name = src.file_name().ok_or_else(invalid)?.to_string_lossy();
+    let (stem, ext) = match name.rfind('.') {
+        Some(dot) if dot > 0 && !src.is_dir() => (&name[..dot], &name[dot..]),
+        _ => (&name[..], ""),
+    };
+    for n in 1.. {
+        let label = if n == 1 {
+            "kopia".to_string()
+        } else {
+            format!("kopia {n}")
+        };
+        let candidate = dir.join(format!("{stem} ({label}){ext}"));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    unreachable!("an unused duplicate name always exists")
+}
+
+/// Copies `src` next to itself under the name given by [`duplicate_path`].
+pub fn duplicate(src: &Path, progress: &Progress) -> Result<PathBuf, OpError> {
+    copy_to(src, &duplicate_path(src)?, progress)
 }
 
 fn copy_recursive(src: &Path, dst: &Path, progress: &Progress) -> Result<(), OpError> {
@@ -199,6 +238,65 @@ mod tests {
         let tmp = tree();
         let src = tmp.path().join("src");
         assert!(copy(&src, &src.join("sub"), &Progress::new()).is_err());
+    }
+
+    #[test]
+    fn duplicate_names_keep_the_extension() {
+        let tmp = tree();
+        let dir = tmp.path().join("src");
+        assert_eq!(
+            duplicate_path(&dir.join("a.txt")).unwrap(),
+            dir.join("a (kopia).txt")
+        );
+        // Directories and dot-files have no extension to preserve.
+        assert_eq!(
+            duplicate_path(&dir.join("sub")).unwrap(),
+            dir.join("sub (kopia)")
+        );
+        fs::write(dir.join(".rc"), "").unwrap();
+        assert_eq!(
+            duplicate_path(&dir.join(".rc")).unwrap(),
+            dir.join(".rc (kopia)")
+        );
+        fs::write(dir.join("noext"), "").unwrap();
+        assert_eq!(
+            duplicate_path(&dir.join("noext")).unwrap(),
+            dir.join("noext (kopia)")
+        );
+    }
+
+    #[test]
+    fn duplicate_never_overwrites() {
+        let tmp = tree();
+        let src = tmp.path().join("src/a.txt");
+        let first = duplicate(&src, &Progress::new()).unwrap();
+        let second = duplicate(&src, &Progress::new()).unwrap();
+        let third = duplicate(&first, &Progress::new()).unwrap();
+        assert!(first.ends_with("a (kopia).txt"));
+        assert!(second.ends_with("a (kopia 2).txt"));
+        assert!(third.ends_with("a (kopia) (kopia).txt"));
+        assert_eq!(fs::read_to_string(&second).unwrap(), "hello");
+        assert_eq!(fs::read_to_string(&src).unwrap(), "hello");
+    }
+
+    #[test]
+    fn duplicate_copies_a_directory_tree() {
+        let tmp = tree();
+        let out = duplicate(&tmp.path().join("src"), &Progress::new()).unwrap();
+        assert!(out.ends_with("src (kopia)"));
+        assert_eq!(fs::read_to_string(out.join("sub/b.txt")).unwrap(), "world!");
+    }
+
+    #[test]
+    fn copy_to_refuses_existing_target() {
+        let tmp = tree();
+        let src = tmp.path().join("src/a.txt");
+        let target = tmp.path().join("dst/x.txt");
+        copy_to(&src, &target, &Progress::new()).unwrap();
+        assert!(matches!(
+            copy_to(&src, &target, &Progress::new()),
+            Err(OpError::Exists(_))
+        ));
     }
 
     #[test]

@@ -21,6 +21,8 @@ egui = "0.36"
 eframe = "0.36"
 trash = "5"
 tempfile = "3"
+# Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
