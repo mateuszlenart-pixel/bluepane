@@ -223,7 +223,18 @@ pub struct Session {
     queue: VecDeque<JobSpec>,
     /// The archive job that needs a password; run again once the user types it.
     retry: Option<JobSpec>,
+    /// Largest archive entry that F3 extracts for a preview.
+    pub view_from_archive_limit: u64,
+    /// Temporary directory holding the file being previewed from an archive.
+    preview_dir: Option<PathBuf>,
 }
+
+/// A file inside an archive larger than this is not previewed (it would have to be extracted
+/// whole into a temporary directory first): the user extracts it with F5 instead.
+pub const VIEW_FROM_ARCHIVE_LIMIT: u64 = 256 * 1024 * 1024;
+
+/// Counter that keeps the temporary preview directories of one process apart.
+static PREVIEW_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Index of the volume that contains `cwd` (the one with the longest matching path).
 fn volume_index(volumes: &[Volume], cwd: &Path) -> Option<usize> {
@@ -251,6 +262,8 @@ impl Session {
             current: None,
             queue: VecDeque::new(),
             retry: None,
+            view_from_archive_limit: VIEW_FROM_ARCHIVE_LIMIT,
+            preview_dir: None,
         }
     }
 
@@ -878,6 +891,9 @@ impl Session {
                 }
                 (text, false)
             }
+            JobKind::Extract if spec.archive.as_ref().is_some_and(|a| a.view) => {
+                self.show_extracted_preview(spec)
+            }
             JobKind::Extract => {
                 let mut text = format!("Rozpakowano: {}", report.files);
                 if report.skipped > 0 {
@@ -1103,7 +1119,9 @@ impl Session {
 
     /// F3: opens the built-in viewer on the file under the cursor.
     fn open_viewer(&mut self) -> Result<(), EngineError> {
-        self.deny_in_archive("podgląd")?;
+        if self.active_panel().archive.is_some() {
+            return self.preview_from_archive();
+        }
         let path = self.entry_to_open()?;
         let viewer = Viewer::open(&path)?;
         self.status = format!(
@@ -1160,9 +1178,96 @@ impl Session {
                 viewer.find_again(action == ViewerAction::Next);
                 self.status = viewer.message.clone();
             }
-            ViewerAction::Close => self.viewer = None,
+            ViewerAction::Close => {
+                self.viewer = None;
+                self.remove_preview_dir();
+            }
         }
         Ok(())
+    }
+
+    /// F3 inside an archive: extract the file to a temporary directory, then view it there.
+    fn preview_from_archive(&mut self) -> Result<(), EngineError> {
+        let panel = self.active_panel();
+        let Some(view) = panel.archive.clone() else {
+            return Err(EngineError("to nie jest archiwum".into()));
+        };
+        let entry = panel
+            .current()
+            .filter(|e| !is_parent_entry(e))
+            .ok_or_else(|| EngineError("nic nie wskazano".into()))?;
+        if entry.is_dir() {
+            return Err(EngineError(format!("to katalog, nie plik: {}", entry.name)));
+        }
+        if entry.size > self.view_from_archive_limit {
+            return Err(EngineError(format!(
+                "plik w archiwum ma {}: za duży na podgląd (limit {}), rozpakuj go (F5)",
+                crate::human_size(entry.size),
+                crate::human_size(self.view_from_archive_limit)
+            )));
+        }
+        let inner = view.inner_path_of(entry).unwrap_or_default();
+        let dir = std::env::temp_dir().join(format!(
+            "bluepane-view-{}-{}",
+            std::process::id(),
+            PREVIEW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        self.enqueue(JobSpec {
+            kind: JobKind::Extract,
+            sources: vec![view.archive.clone()],
+            dest: Some(dir),
+            archive: Some(ArchiveJob {
+                entries: vec![inner],
+                strip: view.inner.clone(),
+                password: view.password.clone(),
+                listing: Some(view.listing.clone()),
+                view: true,
+                ..ArchiveJob::default()
+            }),
+        });
+        Ok(())
+    }
+
+    /// The preview file is out of the archive: open the viewer on it.
+    fn show_extracted_preview(&mut self, spec: &JobSpec) -> (String, bool) {
+        let dir = spec.dest.clone().unwrap_or_default();
+        let file = spec
+            .archive
+            .as_ref()
+            .and_then(|a| a.entries.first())
+            .and_then(|entry| {
+                let strip = spec.archive.as_ref().map_or("", |a| a.strip.as_str());
+                let relative = if strip.is_empty() {
+                    entry.as_str()
+                } else {
+                    entry.strip_prefix(strip)?.trim_start_matches('/')
+                };
+                Some(dir.join(relative))
+            })
+            .unwrap_or_else(|| dir.clone());
+        match Viewer::open(&file) {
+            Ok(viewer) => {
+                self.remove_preview_dir();
+                self.preview_dir = Some(dir);
+                self.viewer = Some(viewer);
+                let name = file
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                (format!("Podgląd z archiwum: {name}"), false)
+            }
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                (format!("Podgląd z archiwum nie powiódł się: {error}"), true)
+            }
+        }
+    }
+
+    /// Deletes the temporary directory of the archive preview, if any.
+    fn remove_preview_dir(&mut self) {
+        if let Some(dir) = self.preview_dir.take() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 
     /// Refuses write operations while the active panel shows the inside of an archive.
@@ -1580,6 +1685,12 @@ impl Session {
         self.active_panel_mut().put_cursor_on(&renamed);
         self.status = format!("Zmieniono nazwę na {}", new_name.trim());
         Ok(())
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.remove_preview_dir();
     }
 }
 
@@ -3184,6 +3295,95 @@ mod tests {
         assert!(s.active_panel().archive.is_none());
     }
 
+    fn preview_dirs() -> Vec<PathBuf> {
+        std::fs::read_dir(std::env::temp_dir())
+            .map(|d| {
+                d.filter_map(Result::ok)
+                    .map(|e| e.path())
+                    .filter(|p| {
+                        p.file_name().is_some_and(|n| {
+                            n.to_string_lossy()
+                                .starts_with(&format!("bluepane-view-{}-", std::process::id()))
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn f3_on_a_file_inside_an_archive_extracts_it_and_shows_it() {
+        let (_tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select docs").unwrap();
+        s.run_line("enter").unwrap();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("view").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            s.status.contains("Podgląd z archiwum: a.txt"),
+            "{}",
+            s.status
+        );
+        let viewer = s.viewer.as_mut().expect("the viewer opened");
+        viewer.set_viewport(5, 80);
+        assert_eq!(viewer.visible_rows()[0].text, "alpha");
+        let shown = viewer.path().to_path_buf();
+        assert!(shown.exists());
+        assert!(shown.starts_with(std::env::temp_dir()), "{shown:?}");
+        assert!(
+            s.active_panel().archive.is_some(),
+            "the panel stays in the archive"
+        );
+
+        s.run_line("viewer close").unwrap();
+        assert!(s.viewer.is_none());
+        assert!(!shown.exists(), "the temporary file is removed on close");
+        assert!(!shown.parent().unwrap().exists(), "and so is its directory");
+    }
+
+    #[test]
+    fn previewing_inside_an_archive_asks_for_a_missing_password() {
+        let (_tmp, mut s) = with_archives();
+        enter_archive(&mut s, "locked.zip");
+        s.run_line("select top.txt").unwrap();
+        s.run_line("view").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.viewer.is_none());
+        assert!(matches!(
+            s.pending,
+            Some(Pending::Input {
+                kind: InputKind::ArchivePassword,
+                ..
+            })
+        ));
+        type_into_dialog(&mut s, "pw");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        let viewer = s.viewer.as_mut().expect("opens once the password is right");
+        viewer.set_viewport(5, 80);
+        assert_eq!(viewer.visible_rows()[0].text, "top");
+        s.run_line("viewer close").unwrap();
+    }
+
+    #[test]
+    fn cancelling_the_preview_password_leaves_no_temporary_files() {
+        let (_tmp, mut s) = with_archives();
+        let before = preview_dirs().len();
+        enter_archive(&mut s, "locked.zip");
+        s.run_line("select top.txt").unwrap();
+        s.run_line("view").unwrap();
+        assert!(s.wait_idle());
+        s.run_line("cancel").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.viewer.is_none());
+        assert_eq!(
+            preview_dirs().len(),
+            before,
+            "nothing was left in the temp directory"
+        );
+    }
+
     #[test]
     fn pack_to_7z_with_hidden_names_then_open_it_with_the_password() {
         let (tmp, mut s) = two_dirs();
@@ -3270,6 +3470,63 @@ mod tests {
             std::fs::read_to_string(tmp.path().join("left/a.txt")).unwrap(),
             "a"
         );
+    }
+
+    #[test]
+    fn previewing_a_directory_or_a_huge_entry_is_refused() {
+        let (_tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select docs").unwrap();
+        assert!(s.run_line("view").unwrap_err().0.contains("katalog"));
+        s.run_line("cursor -10").unwrap(); // onto ".."
+        assert!(s.run_line("view").is_err());
+        s.run_line("select top.txt").unwrap();
+        s.view_from_archive_limit = 1;
+        let err = s.run_line("view").unwrap_err();
+        assert!(err.0.contains("F5"), "{err}");
+        assert!(s.wait_idle());
+        assert!(s.viewer.is_none());
+    }
+
+    #[test]
+    fn a_new_preview_replaces_the_old_one_and_dropping_the_session_cleans_up() {
+        let (_tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select top.txt").unwrap();
+        s.run_line("view").unwrap();
+        assert!(s.wait_idle());
+        let first = s.viewer.as_ref().unwrap().path().to_path_buf();
+        s.run_line("viewer close").unwrap();
+        assert!(!first.exists());
+
+        s.run_line("view").unwrap();
+        assert!(s.wait_idle());
+        let second = s.viewer.as_ref().unwrap().path().to_path_buf();
+        assert!(second.exists());
+        drop(s);
+        assert!(!second.exists(), "dropping the session removes the preview");
+    }
+
+    #[test]
+    fn previewing_works_for_tar_too() {
+        let (tmp, mut s) = with_archives();
+        let src = tmp.path().join("src");
+        make_archive(
+            &[src.join("top.txt")],
+            &tmp.path().join("left/p.tar.gz"),
+            bluepane_archive::Format::TarGz,
+            None,
+        );
+        s.run_line("refresh").unwrap();
+        enter_archive(&mut s, "p.tar.gz");
+        s.run_line("select top.txt").unwrap();
+        s.run_line("view").unwrap();
+        assert!(s.wait_idle());
+        let status = s.status.clone();
+        let viewer = s.viewer.as_mut().unwrap_or_else(|| panic!("{status}"));
+        viewer.set_viewport(3, 40);
+        assert_eq!(viewer.visible_rows()[0].text, "top");
+        s.run_line("viewer close").unwrap();
     }
 
     #[test]
