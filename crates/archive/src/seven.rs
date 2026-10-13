@@ -9,15 +9,16 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use bluepane_ops::{Host, Progress, Writer};
+use bluepane_ops::{Progress, Writer};
 use sevenz_rust2::encoder_options::{AesEncoderOptions, Lzma2Options};
 use sevenz_rust2::{
     Archive, ArchiveEntry, ArchiveReader, ArchiveWriter, EncoderMethod, Error, NtTime, Password,
 };
 
-use crate::create::{CreateOptions, Item, Kind, Level, SourceReader};
+use crate::create::Level;
 use crate::listing::{normalize_name, ArchiveEntry as Entry};
 use crate::read::{below, op_failure, wanted, Selection, VerifyReport};
+use crate::sink::{Meta, Sink, SinkSettings};
 use crate::split::Joined;
 use crate::ArchiveError;
 
@@ -380,84 +381,91 @@ pub fn verify(
     }
 }
 
-fn attributes_for(item: &Item) -> (bool, u32) {
-    let is_dir = matches!(item.kind, Kind::Dir);
+fn attributes_for(meta: &Meta, is_dir: bool) -> u32 {
     let base = if is_dir {
         ATTRIBUTE_DIRECTORY
     } else {
         ATTRIBUTE_ARCHIVE
     };
-    match (item.mode, is_dir) {
+    match (meta.mode, is_dir) {
         (Some(mode), _) => {
             let file_type = if is_dir { S_IFDIR } else { S_IFREG };
-            (
-                true,
-                base | UNIX_EXTENSION | ((file_type | (mode & 0o777)) << 16),
-            )
+            base | UNIX_EXTENSION | ((file_type | (mode & 0o777)) << 16)
         }
-        (None, true) => (true, base | UNIX_EXTENSION | ((S_IFDIR | 0o755) << 16)),
-        (None, false) => (true, base),
+        (None, true) => base | UNIX_EXTENSION | ((S_IFDIR | 0o755) << 16),
+        (None, false) => base,
     }
 }
 
-/// Builds the archive in `temp`.
-pub fn write(
-    items: &[Item],
+struct SevenSink<'a> {
+    writer: ArchiveWriter<File>,
+    progress: &'a Progress,
+}
+
+impl SevenSink<'_> {
+    fn entry(&self, mut entry: ArchiveEntry, meta: &Meta, is_dir: bool) -> ArchiveEntry {
+        if let Some(stamp) = meta.modified.and_then(|m| NtTime::try_from(m).ok()) {
+            entry.last_modified_date = stamp;
+            entry.has_last_modified_date = true;
+        }
+        entry.has_windows_attributes = true;
+        entry.windows_attributes = attributes_for(meta, is_dir);
+        entry
+    }
+}
+
+impl Sink for SevenSink<'_> {
+    fn add_dir(&mut self, name: &str, meta: &Meta) -> Result<(), ArchiveError> {
+        let entry = self.entry(ArchiveEntry::new_directory(name), meta, true);
+        let progress = self.progress;
+        self.writer
+            .push_archive_entry(entry, None::<io::Empty>)
+            .map_err(|e| failure(progress, e, false))?;
+        Ok(())
+    }
+
+    fn add_file(
+        &mut self,
+        name: &str,
+        _size: u64,
+        meta: &Meta,
+        data: &mut dyn Read,
+    ) -> Result<(), ArchiveError> {
+        let entry = self.entry(ArchiveEntry::new_file(name), meta, false);
+        let progress = self.progress;
+        self.writer
+            .push_archive_entry(entry, Some(data))
+            .map_err(|e| failure(progress, e, false))?;
+        Ok(())
+    }
+
+    fn finish(self: Box<Self>) -> Result<(), ArchiveError> {
+        self.writer.finish()?;
+        Ok(())
+    }
+}
+
+/// Opens a 7z sink that writes to `temp`.
+pub(crate) fn open_sink<'a>(
     temp: &Path,
-    options: &CreateOptions,
-    password: Option<&str>,
-    progress: &Progress,
-    _host: &mut dyn Host,
-) -> Result<(), ArchiveError> {
+    settings: &SinkSettings<'_>,
+    progress: &'a Progress,
+) -> Result<Box<dyn Sink + 'a>, ArchiveError> {
     let map = |e: Error| failure(progress, e, false);
     let mut writer = ArchiveWriter::new(File::create(temp)?).map_err(map)?;
-    let compression = match options.level {
+    let compression = match settings.level {
         Level::Store => EncoderMethod::COPY.into(),
         Level::Fast => Lzma2Options::from_level(1).into(),
         Level::Normal => Lzma2Options::from_level(5).into(),
         Level::Maximum => Lzma2Options::from_level(9).into(),
     };
     let mut methods = Vec::new();
-    if let Some(password) = password {
+    if let Some(password) = settings.password {
         methods.push(AesEncoderOptions::new(Password::new(password)).into());
     }
     methods.push(compression);
     writer.set_content_methods(methods);
     // Hiding the names only makes sense (and only works) with a password.
-    writer.set_encrypt_header(password.is_some() && options.encrypt_names);
-
-    for item in items {
-        progress.check()?;
-        progress.set_current(&item.name);
-        let mut entry = match item.kind {
-            Kind::Dir => ArchiveEntry::new_directory(&item.name),
-            Kind::File { .. } => ArchiveEntry::new_file(&item.name),
-        };
-        if let Some(stamp) = item.modified.and_then(|m| NtTime::try_from(m).ok()) {
-            entry.last_modified_date = stamp;
-            entry.has_last_modified_date = true;
-        }
-        let (has_attributes, attributes) = attributes_for(item);
-        entry.has_windows_attributes = has_attributes;
-        entry.windows_attributes = attributes;
-        match item.kind {
-            Kind::Dir => {
-                writer
-                    .push_archive_entry(entry, None::<io::Empty>)
-                    .map_err(map)?;
-            }
-            Kind::File { .. } => {
-                let source = SourceReader {
-                    file: File::open(&item.path)?,
-                    progress,
-                };
-                writer
-                    .push_archive_entry(entry, Some(source))
-                    .map_err(map)?;
-            }
-        }
-        progress.finish_item();
-    }
-    writer.finish()?;
-    Ok(())
+    writer.set_encrypt_header(settings.password.is_some() && settings.encrypt_names);
+    Ok(Box::new(SevenSink { writer, progress }))
 }

@@ -8,18 +8,13 @@
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use bluepane_ops::{Conflict, Host, Progress, Resolution};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use zip::write::SimpleFileOptions;
-use zip::{AesMode, CompressionMethod, ZipWriter};
+use std::time::SystemTime;
 
 use crate::format::Format;
+use crate::sink::{io_failure, open_sink, Meta, SinkSettings};
 use crate::split::SplitWriter;
-use crate::time::to_zip;
 use crate::ArchiveError;
+use bluepane_ops::{Conflict, Host, Progress, Resolution};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
@@ -31,7 +26,7 @@ pub enum Level {
 }
 
 impl Level {
-    fn deflate_level(self) -> i64 {
+    pub(crate) fn deflate_level(self) -> i64 {
         match self {
             Level::Store => 0,
             Level::Fast => 1,
@@ -189,120 +184,6 @@ fn collect(
     Ok((items, left_out))
 }
 
-fn io_failure(progress: &Progress, error: io::Error) -> ArchiveError {
-    if progress.is_cancelled() {
-        ArchiveError::Cancelled
-    } else {
-        ArchiveError::Io(error)
-    }
-}
-
-fn zip_failure(progress: &Progress, error: zip::result::ZipError) -> ArchiveError {
-    match error {
-        zip::result::ZipError::Io(e) => io_failure(progress, e),
-        other => ArchiveError::Op(other.to_string()),
-    }
-}
-
-fn write_zip(
-    items: &[Item],
-    temp: &Path,
-    options: &CreateOptions,
-    password: Option<&str>,
-    progress: &Progress,
-) -> Result<(), ArchiveError> {
-    let mut zip = ZipWriter::new(File::create(temp)?);
-    let method = if options.level == Level::Store {
-        CompressionMethod::Stored
-    } else {
-        CompressionMethod::Deflated
-    };
-    for item in items {
-        progress.check()?;
-        progress.set_current(&item.name);
-        let mut file_options = SimpleFileOptions::default()
-            .compression_method(method)
-            .compression_level(match options.level {
-                Level::Store => None,
-                level => Some(level.deflate_level()),
-            });
-        if let Some(stamp) = item.modified.and_then(to_zip) {
-            file_options = file_options.last_modified_time(stamp);
-        }
-        if let Some(mode) = item.mode {
-            file_options = file_options.unix_permissions(mode);
-        }
-        match item.kind {
-            Kind::Dir => {
-                zip.add_directory(format!("{}/", item.name), file_options)
-                    .map_err(|e| zip_failure(progress, e))?;
-                progress.finish_item();
-            }
-            Kind::File { size } => {
-                file_options = file_options.large_file(size >= u64::from(u32::MAX));
-                if let Some(password) = password {
-                    file_options = file_options.with_aes_encryption(AesMode::Aes256, password);
-                }
-                zip.start_file(item.name.as_str(), file_options)
-                    .map_err(|e| zip_failure(progress, e))?;
-                let mut reader = SourceReader {
-                    file: File::open(&item.path)?,
-                    progress,
-                };
-                io::copy(&mut reader, &mut zip).map_err(|e| io_failure(progress, e))?;
-                progress.finish_item();
-            }
-        }
-    }
-    zip.finish().map_err(|e| zip_failure(progress, e))?;
-    Ok(())
-}
-
-fn tar_header(item: &Item, size: u64, entry_type: tar::EntryType) -> tar::Header {
-    let mut header = tar::Header::new_gnu();
-    header.set_size(size);
-    header.set_entry_type(entry_type);
-    header.set_mode(item.mode.unwrap_or(match entry_type {
-        tar::EntryType::Directory => 0o755,
-        _ => 0o644,
-    }));
-    let secs = item
-        .modified
-        .and_then(|m| m.duration_since(UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_secs());
-    header.set_mtime(secs);
-    header
-}
-
-fn write_tar<W: Write>(items: &[Item], sink: W, progress: &Progress) -> Result<W, ArchiveError> {
-    let mut builder = tar::Builder::new(sink);
-    for item in items {
-        progress.check()?;
-        progress.set_current(&item.name);
-        match item.kind {
-            Kind::Dir => {
-                let mut header = tar_header(item, 0, tar::EntryType::Directory);
-                builder
-                    .append_data(&mut header, format!("{}/", item.name), io::empty())
-                    .map_err(|e| io_failure(progress, e))?;
-            }
-            Kind::File { size } => {
-                let mut header = tar_header(item, size, tar::EntryType::Regular);
-                let reader = SourceReader {
-                    file: File::open(&item.path)?,
-                    progress,
-                };
-                builder
-                    .append_data(&mut header, &item.name, reader)
-                    .map_err(|e| io_failure(progress, e))?;
-            }
-        }
-        progress.finish_item();
-    }
-    builder.finish().map_err(|e| io_failure(progress, e))?;
-    builder.into_inner().map_err(|e| io_failure(progress, e))
-}
-
 /// Finds a free name for the archive when the user chose "keep both".
 fn free_output(output: &Path, split: bool) -> Result<PathBuf, ArchiveError> {
     let mut candidate = output.to_path_buf();
@@ -419,27 +300,33 @@ pub fn create(
             "szyfrowanie nazw plików wymaga formatu 7z i hasła".into(),
         ));
     }
-    match options.format {
-        Format::Zip => write_zip(&items, &temp.path, options, password, progress)?,
-        Format::SevenZ => {
-            crate::seven::write(&items, &temp.path, options, password, progress, host)?
+    let settings = SinkSettings {
+        format: options.format,
+        level: options.level,
+        password,
+        encrypt_names: options.encrypt_names,
+    };
+    let mut sink = open_sink(&temp.path, &settings, progress)?;
+    for item in &items {
+        progress.check()?;
+        progress.set_current(&item.name);
+        let meta = Meta {
+            modified: item.modified,
+            mode: item.mode,
+        };
+        match item.kind {
+            Kind::Dir => sink.add_dir(&item.name, &meta)?,
+            Kind::File { size } => {
+                let mut reader = SourceReader {
+                    file: File::open(&item.path)?,
+                    progress,
+                };
+                sink.add_file(&item.name, size, &meta, &mut reader)?;
+            }
         }
-        Format::Tar => {
-            let mut file = write_tar(&items, File::create(&temp.path)?, progress)?;
-            file.flush().map_err(|e| io_failure(progress, e))?;
-        }
-        Format::TarGz => {
-            let level = match options.level {
-                Level::Store => Compression::none(),
-                Level::Fast => Compression::fast(),
-                Level::Normal => Compression::default(),
-                Level::Maximum => Compression::best(),
-            };
-            let encoder = GzEncoder::new(File::create(&temp.path)?, level);
-            let encoder = write_tar(&items, encoder, progress)?;
-            encoder.finish().map_err(|e| io_failure(progress, e))?;
-        }
+        progress.finish_item();
     }
+    sink.finish()?;
     progress.check()?;
 
     // Put the finished archive in place.

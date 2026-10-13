@@ -14,6 +14,7 @@ mod format;
 mod listing;
 mod read;
 mod seven;
+mod sink;
 mod split;
 mod time;
 
