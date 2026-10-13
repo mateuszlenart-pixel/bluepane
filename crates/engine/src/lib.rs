@@ -11,7 +11,7 @@ mod session;
 
 pub use command::{Command, COMMAND_NAMES};
 pub use keymap::Keymap;
-pub use panel::Panel;
+pub use panel::{is_parent_entry, Panel, PARENT_NAME};
 pub use session::Session;
 
 use std::fmt;

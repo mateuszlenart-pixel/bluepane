@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 /// Maps key names to command lines.
 ///
-/// Key names are plain strings (`"F5"`, `"Tab"`, `"ArrowDown"`), so the engine does not
-/// depend on any UI toolkit. A command line that ends with a space (such as `"mkdir "`)
+/// Key names are plain strings (`"F5"`, `"Tab"`, `"ArrowDown"`), optionally prefixed with
+/// modifiers in the order `Ctrl+`, `Alt+`, `Shift+` (`"Alt+ArrowLeft"`), so the engine does
+/// not depend on any UI toolkit. A command line that ends with a space (such as `"mkdir "`)
 /// is not executed directly: the UI puts it in the command line for the user to complete.
 #[derive(Debug, Clone)]
 pub struct Keymap {
@@ -27,6 +28,19 @@ impl Default for Keymap {
             ("F7", "mkdir "),
             ("F8", "delete"),
             ("F9", "refresh"),
+            ("Escape", "filter"),
+            ("Alt+ArrowLeft", "back"),
+            ("Alt+ArrowRight", "forward"),
+            ("Ctrl+L", "cd "),
+            ("Alt+Num1", "volume 1"),
+            ("Alt+Num2", "volume 2"),
+            ("Alt+Num3", "volume 3"),
+            ("Alt+Num4", "volume 4"),
+            ("Alt+Num5", "volume 5"),
+            ("Alt+Num6", "volume 6"),
+            ("Alt+Num7", "volume 7"),
+            ("Alt+Num8", "volume 8"),
+            ("Alt+Num9", "volume 9"),
         ];
         Self {
             bindings: pairs
@@ -79,6 +93,24 @@ mod tests {
         ] {
             let line = map.lookup(key).unwrap();
             assert!(Command::parse(line).is_ok(), "{key} -> {line}");
+        }
+    }
+
+    #[test]
+    fn navigation_bindings_are_valid_commands() {
+        let map = Keymap::default();
+        for key in [
+            "Escape",
+            "Alt+ArrowLeft",
+            "Alt+ArrowRight",
+            "Ctrl+L",
+            "Alt+Num1",
+        ] {
+            let line = map.lookup(key).unwrap().trim_end();
+            assert!(
+                Command::parse(line).is_ok() || line == "cd",
+                "{key} -> {line}"
+            );
         }
     }
 
