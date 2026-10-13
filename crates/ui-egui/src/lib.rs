@@ -1,0 +1,266 @@
+//! egui front end.
+//!
+//! The UI only translates input into command lines and draws the engine's state.
+//! It contains no file system logic.
+
+use std::time::{Duration, SystemTime};
+
+use bluepane_engine::{Panel, Session};
+use egui::{Color32, RichText};
+
+const CMD_LINE_ID: &str = "bluepane-command-line";
+
+/// F-key bar: (key, label, command line). Same bindings as the default key map.
+const FKEYS: &[(&str, &str, &str)] = &[
+    ("F5", "Kopiuj", "copy"),
+    ("F6", "Przenieś", "move"),
+    ("F7", "Nowy katalog", "mkdir "),
+    ("F8", "Do kosza", "delete"),
+    ("F9", "Odśwież", "refresh"),
+];
+
+pub struct BluepaneUi {
+    session: Session,
+    command_line: String,
+    focus_command_line: bool,
+    last_error: bool,
+}
+
+impl BluepaneUi {
+    pub fn new(session: Session) -> Self {
+        Self {
+            session,
+            command_line: String::new(),
+            focus_command_line: false,
+            last_error: false,
+        }
+    }
+
+    pub fn session(&self) -> &Session {
+        &self.session
+    }
+
+    /// Draws one frame. Call this from `eframe::App::ui`.
+    pub fn show(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        let cmd_id = egui::Id::new(CMD_LINE_ID);
+        let typing = ctx.memory(|m| m.has_focus(cmd_id));
+        if !typing {
+            self.handle_keys(&ctx);
+        }
+
+        egui::Panel::bottom("bottom").show(ui, |ui| {
+            self.bottom_bar(ui, cmd_id);
+        });
+        egui::CentralPanel::default_margins().show(ui, |ui| {
+            ui.columns(2, |columns| {
+                for (index, ui) in columns.iter_mut().enumerate() {
+                    self.panel_ui(ui, index);
+                }
+            });
+        });
+    }
+
+    fn handle_keys(&mut self, ctx: &egui::Context) {
+        let pressed: Vec<String> = ctx.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|event| match event {
+                    egui::Event::Key {
+                        key, pressed: true, ..
+                    } => Some(format!("{key:?}")),
+                    _ => None,
+                })
+                .collect()
+        });
+        for key in pressed {
+            if let Some(line) = self.session.keymap.lookup(&key).map(str::to_owned) {
+                self.dispatch(&line);
+            }
+        }
+    }
+
+    /// Runs a command line, or puts it in the command line if it needs an argument.
+    fn dispatch(&mut self, line: &str) {
+        if line.ends_with(' ') {
+            self.command_line = line.to_string();
+            self.focus_command_line = true;
+        } else {
+            self.last_error = self.session.run_line(line).is_err();
+        }
+    }
+
+    fn bottom_bar(&mut self, ui: &mut egui::Ui, cmd_id: egui::Id) {
+        let status_color = if self.last_error {
+            Color32::LIGHT_RED
+        } else {
+            ui.visuals().weak_text_color()
+        };
+        ui.label(RichText::new(&self.session.status).color(status_color));
+
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(">").monospace());
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut self.command_line)
+                    .id(cmd_id)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("komenda, np. cd /tmp, mkdir Raporty, copy"),
+            );
+            if self.focus_command_line {
+                response.request_focus();
+                self.focus_command_line = false;
+            }
+            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let line = std::mem::take(&mut self.command_line);
+                if !line.trim().is_empty() {
+                    self.last_error = self.session.run_line(&line).is_err();
+                }
+            }
+        });
+
+        ui.horizontal(|ui| {
+            for (key, label, line) in FKEYS {
+                if ui.button(format!("{key} {label}")).clicked() {
+                    self.dispatch(line);
+                }
+            }
+        });
+    }
+
+    fn panel_ui(&mut self, ui: &mut egui::Ui, index: usize) {
+        let is_active = self.session.active == index;
+        let panel: &Panel = &self.session.panels[index];
+
+        let header_color = if is_active {
+            Color32::from_rgb(120, 200, 255)
+        } else {
+            ui.visuals().text_color()
+        };
+        ui.label(
+            RichText::new(panel.cwd.display().to_string())
+                .strong()
+                .color(header_color),
+        );
+        if let Some(err) = &panel.error {
+            ui.colored_label(Color32::LIGHT_RED, err);
+        }
+        ui.separator();
+
+        let row_height = ui.spacing().interact_size.y;
+        let stride = row_height + ui.spacing().item_spacing.y;
+        let cursor = panel.cursor;
+        let mut clicked = None;
+        let mut entered = None;
+
+        egui::ScrollArea::vertical()
+            .id_salt(("panel", index))
+            .auto_shrink([false, false])
+            .show_rows(ui, row_height, panel.entries.len(), |ui, range| {
+                if is_active {
+                    let y =
+                        ui.min_rect().min.y + cursor.saturating_sub(range.start) as f32 * stride;
+                    if cursor < range.start || cursor >= range.end {
+                        let rect = egui::Rect::from_min_size(
+                            egui::pos2(ui.min_rect().min.x, y),
+                            egui::vec2(1.0, row_height),
+                        );
+                        ui.scroll_to_rect(rect, None);
+                    }
+                }
+                for row in range {
+                    let entry = &panel.entries[row];
+                    let marker = if panel.selected.contains(&entry.path) {
+                        "*"
+                    } else {
+                        " "
+                    };
+                    let name = if entry.is_dir() {
+                        format!("[{}]", entry.name)
+                    } else {
+                        entry.name.clone()
+                    };
+                    let size = if entry.is_dir() {
+                        "<DIR>".to_string()
+                    } else {
+                        human_size(entry.size)
+                    };
+                    let text = format!(
+                        "{marker}{name:<42} {size:>10}  {}",
+                        format_age(entry.modified)
+                    );
+                    let mut rich = RichText::new(text).monospace();
+                    if panel.selected.contains(&entry.path) {
+                        rich = rich.color(Color32::YELLOW);
+                    } else if entry.hidden {
+                        rich = rich.color(ui.visuals().weak_text_color());
+                    }
+                    let response = ui.selectable_label(is_active && row == cursor, rich);
+                    if response.clicked() {
+                        clicked = Some(row);
+                    }
+                    if response.double_clicked() {
+                        entered = Some(row);
+                    }
+                }
+            });
+
+        if let Some(row) = clicked.or(entered) {
+            self.session.active = index;
+            self.session.panels[index].cursor = row;
+        }
+        if entered.is_some() {
+            self.session.panels[index].enter();
+        }
+    }
+}
+
+fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
+/// Coarse "how long ago" text; real date formatting arrives with the columns work (stage 3).
+fn format_age(modified: Option<SystemTime>) -> String {
+    let Some(modified) = modified else {
+        return String::new();
+    };
+    let age = SystemTime::now()
+        .duration_since(modified)
+        .unwrap_or(Duration::ZERO)
+        .as_secs();
+    match age {
+        0..=59 => "teraz".to_string(),
+        60..=3599 => format!("{} min temu", age / 60),
+        3600..=86_399 => format!("{} godz. temu", age / 3600),
+        _ => format!("{} dni temu", age / 86_400),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sizes_are_human_readable() {
+        assert_eq!(human_size(0), "0 B");
+        assert_eq!(human_size(1023), "1023 B");
+        assert_eq!(human_size(1536), "1.5 KB");
+        assert_eq!(human_size(5 * 1024 * 1024), "5.0 MB");
+    }
+
+    #[test]
+    fn age_buckets() {
+        assert_eq!(format_age(None), "");
+        assert_eq!(format_age(Some(SystemTime::now())), "teraz");
+    }
+}

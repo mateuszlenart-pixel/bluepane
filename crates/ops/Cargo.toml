@@ -1,0 +1,17 @@
+[package]
+name = "bluepane-ops"
+description = "File operations: copy, move, mkdir, delete to trash, with progress and cancellation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+trash.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

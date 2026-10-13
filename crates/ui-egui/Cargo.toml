@@ -1,0 +1,15 @@
+[package]
+name = "bluepane-ui-egui"
+description = "egui front end: two panels, F-key bar and command line. Depends on the engine only."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bluepane-engine.workspace = true
+egui.workspace = true
+
+[lints]
+workspace = true

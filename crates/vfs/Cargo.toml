@@ -1,0 +1,16 @@
+[package]
+name = "bluepane-vfs"
+description = "File system abstraction: listing, volumes and platform differences (Windows/Linux)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
