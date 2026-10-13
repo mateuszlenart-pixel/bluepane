@@ -200,9 +200,10 @@ mod tests {
                 entry("docs/a.txt", false, 10),
                 entry("docs/sub/b.txt", false, 20),
                 entry("top.txt", false, 5),
-                entry("empty", true, 0, false),
+                entry("empty", true, 0),
             ],
             0,
+            false,
         )
     }
 
