@@ -549,8 +549,9 @@ impl<'a> Writer<'a> {
         }
     }
 
-    /// Writes `reader` (`size` bytes) to `dst`. `label` names the source in conflict
-    /// questions. An existing target is resolved through the host.
+    /// Writes `reader` (`size` bytes) to `dst`, creating missing parent directories (archives
+    /// often list a file without listing its directory). `label` names the source in
+    /// conflict questions. An existing target is resolved through the host.
     pub fn write_file(
         &mut self,
         label: &Path,
@@ -561,6 +562,9 @@ impl<'a> Writer<'a> {
         dst: &Path,
     ) -> Result<(), OpError> {
         self.ctx.progress.check()?;
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)?;
+        }
         store_file(
             &mut self.ctx,
             label,
@@ -1411,5 +1415,25 @@ mod tests {
         let out = writer.finish();
         assert_eq!(out.skipped, 1);
         assert_eq!(progress.bytes_done(), 40);
+    }
+
+    #[test]
+    fn writer_creates_missing_parent_directories() {
+        let tmp = tempfile::tempdir().unwrap();
+        let progress = Progress::new();
+        let mut host = FailOnConflict;
+        let mut writer = Writer::new(&progress, &mut host);
+        let mut data: &[u8] = b"deep";
+        writer
+            .write_file(
+                Path::new("x/f"),
+                &mut data,
+                4,
+                None,
+                None,
+                &tmp.path().join("a/b/c/f"),
+            )
+            .unwrap();
+        assert_eq!(text(tmp.path().join("a/b/c/f")), "deep");
     }
 }
