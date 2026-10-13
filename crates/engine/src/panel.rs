@@ -1,6 +1,9 @@
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::UNIX_EPOCH;
+
+use bluepane_archive::Listing;
 
 use bluepane_vfs::{Entry, EntryKind};
 
@@ -11,6 +14,27 @@ pub const PARENT_NAME: &str = "..";
 
 /// How many visited directories each panel remembers.
 const HISTORY_LIMIT: usize = 100;
+
+/// The rows for one directory of an archive.
+fn archive_entries(view: &ArchiveView) -> Vec<Entry> {
+    view.listing
+        .children(&view.inner)
+        .map(|e| Entry {
+            name: e.name().to_string(),
+            path: view.archive.join(&e.path),
+            kind: if e.is_dir {
+                EntryKind::Dir
+            } else if e.special {
+                EntryKind::Symlink
+            } else {
+                EntryKind::File
+            },
+            size: e.size,
+            modified: e.modified,
+            hidden: false,
+        })
+        .collect()
+}
 
 fn extension_of(entry: &Entry) -> &str {
     crate::name_parts(&entry.name, entry.is_dir()).1
@@ -48,6 +72,49 @@ pub struct Sort {
     pub descending: bool,
 }
 
+/// A panel that is browsing the inside of an archive instead of a directory.
+///
+/// `Panel::cwd` stays the directory that contains the archive; the entries shown are the
+/// archive's contents at `inner`. Their `path`s are virtual (`<archive>/<inner>/<name>`):
+/// they identify rows for selection but are not paths on disk.
+#[derive(Debug, Clone)]
+pub struct ArchiveView {
+    pub archive: PathBuf,
+    pub listing: Arc<Listing>,
+    /// The directory inside the archive being shown (`""` is the top level), `/` separated.
+    pub inner: String,
+    /// The password to use for this archive, once the user has given one.
+    pub password: Option<String>,
+}
+
+impl ArchiveView {
+    /// Where the panel "is", for the path bar and tab titles: `/dir/a.zip/inner`.
+    pub fn location(&self) -> PathBuf {
+        if self.inner.is_empty() {
+            self.archive.clone()
+        } else {
+            self.archive.join(&self.inner)
+        }
+    }
+
+    /// The archive-internal path of a row of this view (`None` for the `..` row).
+    pub fn inner_path_of(&self, entry: &Entry) -> Option<String> {
+        if is_parent_entry(entry) {
+            return None;
+        }
+        let name = entry.name.as_str();
+        Some(if self.inner.is_empty() {
+            name.to_string()
+        } else {
+            format!("{}/{name}", self.inner)
+        })
+    }
+}
+
+fn parent_inner(inner: &str) -> &str {
+    inner.rsplit_once('/').map_or("", |(parent, _)| parent)
+}
+
 /// One of the two file panels.
 ///
 /// `entries` is what the user sees: the `..` row (when there is a parent directory)
@@ -61,6 +128,8 @@ pub struct Panel {
     /// Quick filter: only entries whose name contains this text (case-insensitive) are shown.
     pub filter: String,
     pub sort: Sort,
+    /// Set while browsing the inside of an archive.
+    pub archive: Option<ArchiveView>,
     /// Set when the current directory could not be listed.
     pub error: Option<String>,
     /// The whole directory listing, before filtering and without the `..` row.
@@ -84,6 +153,7 @@ impl Panel {
                 key: SortKey::Name,
                 descending: false,
             },
+            archive: None,
             error: None,
             listing: Vec::new(),
         };
@@ -103,6 +173,7 @@ impl Panel {
                 key: SortKey::Name,
                 descending: false,
             },
+            archive: None,
             error: None,
             listing: Vec::new(),
             history: Vec::new(),
@@ -112,7 +183,11 @@ impl Panel {
 
     /// Re-reads the directory, keeping the cursor entry and the still-valid selection.
     pub fn reload(&mut self) {
-        match bluepane_vfs::list_dir(&self.cwd) {
+        let listed = match &self.archive {
+            Some(view) => Ok(archive_entries(view)),
+            None => bluepane_vfs::list_dir(&self.cwd),
+        };
+        match listed {
             Ok(entries) => {
                 self.listing = entries;
                 self.sort_listing();
@@ -236,10 +311,16 @@ impl Panel {
     fn rebuild(&mut self, keep: Option<&Path>) {
         let needle = self.filter.to_lowercase();
         self.entries.clear();
-        if let Some(parent) = self.cwd.parent() {
+        let parent = match &self.archive {
+            // In an archive the `..` row always exists: it leads up a level or out of it.
+            Some(view) if view.inner.is_empty() => Some(self.cwd.clone()),
+            Some(view) => Some(view.archive.join(parent_inner(&view.inner))),
+            None => self.cwd.parent().map(Path::to_path_buf),
+        };
+        if let Some(parent) = parent {
             self.entries.push(Entry {
                 name: PARENT_NAME.to_string(),
-                path: parent.to_path_buf(),
+                path: parent,
                 kind: EntryKind::Dir,
                 size: 0,
                 modified: None,
@@ -273,20 +354,27 @@ impl Panel {
     /// What an operation acts on: the visible selected entries, or the entry under the
     /// cursor. The `..` row is never a target. Selected entries hidden by the filter are
     /// left alone, so an operation only touches what the user can see.
-    pub fn targets(&self) -> Vec<PathBuf> {
-        let selected: Vec<PathBuf> = self
+    pub fn target_entries(&self) -> Vec<&Entry> {
+        let selected: Vec<&Entry> = self
             .entries
             .iter()
             .filter(|e| self.selected.contains(&e.path))
-            .map(|e| e.path.clone())
             .collect();
         if !selected.is_empty() {
             return selected;
         }
         self.current()
             .filter(|e| !is_parent_entry(e))
-            .map(|e| vec![e.path.clone()])
-            .unwrap_or_default()
+            .into_iter()
+            .collect()
+    }
+
+    /// The paths of [`Panel::target_entries`].
+    pub fn targets(&self) -> Vec<PathBuf> {
+        self.target_entries()
+            .into_iter()
+            .map(|e| e.path.clone())
+            .collect()
     }
 
     /// Navigates to `dir` and records it in the history (forward history is dropped).
@@ -304,6 +392,7 @@ impl Panel {
 
     /// Switches the listing to `dir` without touching the history.
     fn show_dir(&mut self, dir: PathBuf) {
+        self.archive = None;
         self.cwd = dir;
         self.cursor = 0;
         self.selected.clear();
@@ -360,14 +449,32 @@ impl Panel {
         };
         if is_parent_entry(entry) {
             self.up();
+        } else if let Some(view) = &self.archive {
+            let inner = view.inner_path_of(entry).unwrap_or_default();
+            self.set_inner(inner);
         } else {
             let dir = entry.path.clone();
             self.change_dir(dir);
         }
     }
 
-    /// Goes to the parent directory and puts the cursor on the directory just left.
+    /// Goes to the parent directory and puts the cursor on the directory just left. Inside an
+    /// archive this goes up one level, and from its top level leaves the archive.
     pub fn up(&mut self) {
+        if let Some(view) = &self.archive {
+            let left = view.location();
+            if view.inner.is_empty() {
+                self.archive = None;
+                self.selected.clear();
+                self.filter.clear();
+                self.cursor = 0;
+                self.reload();
+            } else {
+                self.set_inner(parent_inner(&view.inner).to_string());
+            }
+            self.put_cursor_on(&left);
+            return;
+        }
         let Some(parent) = self.cwd.parent().map(Path::to_path_buf) else {
             return;
         };
@@ -376,6 +483,42 @@ impl Panel {
         if let Some(index) = self.entries.iter().position(|e| e.path == left) {
             self.cursor = index;
         }
+    }
+
+    /// Where the panel is: the directory, or `archive/inner` while browsing an archive.
+    pub fn location(&self) -> PathBuf {
+        self.archive
+            .as_ref()
+            .map_or_else(|| self.cwd.clone(), ArchiveView::location)
+    }
+
+    /// Starts browsing the inside of `archive` (which lies in `cwd`).
+    pub fn open_archive(
+        &mut self,
+        archive: PathBuf,
+        listing: Arc<Listing>,
+        password: Option<String>,
+    ) {
+        self.archive = Some(ArchiveView {
+            archive,
+            listing,
+            inner: String::new(),
+            password,
+        });
+        self.cursor = 0;
+        self.selected.clear();
+        self.filter.clear();
+        self.reload();
+    }
+
+    fn set_inner(&mut self, inner: String) {
+        if let Some(view) = &mut self.archive {
+            view.inner = inner;
+        }
+        self.cursor = 0;
+        self.selected.clear();
+        self.filter.clear();
+        self.reload();
     }
 
     pub fn move_cursor(&mut self, delta: i32) {
@@ -791,6 +934,130 @@ mod tests {
         panel.set_sort(SortKey::Date, None);
         println!("list: {listed:?}, everything: {:?}", started.elapsed());
         assert_eq!(panel.entries.len(), 100_001);
+    }
+
+    /// A panel that has entered `box.zip` (containing `docs/a.txt`, `docs/sub/b.txt`,
+    /// `top.txt`), plus the temp dir it lives in.
+    fn in_archive() -> (tempfile::TempDir, Panel) {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(src.join("docs/sub")).unwrap();
+        std::fs::write(src.join("docs/a.txt"), "a").unwrap();
+        std::fs::write(src.join("docs/sub/b.txt"), "bb").unwrap();
+        std::fs::write(src.join("top.txt"), "t").unwrap();
+        let archive = tmp.path().join("box.zip");
+        let options = bluepane_archive::CreateOptions {
+            format: bluepane_archive::Format::Zip,
+            level: bluepane_archive::Level::Normal,
+            password: None,
+            split: None,
+        };
+        let sources = [src.join("docs"), src.join("top.txt")];
+        bluepane_archive::create(
+            &sources,
+            &archive,
+            &options,
+            &bluepane_ops::Progress::new(),
+            &mut bluepane_ops::FailOnConflict,
+        )
+        .unwrap();
+        let listing = bluepane_archive::list(&archive, &bluepane_ops::Progress::new()).unwrap();
+        let mut panel = Panel::new(tmp.path());
+        panel.open_archive(archive, Arc::new(listing), None);
+        (tmp, panel)
+    }
+
+    #[test]
+    fn an_archive_panel_shows_the_top_level_with_a_parent_row() {
+        let (tmp, panel) = in_archive();
+        assert_eq!(names(&panel), ["..", "docs", "top.txt"]);
+        assert_eq!(
+            panel.entries[0].path,
+            tmp.path(),
+            "leaving goes to the containing dir"
+        );
+        assert_eq!(panel.location(), tmp.path().join("box.zip"));
+        assert_eq!(panel.entries[2].size, 1);
+        assert!(panel.entries[1].is_dir());
+        // The real directory is untouched.
+        assert_eq!(panel.cwd, tmp.path());
+    }
+
+    #[test]
+    fn entering_directories_inside_an_archive_and_going_back_up() {
+        let (tmp, mut panel) = in_archive();
+        panel.enter_by_name("docs");
+        assert_eq!(names(&panel), ["..", "sub", "a.txt"]);
+        assert_eq!(panel.location(), tmp.path().join("box.zip/docs"));
+        panel.enter_by_name("sub");
+        assert_eq!(names(&panel), ["..", "b.txt"]);
+        panel.up();
+        assert_eq!(names(&panel), ["..", "sub", "a.txt"]);
+        assert_eq!(
+            panel.current().unwrap().name,
+            "sub",
+            "the cursor returns to where we were"
+        );
+        panel.enter_by_name("..");
+        assert_eq!(names(&panel), ["..", "docs", "top.txt"]);
+        assert_eq!(panel.current().unwrap().name, "docs");
+    }
+
+    #[test]
+    fn going_up_from_the_top_level_leaves_the_archive() {
+        let (tmp, mut panel) = in_archive();
+        panel.up();
+        assert!(panel.archive.is_none());
+        assert_eq!(
+            panel.current().unwrap().name,
+            "box.zip",
+            "the cursor lands on the archive"
+        );
+        assert!(names(&panel).contains(&"src"));
+        assert_eq!(panel.location(), tmp.path());
+    }
+
+    #[test]
+    fn changing_directory_or_history_leaves_the_archive() {
+        let (tmp, mut panel) = in_archive();
+        panel.change_dir(tmp.path().join("src"));
+        assert!(panel.archive.is_none());
+        let (_tmp2, mut panel2) = in_archive();
+        panel2.change_dir(_tmp2.path().join("src"));
+        panel2.back().unwrap();
+        assert!(panel2.archive.is_none());
+    }
+
+    #[test]
+    fn rows_in_an_archive_select_filter_and_sort_like_any_other() {
+        let (_tmp, mut panel) = in_archive();
+        panel.move_cursor(2);
+        panel.toggle_select();
+        assert_eq!(panel.selected.len(), 1);
+        panel.set_filter("doc");
+        assert_eq!(names(&panel), ["..", "docs"]);
+        panel.set_filter("");
+        panel.set_sort(SortKey::Size, Some(true));
+        assert_eq!(
+            names(&panel),
+            ["..", "docs", "top.txt"],
+            "directories stay first"
+        );
+    }
+
+    #[test]
+    fn the_inner_path_of_a_row_includes_the_directory_being_shown() {
+        let (_tmp, mut panel) = in_archive();
+        let view = panel.archive.clone().unwrap();
+        assert_eq!(
+            view.inner_path_of(&panel.entries[1]).as_deref(),
+            Some("docs")
+        );
+        assert_eq!(view.inner_path_of(&panel.entries[0]), None);
+        panel.enter_by_name("docs");
+        let view = panel.archive.clone().unwrap();
+        let a = panel.entries.iter().find(|e| e.name == "a.txt").unwrap();
+        assert_eq!(view.inner_path_of(a).as_deref(), Some("docs/a.txt"));
     }
 
     impl Panel {

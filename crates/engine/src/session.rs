@@ -3,12 +3,16 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
+use bluepane_archive::{Format, Level};
 use bluepane_ops::{self as ops, Conflict, Resolution};
 use bluepane_vfs::Volume;
 
-use crate::job::{Answer, Event, JobKind, JobSpec, Report, RunningJob};
+use crate::job::{
+    Answer, ArchiveJob, Event, JobKind, JobSpec, PackOptions, PasswordProblem, Report, RunningJob,
+};
 use crate::{
-    is_parent_entry, Command, EngineError, Keymap, Mask, Panel, TabAction, Viewer, ViewerAction,
+    is_parent_entry, name_parts, parse_size, Command, EngineError, Keymap, Mask, PackArgs, Panel,
+    TabAction, UnpackArgs, Viewer, ViewerAction,
 };
 
 /// What a name dialog is for.
@@ -20,6 +24,63 @@ pub enum InputKind {
     Rename(PathBuf),
     /// Text to search for in the open viewer.
     ViewerFind,
+    /// The password of an archive; the UI hides what is typed.
+    ArchivePassword,
+}
+
+/// The settings dialog of `pack` (Alt+F5). The UI edits the fields; `confirm` validates them.
+#[derive(Debug, Clone)]
+pub struct PackForm {
+    /// Archive name; the extension of the chosen format is added when missing.
+    pub name: String,
+    pub format: Format,
+    pub level: Level,
+    pub password: String,
+    pub password_again: String,
+    /// Volume size such as `100m`; empty for a single file.
+    pub split: String,
+    /// What is wrong with the settings, shown in the dialog.
+    pub error: Option<String>,
+    sources: Vec<PathBuf>,
+    dest: PathBuf,
+}
+
+impl PackForm {
+    /// Where the archive will be created.
+    pub fn destination(&self) -> &Path {
+        &self.dest
+    }
+
+    /// How many items will be packed.
+    pub fn item_count(&self) -> usize {
+        self.sources.len()
+    }
+
+    /// The archive file name that would be created.
+    pub fn output_name(&self) -> String {
+        output_name(&self.name, self.format)
+    }
+}
+
+/// The name without a known archive extension (`photos.zip` and `a.tar.gz` lose it).
+fn strip_archive_extension(name: &str) -> &str {
+    let lower = name.to_lowercase();
+    for ext in [".tar.gz", ".tgz", ".tar", ".zip"] {
+        if lower.ends_with(ext) {
+            return &name[..name.len() - ext.len()];
+        }
+    }
+    name
+}
+
+/// `photos` + ZIP becomes `photos.zip`; a name that already ends in a known archive
+/// extension has it replaced (`photos.tar` + ZIP becomes `photos.zip`).
+fn output_name(name: &str, format: Format) -> String {
+    let name = name.trim();
+    if Format::from_name(name) == Some(format) {
+        return name.to_string();
+    }
+    format!("{}.{}", strip_archive_extension(name), format.extension())
 }
 
 /// A file conflict the running job is waiting on.
@@ -52,6 +113,8 @@ pub enum Pending {
     Input { kind: InputKind, text: String },
     /// An existing file stands in the way of the running copy or move.
     Conflict(ConflictPrompt),
+    /// The settings of an archive about to be created.
+    Pack(PackForm),
 }
 
 /// What the progress bar shows about the running job.
@@ -154,6 +217,8 @@ pub struct Session {
     parked: [ParkedTabs; 2],
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
+    /// The archive job that needs a password; run again once the user types it.
+    retry: Option<JobSpec>,
 }
 
 /// Index of the volume that contains `cwd` (the one with the longest matching path).
@@ -181,6 +246,7 @@ impl Session {
             parked: [ParkedTabs::default(), ParkedTabs::default()],
             current: None,
             queue: VecDeque::new(),
+            retry: None,
         }
     }
 
@@ -234,6 +300,7 @@ impl Session {
         );
         if !answers && !matches!(self.pending, Some(Pending::Conflict(_))) {
             self.pending = None;
+            self.retry = None;
         }
         match command {
             Command::Confirm => self.confirm()?,
@@ -241,6 +308,9 @@ impl Session {
             Command::Resolve(resolution, for_all) => self.resolve(resolution, for_all)?,
             Command::StopJob => self.stop_jobs(),
             Command::Tab(action) => self.tab_action(action)?,
+            Command::Pack(args) => self.pack(args)?,
+            Command::Unpack(args) => self.unpack(&args)?,
+            Command::TestArchive(password) => self.test_archive(password)?,
             Command::View => self.open_viewer()?,
             Command::Edit => self.edit_file()?,
             Command::Viewer(action) => self.viewer_action(action)?,
@@ -251,7 +321,7 @@ impl Session {
                     panel.up();
                 }
             }
-            Command::Enter => self.active_panel_mut().enter(),
+            Command::Enter => self.enter_current(),
             Command::Cursor(delta) => self.active_panel_mut().move_cursor(delta),
             Command::ToggleSelect => self.active_panel_mut().toggle_select(),
             Command::Refresh => {
@@ -303,8 +373,12 @@ impl Session {
             }
             Command::Copy => self.transfer(false)?,
             Command::Move => self.transfer(true)?,
-            Command::Mkdir(Some(name)) => self.make_dir(&name)?,
+            Command::Mkdir(Some(name)) => {
+                self.deny_in_archive("tworzenie katalogu")?;
+                self.make_dir(&name)?
+            }
             Command::Mkdir(None) => {
+                self.deny_in_archive("tworzenie katalogu")?;
                 self.status = "Nazwa nowego katalogu (Enter = utwórz, Esc = anuluj)".into();
                 self.pending = Some(Pending::Input {
                     kind: InputKind::Mkdir,
@@ -374,6 +448,20 @@ impl Session {
 
     /// Copy or move the active panel's targets into the other panel's directory.
     fn transfer(&mut self, remove_source: bool) -> Result<(), EngineError> {
+        if self.panels[1 - self.active].archive.is_some() {
+            return Err(EngineError(
+                "nie można kopiować do wnętrza archiwum (użyj pack, aby spakować)".into(),
+            ));
+        }
+        if self.active_panel().archive.is_some() {
+            if remove_source {
+                return Err(EngineError(
+                    "archiwum jest tylko do odczytu: przenoszenie niedostępne (F5 rozpakowuje)"
+                        .into(),
+                ));
+            }
+            return self.extract_selection();
+        }
         let source = self.active_panel();
         let dest = self.panels[1 - self.active].cwd.clone();
         let targets = source.targets();
@@ -395,6 +483,7 @@ impl Session {
             kind,
             sources: targets,
             dest: Some(dest),
+            archive: None,
         });
         Ok(())
     }
@@ -420,6 +509,7 @@ impl Session {
 
     /// F8: ask first, then move to the trash.
     fn propose_delete(&mut self) -> Result<(), EngineError> {
+        self.deny_in_archive("usuwanie")?;
         let targets = self.active_panel().targets();
         if targets.is_empty() {
             return Err(EngineError("nic nie zaznaczono".into()));
@@ -447,12 +537,34 @@ impl Session {
                 kind: JobKind::Duplicate,
                 sources,
                 dest: None,
+                archive: None,
             }),
             Some(Pending::ConfirmDelete(sources)) => self.enqueue(JobSpec {
                 kind: JobKind::Delete,
                 sources,
                 dest: None,
+                archive: None,
             }),
+            Some(Pending::Input {
+                kind: InputKind::ArchivePassword,
+                text,
+            }) => {
+                if text.is_empty() {
+                    self.pending = Some(Pending::Input {
+                        kind: InputKind::ArchivePassword,
+                        text,
+                    });
+                    return Err(EngineError("podaj hasło".into()));
+                }
+                self.retry_with_password(text)?;
+            }
+            Some(Pending::Pack(mut form)) => {
+                if let Err(err) = self.start_pack(&form) {
+                    form.error = Some(err.0.clone());
+                    self.pending = Some(Pending::Pack(form));
+                    return Err(err);
+                }
+            }
             Some(Pending::Input { kind, text }) => {
                 let result = match &kind {
                     InputKind::Mkdir => self.make_dir(&text),
@@ -460,6 +572,7 @@ impl Session {
                     InputKind::ViewerFind => {
                         self.viewer_action(ViewerAction::Find(Some(text.clone())))
                     }
+                    InputKind::ArchivePassword => unreachable!("handled in the arm above"),
                 };
                 if let Err(err) = result {
                     // Keep the dialog open so the name can be corrected.
@@ -487,7 +600,19 @@ impl Session {
                 self.queue.clear();
                 self.status = "Anulowanie zadania…".into();
             }
-            Some(_) => self.status = "Anulowano".into(),
+            Some(other) => {
+                if matches!(
+                    other,
+                    Pending::Input {
+                        kind: InputKind::ArchivePassword,
+                        ..
+                    }
+                ) {
+                    self.retry = None;
+                    self.start_next();
+                }
+                self.status = "Anulowano".into();
+            }
             None => {}
         }
     }
@@ -601,45 +726,202 @@ impl Session {
             return;
         };
         job.join();
-        let (kind, total) = (job.spec.kind, job.spec.sources.len());
+        let spec = job.spec;
         self.pending = None;
         self.panels.iter_mut().for_each(Panel::reload);
 
-        let verb = kind.verb();
-        let mut text = match report.failed.first() {
-            Some(first) => format!("{verb}: {} z {total}, błąd: {first}", report.done),
-            None => format!("{verb}: {}", report.done),
+        if let Some(problem) = report.password {
+            self.ask_password(spec, problem);
+            return;
+        }
+
+        let (text, is_error) = if matches!(
+            spec.kind,
+            JobKind::OpenArchive | JobKind::Extract | JobKind::Pack | JobKind::VerifyArchive
+        ) {
+            self.archive_result(&spec, report)
+        } else {
+            let (verb, total) = (spec.kind.verb(), spec.sources.len());
+            let mut text = match report.failed.first() {
+                Some(first) => format!("{verb}: {} z {total}, błąd: {first}", report.done),
+                None => format!("{verb}: {}", report.done),
+            };
+            if report.skipped > 0 {
+                text.push_str(&format!(", pominięto: {}", report.skipped));
+            }
+            if report.cancelled {
+                text = format!("Anulowano. {text}");
+            }
+            (text, !report.failed.is_empty())
         };
-        if report.skipped > 0 {
-            text.push_str(&format!(", pominięto: {}", report.skipped));
-        }
-        if report.cancelled {
-            text = format!("Anulowano. {text}");
-        }
         self.status = text;
-        self.status_is_error = !report.failed.is_empty();
+        self.status_is_error = is_error;
 
         if let Some(next) = self.queue.pop_front() {
             let message = std::mem::take(&mut self.status);
-            let was_error = self.status_is_error;
             self.start(next);
-            // Keep the result of the finished job visible until the next one says something.
-            if was_error {
+            // Keep an error of the finished job visible until the next one says something.
+            if is_error {
                 self.status = message;
                 self.status_is_error = true;
             }
         }
     }
 
+    /// Starts the next queued job when nothing is running.
+    fn start_next(&mut self) {
+        if self.current.is_none() {
+            if let Some(next) = self.queue.pop_front() {
+                self.start(next);
+            }
+        }
+    }
+
+    /// An archive job needs a password: ask for it and run the job again with it.
+    fn ask_password(&mut self, spec: JobSpec, problem: PasswordProblem) {
+        self.retry = Some(spec);
+        self.pending = Some(Pending::Input {
+            kind: InputKind::ArchivePassword,
+            text: String::new(),
+        });
+        self.status_is_error = problem == PasswordProblem::Wrong;
+        self.status = match problem {
+            PasswordProblem::Needed => {
+                "Archiwum jest zaszyfrowane: podaj hasło (Enter = dalej, Esc = anuluj)".into()
+            }
+            PasswordProblem::Wrong => "Błędne hasło: spróbuj ponownie (Esc = anuluj)".into(),
+        };
+    }
+
+    fn retry_with_password(&mut self, password: String) -> Result<(), EngineError> {
+        let Some(mut spec) = self.retry.take() else {
+            return Err(EngineError("nie ma operacji do ponowienia".into()));
+        };
+        let archive_path = spec.sources.first().cloned();
+        if let Some(job) = spec.archive.as_mut() {
+            job.password = Some(password.clone());
+        }
+        // Remember it for the panels that show this archive, so the next F5 does not ask again.
+        for panel in &mut self.panels {
+            if let Some(view) = panel.archive.as_mut() {
+                if Some(&view.archive) == archive_path.as_ref() {
+                    view.password = Some(password.clone());
+                }
+            }
+        }
+        self.enqueue(spec);
+        Ok(())
+    }
+
+    /// The status line for a finished archive job (and, for "open", the panel switch).
+    fn archive_result(&mut self, spec: &JobSpec, report: &Report) -> (String, bool) {
+        let archive_name = spec
+            .sources
+            .first()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Some(first) = report.failed.first() {
+            return (format!("Błąd: {first}"), true);
+        }
+        if report.cancelled {
+            return ("Anulowano".into(), false);
+        }
+        match spec.kind {
+            JobKind::OpenArchive => {
+                let Some(listing) = report.listing.clone() else {
+                    return ("Nie udało się wczytać archiwum".into(), true);
+                };
+                let side = spec.archive.as_ref().map_or(0, |a| a.side);
+                let path = spec.sources.first().cloned().unwrap_or_default();
+                let still_there = self.panels[side].archive.is_none()
+                    && path.parent() == Some(self.panels[side].cwd.as_path());
+                let mut text = format!(
+                    "Archiwum {archive_name}: {} elementów",
+                    listing.entries.len()
+                );
+                if listing.volumes > 1 {
+                    text.push_str(&format!(", części: {}", listing.volumes));
+                }
+                if listing.has_encrypted() {
+                    text.push_str(", zaszyfrowane (hasło przy rozpakowaniu)");
+                }
+                if listing.unsafe_skipped > 0 {
+                    text.push_str(&format!(
+                        ", pominięto niebezpieczne nazwy: {}",
+                        listing.unsafe_skipped
+                    ));
+                }
+                if still_there {
+                    self.panels[side].open_archive(path, listing, None);
+                } else {
+                    text.push_str(" (panel zmienił katalog: nie otwieram)");
+                }
+                (text, false)
+            }
+            JobKind::Extract => {
+                let mut text = format!("Rozpakowano: {}", report.files);
+                if report.skipped > 0 {
+                    text.push_str(&format!(", pominięto: {}", report.skipped));
+                }
+                if report.left_out > 0 {
+                    text.push_str(&format!(", pominięto dowiązania: {}", report.left_out));
+                }
+                (text, false)
+            }
+            JobKind::Pack => {
+                if report.skipped > 0 && report.created.is_empty() {
+                    return ("Archiwum już istnieje: pominięto".into(), false);
+                }
+                let name = report
+                    .created
+                    .first()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let mut text = format!("Spakowano: {} plików do {name}", report.files);
+                if report.created.len() > 1 {
+                    text.push_str(&format!(" ({} części)", report.created.len()));
+                }
+                if report.left_out > 0 {
+                    text.push_str(&format!(", pominięto dowiązania: {}", report.left_out));
+                }
+                (text, false)
+            }
+            JobKind::VerifyArchive => match &report.verify {
+                Some(check) if check.damaged.is_empty() => (
+                    format!(
+                        "Archiwum {archive_name} jest w porządku: {} plików, {}",
+                        check.files,
+                        crate::human_size(check.bytes)
+                    ),
+                    false,
+                ),
+                Some(check) => (
+                    format!(
+                        "Uszkodzone w {archive_name}: {} ({})",
+                        check.damaged.len(),
+                        check.damaged[0]
+                    ),
+                    true,
+                ),
+                None => ("Nie sprawdzono archiwum".into(), true),
+            },
+            _ => (String::new(), false),
+        }
+    }
+
     /// Blocks until every job has finished. Returns false when it stopped because a
-    /// conflict needs an answer (answer it, then call this again). For scripts and tests.
+    /// question needs an answer first (a conflict, a password): answer it, then call this
+    /// again. For scripts and tests.
     pub fn wait_idle(&mut self) -> bool {
         loop {
             self.poll();
             if !self.is_busy() {
                 return true;
             }
-            if matches!(self.pending, Some(Pending::Conflict(_))) {
+            // Jobs are waiting but none is running: they are held back by a question.
+            if matches!(self.pending, Some(Pending::Conflict(_))) || self.current.is_none() {
                 return false;
             }
             std::thread::sleep(Duration::from_millis(1));
@@ -649,8 +931,8 @@ impl Session {
     /// The tab row of one side, for drawing.
     pub fn tab_strip(&self, side: usize) -> TabStrip {
         let parked = &self.parked[side];
-        let mut paths: Vec<PathBuf> = parked.others.iter().map(|p| p.cwd.clone()).collect();
-        paths.insert(parked.position, self.panels[side].cwd.clone());
+        let mut paths: Vec<PathBuf> = parked.others.iter().map(Panel::location).collect();
+        paths.insert(parked.position, self.panels[side].location());
         TabStrip {
             titles: paths.iter().map(|p| tab_title(p)).collect(),
             paths,
@@ -766,6 +1048,7 @@ impl Session {
 
     /// F3: opens the built-in viewer on the file under the cursor.
     fn open_viewer(&mut self) -> Result<(), EngineError> {
+        self.deny_in_archive("podgląd")?;
         let path = self.entry_to_open()?;
         let viewer = Viewer::open(&path)?;
         self.status = format!(
@@ -780,6 +1063,7 @@ impl Session {
 
     /// F4: opens the file in `BLUEPANE_EDITOR`, or the system's default application.
     fn edit_file(&mut self) -> Result<(), EngineError> {
+        self.deny_in_archive("edycja")?;
         let path = self.entry_to_open()?;
         let editor = std::env::var("BLUEPANE_EDITOR").ok();
         bluepane_vfs::open_external(&path, editor.as_deref())
@@ -826,6 +1110,271 @@ impl Session {
         Ok(())
     }
 
+    /// Refuses write operations while the active panel shows the inside of an archive.
+    fn deny_in_archive(&self, what: &str) -> Result<(), EngineError> {
+        if self.active_panel().archive.is_some() {
+            return Err(EngineError(format!(
+                "{what} nie jest dostępne w archiwum (tylko do odczytu): rozpakuj je (F5 lub unpack)"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Enter: opens an archive file in the panel, or enters the directory under the cursor.
+    fn enter_current(&mut self) {
+        let panel = self.active_panel();
+        if panel.archive.is_none() {
+            let archive = panel
+                .current()
+                .filter(|e| !e.is_dir() && !is_parent_entry(e))
+                .filter(|e| bluepane_archive::detect(&e.path).is_some())
+                .map(|e| e.path.clone());
+            if let Some(path) = archive {
+                let side = self.active;
+                self.enqueue(JobSpec {
+                    kind: JobKind::OpenArchive,
+                    sources: vec![path],
+                    dest: None,
+                    archive: Some(ArchiveJob {
+                        side,
+                        ..ArchiveJob::default()
+                    }),
+                });
+                return;
+            }
+        }
+        self.active_panel_mut().enter();
+    }
+
+    /// The archive an archive command acts on, with what is known about it: the one being
+    /// browsed, or the archive file under the cursor.
+    #[allow(clippy::type_complexity)]
+    fn archive_target(
+        &self,
+    ) -> Result<
+        (
+            PathBuf,
+            Option<std::sync::Arc<bluepane_archive::Listing>>,
+            Option<String>,
+        ),
+        EngineError,
+    > {
+        let panel = self.active_panel();
+        if let Some(view) = &panel.archive {
+            return Ok((
+                view.archive.clone(),
+                Some(view.listing.clone()),
+                view.password.clone(),
+            ));
+        }
+        panel
+            .current()
+            .filter(|e| !e.is_dir() && !is_parent_entry(e))
+            .filter(|e| bluepane_archive::detect(&e.path).is_some())
+            .map(|e| (e.path.clone(), None, None))
+            .ok_or_else(|| EngineError("kursor nie wskazuje archiwum (zip, tar, tar.gz)".into()))
+    }
+
+    /// The other panel's directory, as the place to extract or pack into.
+    fn other_directory(&self) -> Result<PathBuf, EngineError> {
+        let other = &self.panels[1 - self.active];
+        if other.archive.is_some() {
+            return Err(EngineError(
+                "drugi panel pokazuje wnętrze archiwum: wybierz w nim zwykły katalog".into(),
+            ));
+        }
+        Ok(other.cwd.clone())
+    }
+
+    /// F5 inside an archive: extract the selection into the other panel's directory.
+    fn extract_selection(&mut self) -> Result<(), EngineError> {
+        let dest = self.other_directory()?;
+        let panel = self.active_panel();
+        let Some(view) = panel.archive.clone() else {
+            return Err(EngineError("to nie jest archiwum".into()));
+        };
+        let entries: Vec<String> = panel
+            .target_entries()
+            .into_iter()
+            .filter_map(|e| view.inner_path_of(e))
+            .collect();
+        if entries.is_empty() {
+            return Err(EngineError("nic nie zaznaczono".into()));
+        }
+        self.enqueue(JobSpec {
+            kind: JobKind::Extract,
+            sources: vec![view.archive.clone()],
+            dest: Some(dest),
+            archive: Some(ArchiveJob {
+                entries,
+                strip: view.inner.clone(),
+                password: view.password.clone(),
+                listing: Some(view.listing.clone()),
+                ..ArchiveJob::default()
+            }),
+        });
+        Ok(())
+    }
+
+    /// `unpack`: the whole archive into the other panel's directory.
+    fn unpack(&mut self, args: &UnpackArgs) -> Result<(), EngineError> {
+        let (archive, listing, known_password) = self.archive_target()?;
+        let base = self.other_directory()?;
+        let dest = if args.subfolder {
+            let name = archive
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let stem = strip_archive_extension(name.strip_suffix(".001").unwrap_or(&name));
+            base.join(if stem.is_empty() { "archiwum" } else { stem })
+        } else {
+            base
+        };
+        self.enqueue(JobSpec {
+            kind: JobKind::Extract,
+            sources: vec![archive],
+            dest: Some(dest),
+            archive: Some(ArchiveJob {
+                password: args.password.clone().or(known_password),
+                listing,
+                ..ArchiveJob::default()
+            }),
+        });
+        Ok(())
+    }
+
+    /// `testarchive`: read the whole archive and report damaged files.
+    fn test_archive(&mut self, password: Option<String>) -> Result<(), EngineError> {
+        let (archive, _listing, known_password) = self.archive_target()?;
+        self.enqueue(JobSpec {
+            kind: JobKind::VerifyArchive,
+            sources: vec![archive],
+            dest: None,
+            archive: Some(ArchiveJob {
+                password: password.or(known_password),
+                ..ArchiveJob::default()
+            }),
+        });
+        Ok(())
+    }
+
+    /// `pack`: without arguments open the settings dialog, with arguments start right away.
+    fn pack(&mut self, args: Option<PackArgs>) -> Result<(), EngineError> {
+        self.deny_in_archive("pakowanie")?;
+        let dest = self.other_directory()?;
+        let sources = self.active_panel().targets();
+        if sources.is_empty() {
+            return Err(EngineError("nic nie zaznaczono".into()));
+        }
+        let mut form = PackForm {
+            name: self.default_archive_name(&sources),
+            format: Format::Zip,
+            level: Level::Normal,
+            password: String::new(),
+            password_again: String::new(),
+            split: String::new(),
+            error: None,
+            sources,
+            dest,
+        };
+        match args {
+            None => {
+                self.status = "Pakowanie: ustaw opcje (Enter = pakuj, Esc = anuluj)".into();
+                self.pending = Some(Pending::Pack(form));
+                Ok(())
+            }
+            Some(args) => {
+                if !args.name.is_empty() {
+                    form.name = args.name;
+                }
+                form.format = args
+                    .format
+                    .or_else(|| Format::from_name(&form.name))
+                    .unwrap_or(Format::Zip);
+                if let Some(level) = args.level {
+                    form.level = level;
+                }
+                if let Some(password) = args.password {
+                    form.password_again = password.clone();
+                    form.password = password;
+                }
+                if let Some(split) = args.split {
+                    form.split = split.to_string();
+                }
+                self.start_pack(&form)
+            }
+        }
+    }
+
+    /// The suggested archive name: the single item's name (without extension for a file),
+    /// or the current directory's name for several items.
+    fn default_archive_name(&self, sources: &[PathBuf]) -> String {
+        let panel = self.active_panel();
+        let name_of = |path: &Path| {
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        };
+        let base = match sources {
+            [only] => {
+                let is_dir = panel
+                    .entries
+                    .iter()
+                    .find(|e| &e.path == only)
+                    .is_some_and(|e| e.is_dir());
+                name_parts(&name_of(only), is_dir).0.to_string()
+            }
+            _ => name_of(&panel.cwd),
+        };
+        if base.is_empty() {
+            "archiwum".into()
+        } else {
+            base
+        }
+    }
+
+    /// Checks the pack settings and starts the job.
+    fn start_pack(&mut self, form: &PackForm) -> Result<(), EngineError> {
+        let name = form.name.trim();
+        if name.is_empty() {
+            return Err(EngineError("podaj nazwę archiwum".into()));
+        }
+        if name.contains(['/', '\\', '\0']) {
+            return Err(EngineError(
+                "nazwa archiwum nie może zawierać ukośników (wskazuje je drugi panel)".into(),
+            ));
+        }
+        if form.password != form.password_again {
+            return Err(EngineError("hasła się różnią".into()));
+        }
+        if !form.password.is_empty() && !form.format.supports_password() {
+            return Err(EngineError(
+                "TAR nie obsługuje haseł: wybierz ZIP albo usuń hasło".into(),
+            ));
+        }
+        let split = if form.split.trim().is_empty() {
+            None
+        } else {
+            Some(parse_size(&form.split)?)
+        };
+        self.enqueue(JobSpec {
+            kind: JobKind::Pack,
+            sources: form.sources.clone(),
+            dest: Some(form.dest.clone()),
+            archive: Some(ArchiveJob {
+                password: (!form.password.is_empty()).then(|| form.password.clone()),
+                pack: Some(PackOptions {
+                    format: form.format,
+                    level: form.level,
+                    split,
+                    output_name: output_name(name, form.format),
+                }),
+                ..ArchiveJob::default()
+            }),
+        });
+        Ok(())
+    }
+
     fn make_dir(&mut self, name: &str) -> Result<(), EngineError> {
         let cwd = self.active_panel().cwd.clone();
         let created = ops::mkdir(&cwd, name).map_err(|e| EngineError(e.to_string()))?;
@@ -837,6 +1386,7 @@ impl Session {
 
     /// The entry a rename acts on: the one under the cursor, never `..`.
     fn entry_to_rename(&self) -> Result<PathBuf, EngineError> {
+        self.deny_in_archive("zmiana nazwy")?;
         self.active_panel()
             .current()
             .filter(|e| !is_parent_entry(e))
@@ -1648,5 +2198,693 @@ mod tests {
         let beyond = Path::new(root).join("..").join("..");
         assert_eq!(normalize_path(&beyond), Path::new(root));
         assert_eq!(normalize_path(Path::new("a/b/../../..")), Path::new(""));
+    }
+
+    // ---- archives -------------------------------------------------------------------
+
+    fn make_archive(
+        sources: &[PathBuf],
+        out: &Path,
+        format: bluepane_archive::Format,
+        password: Option<&str>,
+    ) {
+        let options = bluepane_archive::CreateOptions {
+            format,
+            level: bluepane_archive::Level::Normal,
+            password: password.map(str::to_string),
+            split: None,
+        };
+        bluepane_archive::create(
+            sources,
+            out,
+            &options,
+            &bluepane_ops::Progress::new(),
+            &mut bluepane_ops::FailOnConflict,
+        )
+        .unwrap();
+    }
+
+    /// `left/box.zip` (docs/a.txt, docs/sub/b.txt, top.txt) and `left/locked.zip` (the same,
+    /// password "pw"); `right` is empty. The active panel is the left one.
+    fn with_archives() -> (tempfile::TempDir, Session) {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir_all(src.join("docs/sub")).unwrap();
+        std::fs::write(src.join("docs/a.txt"), "alpha").unwrap();
+        std::fs::write(src.join("docs/sub/b.txt"), "bravo").unwrap();
+        std::fs::write(src.join("top.txt"), "top").unwrap();
+        let left = tmp.path().join("left");
+        let right = tmp.path().join("right");
+        std::fs::create_dir_all(&left).unwrap();
+        std::fs::create_dir_all(&right).unwrap();
+        let sources = [src.join("docs"), src.join("top.txt")];
+        make_archive(
+            &sources,
+            &left.join("box.zip"),
+            bluepane_archive::Format::Zip,
+            None,
+        );
+        make_archive(
+            &sources,
+            &left.join("locked.zip"),
+            bluepane_archive::Format::Zip,
+            Some("pw"),
+        );
+        let s = Session::new(left, right);
+        (tmp, s)
+    }
+
+    fn enter_archive(s: &mut Session, name: &str) {
+        s.run_line(&format!("select {name}")).unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.panels[s.active].archive.is_some(), "{}", s.status);
+    }
+
+    fn rows(s: &Session) -> Vec<String> {
+        s.active_panel()
+            .entries
+            .iter()
+            .map(|e| e.name.clone())
+            .collect()
+    }
+
+    #[test]
+    fn enter_on_an_archive_opens_it_in_the_panel() {
+        let (tmp, mut s) = with_archives();
+        s.run_line("select box.zip").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("Archiwum box.zip"), "{}", s.status);
+        assert!(!s.status_is_error);
+        assert_eq!(rows(&s), ["..", "docs", "top.txt"]);
+        assert_eq!(s.active_panel().location(), tmp.path().join("left/box.zip"));
+        assert_eq!(s.tab_strip(0).titles, ["box.zip"]);
+
+        s.run_line("select docs").unwrap();
+        s.run_line("enter").unwrap();
+        assert_eq!(rows(&s), ["..", "sub", "a.txt"]);
+        s.run_line("up").unwrap();
+        s.run_line("up").unwrap();
+        assert!(
+            s.active_panel().archive.is_none(),
+            "up from the top level leaves"
+        );
+        assert_eq!(s.active_panel().current().unwrap().name, "box.zip");
+    }
+
+    #[test]
+    fn enter_on_a_plain_file_does_nothing_and_on_a_directory_enters_it() {
+        let (tmp, mut s) = with_archives();
+        std::fs::write(tmp.path().join("left/plain.txt"), "x").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select plain.txt").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.active_panel().archive.is_none());
+        std::fs::create_dir(tmp.path().join("left/d")).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select d").unwrap();
+        s.run_line("enter").unwrap();
+        assert_eq!(s.active_panel().cwd, tmp.path().join("left/d"));
+    }
+
+    #[test]
+    fn a_broken_archive_reports_an_error_and_the_panel_stays_put() {
+        let (tmp, mut s) = with_archives();
+        std::fs::write(tmp.path().join("left/bad.zip"), "not a zip").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select bad.zip").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status_is_error, "{}", s.status);
+        assert!(s.status.contains("bad.zip"));
+        assert!(s.active_panel().archive.is_none());
+    }
+
+    #[test]
+    fn f5_in_an_archive_extracts_the_selection_into_the_other_panel() {
+        let (tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select docs").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("Rozpakowano: 2"), "{}", s.status);
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/docs/a.txt")).unwrap(),
+            "alpha"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/docs/sub/b.txt")).unwrap(),
+            "bravo"
+        );
+        assert!(!tmp.path().join("right/top.txt").exists());
+        assert!(
+            s.panels[1].entries.iter().any(|e| e.name == "docs"),
+            "the other panel refreshed"
+        );
+        assert!(
+            s.active_panel().archive.is_some(),
+            "still browsing the archive"
+        );
+    }
+
+    #[test]
+    fn extracting_from_a_subdirectory_drops_the_directory_prefix() {
+        let (tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select docs").unwrap();
+        s.run_line("enter").unwrap();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/a.txt")).unwrap(),
+            "alpha"
+        );
+        assert!(!tmp.path().join("right/docs").exists());
+    }
+
+    #[test]
+    fn extraction_asks_before_replacing_files() {
+        let (tmp, mut s) = with_archives();
+        std::fs::write(tmp.path().join("right/top.txt"), "mine").unwrap();
+        s.run_line("refresh").unwrap();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select top.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(!s.wait_idle(), "must stop at the conflict");
+        assert!(matches!(s.pending, Some(Pending::Conflict(_))));
+        s.run_line("keepboth").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/top.txt")).unwrap(),
+            "mine"
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/top (kopia).txt")).unwrap(),
+            "top"
+        );
+    }
+
+    #[test]
+    fn an_archive_is_read_only() {
+        let (_tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("select top.txt").unwrap();
+        for command in [
+            "delete",
+            "move",
+            "mkdir",
+            "mkdir newdir",
+            "rename x",
+            "rename",
+            "edit",
+            "view",
+            "pack",
+        ] {
+            let err = s.run_line(command).unwrap_err();
+            assert!(!err.0.is_empty(), "{command}");
+            assert!(s.pending.is_none(), "{command} must not open a dialog");
+        }
+        let err = s.run_line("move").unwrap_err();
+        assert!(err.0.contains("tylko do odczytu"), "{err}");
+    }
+
+    #[test]
+    fn copying_into_an_archive_is_refused() {
+        let (_tmp, mut s) = with_archives();
+        std::fs::write(_tmp.path().join("left/plain.txt"), "x").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line(&format!("cd {}", _tmp.path().join("left").display()))
+            .unwrap();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("switch").unwrap();
+        s.run_line(&format!("cd {}", _tmp.path().join("left").display()))
+            .unwrap();
+        s.run_line("select plain.txt").unwrap();
+        let err = s.run_line("copy").unwrap_err();
+        assert!(err.0.contains("pack"), "{err}");
+        assert!(s.run_line("move").is_err());
+    }
+
+    #[test]
+    fn unpack_extracts_the_archive_under_the_cursor_or_the_open_one() {
+        let (tmp, mut s) = with_archives();
+        s.run_line("select box.zip").unwrap();
+        s.run_line("unpack").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("right/docs/sub/b.txt").exists());
+        assert!(tmp.path().join("right/top.txt").exists());
+
+        s.run_line("unpack -s").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            tmp.path().join("right/box/docs/a.txt").exists(),
+            "extracted into a subfolder"
+        );
+
+        // From inside the archive too.
+        enter_archive(&mut s, "box.zip");
+        std::fs::remove_dir_all(tmp.path().join("right")).unwrap();
+        std::fs::create_dir(tmp.path().join("right")).unwrap();
+        s.run_line("unpack").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("right/top.txt").exists());
+    }
+
+    #[test]
+    fn unpack_needs_an_archive() {
+        let (tmp, mut s) = with_archives();
+        std::fs::write(tmp.path().join("left/plain.txt"), "x").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select plain.txt").unwrap();
+        let err = s.run_line("unpack").unwrap_err();
+        assert!(err.0.contains("archiwum"), "{err}");
+        assert!(s.run_line("testarchive").is_err());
+    }
+
+    #[test]
+    fn a_missing_password_is_asked_for_and_the_job_continues() {
+        let (tmp, mut s) = with_archives();
+        enter_archive(&mut s, "locked.zip");
+        assert!(s.status.contains("zaszyfrowane"), "{}", s.status);
+        s.run_line("select top.txt").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            matches!(
+                s.pending,
+                Some(Pending::Input {
+                    kind: InputKind::ArchivePassword,
+                    ..
+                })
+            ),
+            "{:?}",
+            s.pending
+        );
+        assert!(s.status.contains("hasło"));
+        assert!(!tmp.path().join("right/top.txt").exists());
+
+        // An empty answer keeps the dialog open.
+        assert!(s.run_line("confirm").is_err());
+        type_into_dialog(&mut s, "wrong");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("Błędne hasło"), "{}", s.status);
+        assert!(s.status_is_error);
+        assert!(
+            matches!(s.pending, Some(Pending::Input { .. })),
+            "asks again"
+        );
+
+        type_into_dialog(&mut s, "pw");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/top.txt")).unwrap(),
+            "top"
+        );
+        assert!(!s.status_is_error, "{}", s.status);
+
+        // The password is remembered for this archive: no second prompt.
+        s.run_line("select docs").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.pending.is_none());
+        assert!(tmp.path().join("right/docs/a.txt").exists());
+    }
+
+    #[test]
+    fn cancelling_the_password_dialog_extracts_nothing() {
+        let (tmp, mut s) = with_archives();
+        s.run_line("select locked.zip").unwrap();
+        s.run_line("unpack").unwrap();
+        assert!(s.wait_idle());
+        assert!(matches!(s.pending, Some(Pending::Input { .. })));
+        s.run_line("cancel").unwrap();
+        assert!(s.pending.is_none());
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_dir(tmp.path().join("right")).unwrap().count(),
+            0
+        );
+        assert!(s.run_line("confirm").is_err(), "nothing left to retry");
+    }
+
+    #[test]
+    fn a_password_on_the_command_line_skips_the_dialog() {
+        let (tmp, mut s) = with_archives();
+        s.run_line("select locked.zip").unwrap();
+        s.run_line("unpack -ppw").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.pending.is_none());
+        assert!(tmp.path().join("right/docs/sub/b.txt").exists());
+    }
+
+    #[test]
+    fn a_queued_job_waits_while_the_password_is_asked() {
+        let (tmp, mut s) = with_archives();
+        s.run_line("select locked.zip").unwrap();
+        s.run_line("unpack").unwrap();
+        s.run_line("select box.zip").unwrap();
+        s.run_line("unpack -s").unwrap(); // queued behind the first job
+        assert!(!s.wait_idle(), "held back by the password question");
+        assert!(matches!(s.pending, Some(Pending::Input { .. })));
+        assert!(
+            !tmp.path().join("right/box").exists(),
+            "held back until the question is answered"
+        );
+        type_into_dialog(&mut s, "pw");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("right/top.txt").exists());
+        assert!(tmp.path().join("right/box/top.txt").exists());
+    }
+
+    #[test]
+    fn cancelling_the_password_dialog_releases_the_queue() {
+        let (tmp, mut s) = with_archives();
+        s.run_line("select locked.zip").unwrap();
+        s.run_line("unpack").unwrap();
+        s.run_line("select box.zip").unwrap();
+        s.run_line("unpack -s").unwrap();
+        assert!(!s.wait_idle(), "held back by the password question");
+        s.run_line("cancel").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("right/box/top.txt").exists());
+        assert!(!tmp.path().join("right/top.txt").exists());
+    }
+
+    fn pack_form(s: &mut Session) -> &mut PackForm {
+        match &mut s.pending {
+            Some(Pending::Pack(form)) => form,
+            other => panic!("no pack dialog: {other:?}"),
+        }
+    }
+
+    fn list_names(path: &Path) -> Vec<String> {
+        let listing = bluepane_archive::list(path, &bluepane_ops::Progress::new()).unwrap();
+        listing.entries.iter().map(|e| e.path.clone()).collect()
+    }
+
+    #[test]
+    fn pack_with_a_name_creates_the_archive_in_the_other_panel() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("selmask *.txt").unwrap();
+        s.run_line("pack both.zip").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("Spakowano: 2"), "{}", s.status);
+        assert_eq!(
+            list_names(&tmp.path().join("right/both.zip")),
+            ["a.txt", "b.txt"]
+        );
+        assert!(tmp.path().join("left/a.txt").exists(), "the originals stay");
+        assert!(s.panels[1].entries.iter().any(|e| e.name == "both.zip"));
+    }
+
+    #[test]
+    fn pack_defaults_the_name_and_adds_the_extension_of_the_format() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack -ttgz").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            tmp.path().join("right/a.tar.gz").exists(),
+            "named after the single file"
+        );
+        s.run_line("select b.txt").unwrap();
+        s.run_line("pack bundle -ttar").unwrap();
+        assert!(s.wait_idle());
+        assert!(tmp.path().join("right/bundle.tar").exists());
+        // The format follows the extension of the name when no -t is given.
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack named.tgz").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(list_names(&tmp.path().join("right/named.tgz")), ["a.txt"]);
+    }
+
+    #[test]
+    fn output_names_get_the_right_extension() {
+        assert_eq!(output_name("photos", Format::Zip), "photos.zip");
+        assert_eq!(output_name("photos.zip", Format::Zip), "photos.zip");
+        assert_eq!(output_name("Photos.ZIP", Format::Zip), "Photos.ZIP");
+        assert_eq!(output_name("photos.tar", Format::Zip), "photos.zip");
+        assert_eq!(output_name("photos.zip", Format::TarGz), "photos.tar.gz");
+        assert_eq!(output_name("a.b.c", Format::Tar), "a.b.c.tar");
+        assert_eq!(output_name(" x ", Format::Tar), "x.tar");
+        assert_eq!(output_name("data.tgz", Format::TarGz), "data.tgz");
+    }
+
+    #[test]
+    fn pack_dialog_is_prefilled_and_validated_before_starting() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack").unwrap();
+        let form = pack_form(&mut s);
+        assert_eq!(form.name, "a");
+        assert_eq!(form.format, Format::Zip);
+        assert_eq!(form.output_name(), "a.zip");
+        assert_eq!(form.destination(), tmp.path().join("right"));
+        assert_eq!(form.item_count(), 1);
+
+        form.password = "one".into();
+        form.password_again = "two".into();
+        assert!(s.run_line("confirm").unwrap_err().0.contains("różnią"));
+        assert!(pack_form(&mut s)
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("różnią"));
+        let form = pack_form(&mut s);
+        form.password_again = "one".into();
+        form.format = Format::Tar;
+        assert!(s.run_line("confirm").unwrap_err().0.contains("TAR"));
+        let form = pack_form(&mut s);
+        form.format = Format::Zip;
+        form.split = "lots".into();
+        assert!(s.run_line("confirm").is_err());
+        let form = pack_form(&mut s);
+        form.split = String::new();
+        form.name = String::new();
+        assert!(s.run_line("confirm").unwrap_err().0.contains("nazwę"));
+        let form = pack_form(&mut s);
+        form.name = "bad/name".into();
+        assert!(s.run_line("confirm").is_err());
+        assert!(
+            !tmp.path().join("right/a.zip").exists(),
+            "nothing started yet"
+        );
+
+        let form = pack_form(&mut s);
+        form.name = "secret".into();
+        s.run_line("confirm").unwrap();
+        assert!(s.pending.is_none());
+        assert!(s.wait_idle());
+        let archive = tmp.path().join("right/secret.zip");
+        assert!(
+            bluepane_archive::list(&archive, &bluepane_ops::Progress::new())
+                .unwrap()
+                .has_encrypted()
+        );
+    }
+
+    #[test]
+    fn cancelling_the_pack_dialog_creates_nothing() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack").unwrap();
+        s.run_line("cancel").unwrap();
+        assert!(s.pending.is_none());
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_dir(tmp.path().join("right")).unwrap().count(),
+            0
+        );
+    }
+
+    #[test]
+    fn a_packed_password_zip_round_trips_through_unpack() {
+        let (tmp, mut s) = two_dirs();
+        s.run_line("selmask *").unwrap();
+        s.run_line("pack sealed.zip -psekret -mx=9").unwrap();
+        assert!(s.wait_idle());
+        s.run_line("switch").unwrap();
+        s.run_line("select sealed.zip").unwrap();
+        s.run_line("unpack -s -psekret").unwrap();
+        // The panels swapped roles: extract into the (now other) left panel's directory.
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("left/sealed/a.txt")).unwrap(),
+            "a"
+        );
+    }
+
+    #[test]
+    fn pack_splits_into_volumes_that_open_from_the_first() {
+        let (tmp, mut s) = two_dirs();
+        let big: Vec<u8> = (0..60_000u32).map(|i| (i % 251) as u8).collect();
+        std::fs::write(tmp.path().join("left/big.bin"), &big).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select big.bin").unwrap();
+        s.run_line("pack parts.zip -v20k -mx0").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("części"), "{}", s.status);
+        assert!(tmp.path().join("right/parts.zip.001").exists());
+        assert!(tmp.path().join("right/parts.zip.003").exists());
+        assert!(!tmp.path().join("right/parts.zip").exists());
+
+        s.run_line("switch").unwrap();
+        s.run_line("select parts.zip.001").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(s.active_panel().entries[1].name, "big.bin");
+        assert_eq!(s.active_panel().entries[1].size, 60_000);
+    }
+
+    #[test]
+    fn an_existing_archive_name_triggers_the_conflict_dialog() {
+        let (tmp, mut s) = two_dirs();
+        std::fs::write(tmp.path().join("right/x.zip"), "precious").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack x.zip").unwrap();
+        assert!(!s.wait_idle());
+        assert!(matches!(s.pending, Some(Pending::Conflict(_))));
+        s.run_line("keepboth").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/x.zip")).unwrap(),
+            "precious"
+        );
+        assert!(tmp.path().join("right/x (kopia).zip").exists());
+
+        s.run_line("pack x.zip").unwrap();
+        assert!(!s.wait_idle());
+        s.run_line("skip").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("już istnieje"), "{}", s.status);
+    }
+
+    #[test]
+    fn pack_needs_a_selection_and_a_plain_directory_on_the_other_side() {
+        let (_tmp, mut s) = two_dirs();
+        assert!(s.run_line("pack x.zip").is_err(), "cursor is on ..");
+        s.run_line("select a.txt").unwrap();
+        // Make the other panel show an archive.
+        std::fs::write(_tmp.path().join("right/in.zip"), "x").unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line("refresh").unwrap();
+        let make = |s: &mut Session| {
+            let src = _tmp.path().join("left/b.txt");
+            make_archive(
+                &[src],
+                &_tmp.path().join("right/real.zip"),
+                bluepane_archive::Format::Zip,
+                None,
+            );
+            s.run_line("refresh").unwrap();
+        };
+        make(&mut s);
+        s.run_line("select real.zip").unwrap();
+        s.run_line("enter").unwrap();
+        assert!(s.wait_idle());
+        s.run_line("switch").unwrap();
+        s.run_line("select a.txt").unwrap();
+        let err = s.run_line("pack x.zip").unwrap_err();
+        assert!(err.0.contains("archiwum"), "{err}");
+    }
+
+    #[test]
+    fn testarchive_reports_intact_damaged_and_password_protected_archives() {
+        let (tmp, mut s) = with_archives();
+        s.run_line("select box.zip").unwrap();
+        s.run_line("testarchive").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("w porządku"), "{}", s.status);
+        assert!(!s.status_is_error);
+
+        s.run_line("select locked.zip").unwrap();
+        s.run_line("testarchive").unwrap();
+        assert!(s.wait_idle());
+        assert!(
+            matches!(s.pending, Some(Pending::Input { .. })),
+            "asks for the password"
+        );
+        type_into_dialog(&mut s, "pw");
+        s.run_line("confirm").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status.contains("w porządku"), "{}", s.status);
+
+        // Damage a stored archive (data that does not also appear in a file name).
+        let src = tmp.path().join("src/zeta.txt");
+        std::fs::write(&src, "UNIQUEDATA").unwrap();
+        let options = bluepane_archive::CreateOptions {
+            format: bluepane_archive::Format::Zip,
+            level: bluepane_archive::Level::Store,
+            password: None,
+            split: None,
+        };
+        bluepane_archive::create(
+            &[src],
+            &tmp.path().join("left/dam.zip"),
+            &options,
+            &bluepane_ops::Progress::new(),
+            &mut bluepane_ops::FailOnConflict,
+        )
+        .unwrap();
+        let path = tmp.path().join("left/dam.zip");
+        let mut bytes = std::fs::read(&path).unwrap();
+        let at = bytes.windows(10).position(|w| w == b"UNIQUEDATA").unwrap();
+        bytes[at] ^= 0xff;
+        std::fs::write(&path, bytes).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select dam.zip").unwrap();
+        s.run_line("testarchive").unwrap();
+        assert!(s.wait_idle());
+        assert!(s.status_is_error, "{}", s.status);
+        assert!(s.status.contains("Uszkodzone"), "{}", s.status);
+    }
+
+    #[test]
+    fn tar_archives_browse_and_extract_too() {
+        let (tmp, mut s) = with_archives();
+        let src = tmp.path().join("src");
+        make_archive(
+            &[src.join("docs")],
+            &tmp.path().join("left/t.tar.gz"),
+            bluepane_archive::Format::TarGz,
+            None,
+        );
+        s.run_line("refresh").unwrap();
+        enter_archive(&mut s, "t.tar.gz");
+        assert_eq!(rows(&s), ["..", "docs"]);
+        s.run_line("select docs").unwrap();
+        s.run_line("copy").unwrap();
+        assert!(s.wait_idle());
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("right/docs/sub/b.txt")).unwrap(),
+            "bravo"
+        );
+    }
+
+    #[test]
+    fn changing_directory_leaves_the_archive_and_keeps_other_tabs() {
+        let (tmp, mut s) = with_archives();
+        enter_archive(&mut s, "box.zip");
+        s.run_line("tab new").unwrap();
+        assert!(
+            s.active_panel().archive.is_none(),
+            "a new tab shows the real directory"
+        );
+        assert_eq!(s.tab_strip(0).titles, ["box.zip", "left"]);
+        s.run_line("tab 1").unwrap();
+        assert!(
+            s.active_panel().archive.is_some(),
+            "the first tab is still inside the archive"
+        );
+        s.run_line(&format!("cd {}", tmp.path().display())).unwrap();
+        assert!(s.active_panel().archive.is_none());
     }
 }

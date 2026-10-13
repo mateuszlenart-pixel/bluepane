@@ -529,6 +529,7 @@ dependencies = [
 name = "bluepane-engine"
 version = "0.1.0"
 dependencies = [
+ "bluepane-archive",
  "bluepane-ops",
  "bluepane-vfs",
  "chrono",

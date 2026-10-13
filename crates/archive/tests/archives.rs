@@ -223,12 +223,9 @@ fn zip_passwords_protect_content_but_not_names() {
         unpack(&archive, &dest, Some("wrong")),
         Err(ArchiveError::WrongPassword)
     ));
-    // Nothing from a failed attempt is left behind as a partial file.
-    let leftovers = fs::read_dir(&dest).map_or(0, |d| d.count());
-    assert!(leftovers <= 1, "only directories may exist");
-    assert!(!dest.join("photos/a.txt").exists());
+    // A missing or wrong password is detected before anything is written.
+    assert!(!dest.exists(), "nothing may be created by a failed attempt");
 
-    fs::remove_dir_all(&dest).ok();
     unpack(&archive, &dest, Some("sekret")).unwrap();
     assert_sample_extracted(&dest);
 }

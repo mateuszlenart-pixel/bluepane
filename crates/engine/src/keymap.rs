@@ -30,6 +30,8 @@ impl Default for Keymap {
             ("F2", "rename"),
             ("F3", "view"),
             ("F4", "edit"),
+            ("Alt+F5", "pack"),
+            ("Alt+F9", "unpack"),
             ("F7", "mkdir"),
             ("F8", "delete"),
             ("F9", "refresh"),

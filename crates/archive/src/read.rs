@@ -267,6 +267,36 @@ pub fn extract(
     match format {
         Format::Zip => {
             let mut archive = open_zip(&volumes)?;
+            // Settle the password before writing anything, so a missing or wrong one does
+            // not leave a half-extracted tree of empty directories behind.
+            for index in 0..archive.len() {
+                let (name, is_dir, special, encrypted) = {
+                    let file = archive.by_index_raw(index).map_err(zip_error)?;
+                    (
+                        file.name().map_err(zip_error)?.into_owned(),
+                        file.is_dir(),
+                        file.is_symlink(),
+                        file.encrypted(),
+                    )
+                };
+                let wanted_file = !is_dir
+                    && !special
+                    && encrypted
+                    && normalize_name(&name).is_some_and(|path| {
+                        wanted(&path, selection) && below(&path, selection.strip).is_some()
+                    });
+                if wanted_file {
+                    match password {
+                        None => return Err(ArchiveError::NeedsPassword),
+                        Some(password) => {
+                            archive
+                                .by_index_decrypt(index, password.as_bytes())
+                                .map_err(zip_error)?;
+                        }
+                    }
+                    break;
+                }
+            }
             for index in 0..archive.len() {
                 progress.check()?;
                 // Look at the entry without decrypting it.
