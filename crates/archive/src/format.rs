@@ -7,6 +7,8 @@ pub enum Format {
     Zip,
     Tar,
     TarGz,
+    /// 7-Zip's own format (LZMA2, AES-256, optionally with encrypted file names).
+    SevenZ,
 }
 
 impl Format {
@@ -16,12 +18,19 @@ impl Format {
             Format::Zip => "zip",
             Format::Tar => "tar",
             Format::TarGz => "tar.gz",
+            Format::SevenZ => "7z",
         }
     }
 
     /// Whether the format can be password protected.
     pub fn supports_password(self) -> bool {
-        self == Format::Zip
+        matches!(self, Format::Zip | Format::SevenZ)
+    }
+
+    /// Whether the file names can be hidden behind the password (7z only: a ZIP always shows
+    /// its names).
+    pub fn can_encrypt_names(self) -> bool {
+        self == Format::SevenZ
     }
 
     /// The format a file name stands for. A split archive is recognised by its first
@@ -35,6 +44,8 @@ impl Format {
         };
         if base.ends_with(".zip") {
             Some(Format::Zip)
+        } else if base.ends_with(".7z") {
+            Some(Format::SevenZ)
         } else if base.ends_with(".tar.gz") || base.ends_with(".tgz") {
             Some(Format::TarGz)
         } else if base.ends_with(".tar") {
@@ -96,6 +107,8 @@ mod tests {
         assert_eq!(Format::from_name("a.tar"), Some(Format::Tar));
         assert_eq!(Format::from_name("a.tar.gz"), Some(Format::TarGz));
         assert_eq!(Format::from_name("a.tgz"), Some(Format::TarGz));
+        assert_eq!(Format::from_name("a.7z"), Some(Format::SevenZ));
+        assert_eq!(Format::from_name("A.7Z"), Some(Format::SevenZ));
         assert_eq!(Format::from_name("a.txt"), None);
         assert_eq!(Format::from_name("zip"), None);
         assert_eq!(Format::from_name("a.gz"), None);
@@ -105,6 +118,8 @@ mod tests {
     fn only_the_first_volume_of_a_split_archive_opens() {
         assert_eq!(Format::from_name("a.zip.001"), Some(Format::Zip));
         assert_eq!(Format::from_name("a.tar.gz.001"), Some(Format::TarGz));
+        assert_eq!(Format::from_name("a.7z.001"), Some(Format::SevenZ));
+        assert_eq!(Format::from_name("a.7z.002"), None);
         assert_eq!(Format::from_name("a.zip.002"), None);
         assert_eq!(Format::from_name("a.zip.123"), None);
         assert_eq!(Format::from_name("photo.001"), None);
@@ -127,9 +142,12 @@ mod tests {
     }
 
     #[test]
-    fn password_support_is_zip_only() {
+    fn passwords_are_for_zip_and_7z_and_hidden_names_for_7z_only() {
         assert!(Format::Zip.supports_password());
+        assert!(Format::SevenZ.supports_password());
         assert!(!Format::Tar.supports_password());
         assert!(!Format::TarGz.supports_password());
+        assert!(Format::SevenZ.can_encrypt_names());
+        assert!(!Format::Zip.can_encrypt_names());
     }
 }

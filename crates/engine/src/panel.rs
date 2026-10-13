@@ -511,6 +511,21 @@ impl Panel {
         self.reload();
     }
 
+    /// Shows new contents of the archive after it was changed. When the directory being
+    /// browsed is gone, falls back to the nearest one that still exists.
+    pub fn replace_listing(&mut self, listing: Arc<Listing>) {
+        if let Some(view) = &mut self.archive {
+            view.listing = listing;
+            while !view.inner.is_empty()
+                && !view.listing.find(&view.inner).is_some_and(|e| e.is_dir)
+            {
+                view.inner = parent_inner(&view.inner).to_string();
+            }
+            self.selected.clear();
+            self.reload();
+        }
+    }
+
     fn set_inner(&mut self, inner: String) {
         if let Some(view) = &mut self.archive {
             view.inner = inner;
@@ -951,6 +966,7 @@ mod tests {
             level: bluepane_archive::Level::Normal,
             password: None,
             split: None,
+            encrypt_names: false,
         };
         let sources = [src.join("docs"), src.join("top.txt")];
         bluepane_archive::create(
@@ -961,7 +977,8 @@ mod tests {
             &mut bluepane_ops::FailOnConflict,
         )
         .unwrap();
-        let listing = bluepane_archive::list(&archive, &bluepane_ops::Progress::new()).unwrap();
+        let listing =
+            bluepane_archive::list(&archive, None, &bluepane_ops::Progress::new()).unwrap();
         let mut panel = Panel::new(tmp.path());
         panel.open_archive(archive, Arc::new(listing), None);
         (tmp, panel)
@@ -1001,6 +1018,39 @@ mod tests {
         panel.enter_by_name("..");
         assert_eq!(names(&panel), ["..", "docs", "top.txt"]);
         assert_eq!(panel.current().unwrap().name, "docs");
+    }
+
+    #[test]
+    fn a_new_listing_keeps_the_directory_or_falls_back_to_one_that_exists() {
+        let (tmp, mut panel) = in_archive();
+        panel.enter_by_name("docs");
+        panel.enter_by_name("sub");
+        let archive = tmp.path().join("box.zip");
+        let read = || {
+            Arc::new(
+                bluepane_archive::list(&archive, None, &bluepane_ops::Progress::new()).unwrap(),
+            )
+        };
+
+        // Same contents: we stay where we are.
+        panel.replace_listing(read());
+        assert_eq!(panel.archive.as_ref().unwrap().inner, "docs/sub");
+
+        // `docs` is gone: the panel falls back to the top level.
+        bluepane_archive::modify(
+            &archive,
+            &read(),
+            &bluepane_archive::Change::Remove {
+                entries: vec!["docs".to_string()],
+            },
+            None,
+            &bluepane_ops::Progress::new(),
+            &mut bluepane_ops::FailOnConflict,
+        )
+        .unwrap();
+        panel.replace_listing(read());
+        assert_eq!(panel.archive.as_ref().unwrap().inner, "");
+        assert_eq!(names(&panel), ["..", "top.txt"]);
     }
 
     #[test]

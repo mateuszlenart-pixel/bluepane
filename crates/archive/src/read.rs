@@ -11,6 +11,7 @@ use zip::ZipArchive;
 
 use crate::format::{detect, volumes_of, Format};
 use crate::listing::{is_selected, normalize_name, ArchiveEntry, Listing};
+use crate::sink::{Existing, Meta};
 use crate::split::Joined;
 use crate::time::from_zip;
 use crate::ArchiveError;
@@ -61,7 +62,7 @@ impl<R: Read> Read for Counting<'_, R> {
     }
 }
 
-fn zip_error(error: ZipError) -> ArchiveError {
+pub(crate) fn zip_error(error: ZipError) -> ArchiveError {
     match error {
         ZipError::Io(e) => ArchiveError::Io(e),
         ZipError::InvalidPassword => ArchiveError::WrongPassword,
@@ -97,7 +98,7 @@ fn io_failure(progress: &Progress, error: io::Error, encrypted: bool) -> Archive
     }
 }
 
-fn op_failure(progress: &Progress, error: OpError, encrypted: bool) -> ArchiveError {
+pub(crate) fn op_failure(progress: &Progress, error: OpError, encrypted: bool) -> ArchiveError {
     match error {
         OpError::Io(e) => io_failure(progress, e, encrypted),
         other => other.into(),
@@ -158,13 +159,61 @@ fn tar_time(header: &tar::Header) -> Option<SystemTime> {
         .map(|secs| UNIX_EPOCH + Duration::from_secs(secs))
 }
 
+/// Calls `each` for every entry of a tar (or tar.gz) with its data, in the order stored.
+pub(crate) fn stream_tar(
+    volumes: &[PathBuf],
+    format: Format,
+    progress: &Progress,
+    each: &mut dyn FnMut(&Existing, &mut dyn Read) -> Result<(), ArchiveError>,
+) -> Result<(), ArchiveError> {
+    let reader = tar_reader(volumes, format, progress, false)?;
+    let mut archive = tar::Archive::new(reader);
+    let entries = archive
+        .entries()
+        .map_err(|e| io_failure(progress, e, false))?;
+    for entry in entries {
+        let mut entry = entry.map_err(|e| io_failure(progress, e, false))?;
+        let name = entry
+            .path()
+            .map_err(|e| io_failure(progress, e, false))?
+            .to_string_lossy()
+            .into_owned();
+        let existing = {
+            let header = entry.header();
+            let kind = tar_kind(header.entry_type());
+            Existing {
+                path: normalize_name(&name),
+                name,
+                is_dir: matches!(kind, TarKind::Dir),
+                size: if matches!(kind, TarKind::File) {
+                    header.size().unwrap_or(0)
+                } else {
+                    0
+                },
+                meta: Meta {
+                    modified: tar_time(header),
+                    mode: header.mode().ok().map(|m| m & 0o777),
+                },
+                special: matches!(kind, TarKind::Special),
+            }
+        };
+        each(&existing, &mut entry)?;
+    }
+    Ok(())
+}
+
 fn format_of(path: &Path) -> Result<Format, ArchiveError> {
     detect(path).ok_or_else(|| ArchiveError::Unsupported("nieznany format archiwum".into()))
 }
 
 /// Reads the table of contents. For ZIP that is quick (the central directory); TAR and
-/// TAR.GZ have to be read through, so the progress counts the bytes read of the file.
-pub fn list(path: &Path, progress: &Progress) -> Result<Listing, ArchiveError> {
+/// TAR.GZ have to be read through, so the progress counts the bytes read of the file. The
+/// password matters only for a 7z archive whose file names are encrypted.
+pub fn list(
+    path: &Path,
+    password: Option<&str>,
+    progress: &Progress,
+) -> Result<Listing, ArchiveError> {
     let format = format_of(path)?;
     let volumes = volumes_of(path);
     let packed = packed_size(&volumes);
@@ -172,6 +221,7 @@ pub fn list(path: &Path, progress: &Progress) -> Result<Listing, ArchiveError> {
     progress.set_current(&path.file_name().unwrap_or_default().to_string_lossy());
     let mut raw = Vec::new();
     let mut unsafe_skipped = 0;
+    let mut names_encrypted = false;
     match format {
         Format::Zip => {
             let mut archive = open_zip(&volumes)?;
@@ -194,6 +244,13 @@ pub fn list(path: &Path, progress: &Progress) -> Result<Listing, ArchiveError> {
                     special: file.is_symlink(),
                 });
             }
+            progress.add(packed);
+        }
+        Format::SevenZ => {
+            let (entries, skipped, hidden) = crate::seven::list(&volumes, password, progress)?;
+            raw = entries;
+            unsafe_skipped = skipped;
+            names_encrypted = hidden;
             progress.add(packed);
         }
         Format::Tar | Format::TarGz => {
@@ -233,18 +290,19 @@ pub fn list(path: &Path, progress: &Progress) -> Result<Listing, ArchiveError> {
         packed,
         raw,
         unsafe_skipped,
+        names_encrypted,
     ))
 }
 
 /// `path` below `strip`, or `None` when it is `strip` itself or lies elsewhere.
-fn below<'p>(path: &'p str, strip: &str) -> Option<&'p str> {
+pub(crate) fn below<'p>(path: &'p str, strip: &str) -> Option<&'p str> {
     if strip.is_empty() {
         return Some(path);
     }
     path.strip_prefix(strip)?.strip_prefix('/')
 }
 
-fn wanted(path: &str, selection: &Selection<'_>) -> bool {
+pub(crate) fn wanted(path: &str, selection: &Selection<'_>) -> bool {
     selection.entries.is_empty() || selection.entries.iter().any(|s| is_selected(path, s))
 }
 
@@ -349,6 +407,17 @@ pub fn extract(
                     )
                     .map_err(|e| op_failure(progress, e, encrypted))?;
             }
+        }
+        Format::SevenZ => {
+            special_skipped = crate::seven::extract(
+                &volumes,
+                &label_root,
+                selection,
+                dest,
+                password,
+                progress,
+                &mut writer,
+            )?;
         }
         Format::Tar | Format::TarGz => {
             let reader = tar_reader(&volumes, format, progress, false)?;
@@ -468,6 +537,7 @@ pub fn verify(
                 }
             }
         }
+        Format::SevenZ => return crate::seven::verify(&volumes, password, progress),
         Format::Tar | Format::TarGz => {
             let reader = tar_reader(&volumes, format, progress, false)?;
             let mut archive = tar::Archive::new(reader);
