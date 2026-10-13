@@ -480,3 +480,75 @@ fn seven_z_with_methods_this_build_lacks_is_a_clear_error() {
         );
     }
 }
+
+#[test]
+fn archives_made_by_real_tools_can_be_changed_and_stay_valid() {
+    use bluepane_archive::{modify, Change};
+
+    let tmp = tempfile::tempdir().unwrap();
+    tree(tmp.path());
+    fs::write(tmp.path().join("new.txt"), "added here").unwrap();
+    let mut cases: Vec<(&str, &str, Vec<&str>)> = Vec::new();
+    if find_tool(&["zip"]).is_some() {
+        // Info-ZIP writes extra fields (Unix owner, timestamps) that must survive a rewrite.
+        cases.push(("zip", "info.zip", vec!["-qr", "info.zip", "data"]));
+    }
+    if let Some(z) = seven_zip() {
+        let z: &'static str = Box::leak(z.into_boxed_str());
+        cases.push((z, "seven.7z", vec!["a", "-t7z", "seven.7z", "data"]));
+        cases.push((z, "seven.zip", vec!["a", "-tzip", "seven.zip", "data"]));
+    }
+    for (program, name, args) in cases {
+        assert!(ok(&run(program, &args, tmp.path())), "{program} {name}");
+        let archive = tmp.path().join(name);
+        let relist = || list(&archive, None, &Progress::new()).unwrap();
+        for change in [
+            Change::Add {
+                sources: vec![tmp.path().join("new.txt")],
+                into: "data".into(),
+            },
+            Change::Rename {
+                from: "data/sub".into(),
+                to: "data/moved".into(),
+            },
+            Change::Remove {
+                entries: vec!["data/a.txt".into()],
+            },
+        ] {
+            modify(
+                &archive,
+                &relist(),
+                &change,
+                None,
+                &Progress::new(),
+                &mut FailOnConflict,
+            )
+            .unwrap_or_else(|e| panic!("{name} {change:?}: {e}"));
+        }
+        let names: Vec<String> = relist().entries.iter().map(|e| e.path.clone()).collect();
+        assert!(
+            names.contains(&"data/new.txt".to_string()),
+            "{name}: {names:?}"
+        );
+        assert!(
+            !names.contains(&"data/a.txt".to_string()),
+            "{name}: {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n.starts_with("data/moved/")),
+            "{name}: {names:?}"
+        );
+
+        // The real tools still accept what was written.
+        if name.ends_with(".zip") {
+            if find_tool(&["unzip"]).is_some() {
+                assert!(
+                    ok(&run("unzip", &["-t", name], tmp.path())),
+                    "unzip -t {name}"
+                );
+            }
+        } else if let Some(z) = seven_zip() {
+            assert!(ok(&run(&z, &["t", name], tmp.path())), "7z t {name}");
+        }
+    }
+}
