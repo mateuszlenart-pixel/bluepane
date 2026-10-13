@@ -552,7 +552,7 @@ fn display_text(bytes: &[u8]) -> String {
         match c {
             '\t' => {
                 let n = TAB_WIDTH - column % TAB_WIDTH;
-                out.extend(std::iter::repeat(' ').take(n));
+                out.extend(std::iter::repeat_n(' ', n));
                 column += n;
             }
             c if c.is_control() => {

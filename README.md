@@ -35,6 +35,8 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Ctrl+L | wiersz poleceń z `cd ` (przejście do wpisanej ścieżki) |
 | Spacja, Insert | zaznacz i przejdź niżej |
 | F2 | zmień nazwę (okno z bieżącą nazwą; nie nadpisuje istniejących) |
+| F3 | podgląd pliku (tekst lub hex, dowolnie duży) |
+| F4 | edycja w zewnętrznym edytorze (`BLUEPANE_EDITOR`, np. `code -w`; domyślnie aplikacja systemu) |
 | F5 / F6 | kopiuj / przenieś do drugiego panelu; F5 przy tym samym katalogu w obu panelach proponuje kopię „nazwa (kopia).ext” (Enter = tak, Esc = nie) |
 | F7 | nowy katalog (okno z polem na nazwę) |
 | F8 | do kosza (po potwierdzeniu: Enter = tak, Esc = nie) |
@@ -48,6 +50,24 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `sort <name|ext|size|date> [asc|desc]`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
+
+## Podgląd plików (F3)
+
+Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie
+zajmuje pamięci. Pliki z bajtami zerowymi otwierają się w trybie hex.
+
+| Klawisz | Akcja |
+| --- | --- |
+| strzałki góra/dół, PgUp/PgDn, Spacja | przewijanie o wiersz / stronę |
+| Home / End | początek / koniec pliku |
+| strzałki lewo/prawo | przesunięcie w bok (długie linie) |
+| H lub F4 | przełącz tekst / hex |
+| `/`, F7 lub Ctrl+F | szukaj (bez rozróżniania wielkości liter, ASCII) |
+| N / Shift+N (F3 / Shift+F3) | następne / poprzednie trafienie |
+| Esc lub Q | zamknij podgląd |
+
+Szukanie przeszukuje do 256 MiB na raz; jeśli nic nie znajdzie w tej części, pokazuje dokąd doszło
+i kolejne **N** szuka dalej. Komendy: `view`, `viewer scroll|page|hscroll|top|bottom|mode|goto|find|next|prev|close`.
 
 ## Kopiowanie i przenoszenie
 
