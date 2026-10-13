@@ -27,10 +27,11 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - Kosz zamiast twardego usuwania, kopiowanie bez nadpisywania.
 
 ### Etap 2: nawigacja
-- [ ] Pasek ścieżki z edycją, lista wolumenów (`bluepane_vfs::volumes`) w UI, skok do wolumenu
-- [ ] Historia katalogów (wstecz/naprzód) per panel, zakładki
-- [ ] Szybkie filtrowanie po wpisaniu liter
-- [ ] Wpis `..` na górze listy
+- [x] Pasek ścieżki z edycją, lista wolumenów (`bluepane_vfs::volumes`) w UI, skok do wolumenu (`volume`, Alt+1..9)
+- [x] Historia katalogów (wstecz/naprzód) per panel (`back`, `forward`, Alt+←/→)
+- [ ] Zakładki (reszta etapu 2; stan etapu zostaje 🟡 do ich zrobienia)
+- [x] Szybkie filtrowanie po wpisaniu liter (`filter`, Esc czyści, Backspace skraca)
+- [x] Wpis `..` na górze listy (nie jest celem operacji, nie da się go zaznaczyć)
 
 ### Etap 3: zaznaczanie
 - [ ] `+` i `-` (zaznacz/odznacz po masce), Ctrl+A, odwrócenie zaznaczenia
@@ -50,5 +51,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - Operacje na plikach działają synchronicznie w wątku UI (duże kopie zamrożą okno do etapu 4).
 - Kopiowanie symlinków podąża za celem (`fs::copy`), nie odtwarza dowiązania.
 - Brak dialogów: F7 wpisuje `mkdir ` w wiersz poleceń, a F8 usuwa od razu (do kosza).
-- Interfejs sprawdzony wyłącznie kompilacją; **nie był uruchamiany na ekranie**. Pierwsze
-  uruchomienie na Windows i Linuksie to zadanie numer jeden dla etapu 2.
+- Interfejs sprawdzony ręcznie na Linuksie (Linux Mint, X11, wgpu); **nie był jeszcze uruchamiany
+  na Windows** (kompiluje się i przechodzi CI).
+- Kursor startuje na wierszu `..`, więc `copy`/`move`/`delete` bez zaznaczenia i bez ruchu kursora
+  zgłaszają „nic nie zaznaczono”.

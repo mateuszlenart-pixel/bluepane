@@ -5,7 +5,7 @@
 
 use std::time::{Duration, SystemTime};
 
-use bluepane_engine::{Panel, Session};
+use bluepane_engine::{Command, Panel, Session};
 use egui::{Color32, RichText};
 
 const CMD_LINE_ID: &str = "bluepane-command-line";
@@ -24,6 +24,8 @@ pub struct BluepaneUi {
     command_line: String,
     focus_command_line: bool,
     last_error: bool,
+    /// Editable text of each panel's path bar (resynced from the panel while not focused).
+    path_text: [String; 2],
 }
 
 impl BluepaneUi {
@@ -33,6 +35,7 @@ impl BluepaneUi {
             command_line: String::new(),
             focus_command_line: false,
             last_error: false,
+            path_text: [String::new(), String::new()],
         }
     }
 
@@ -44,8 +47,8 @@ impl BluepaneUi {
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         let cmd_id = egui::Id::new(CMD_LINE_ID);
-        let typing = ctx.memory(|m| m.has_focus(cmd_id));
-        if !typing {
+        // While any text field (command line, path bar) has focus, keys belong to it.
+        if !ctx.egui_wants_keyboard_input() {
             self.handle_keys(&ctx);
         }
 
@@ -62,21 +65,45 @@ impl BluepaneUi {
     }
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
-        let pressed: Vec<String> = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter_map(|event| match event {
+        let (pressed, typed) = ctx.input(|i| {
+            let mut pressed = Vec::new();
+            let mut typed = String::new();
+            // Alt/Ctrl shortcuts can also arrive as text ("Alt+2" -> "2"); the modifier state
+            // of the frame may already be released, so remember it from the key events.
+            let mut shortcut = i.modifiers.alt || i.modifiers.ctrl;
+            for event in &i.events {
+                match event {
                     egui::Event::Key {
-                        key, pressed: true, ..
-                    } => Some(format!("{key:?}")),
-                    _ => None,
-                })
-                .collect()
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
+                    } => {
+                        shortcut |= modifiers.alt || modifiers.ctrl;
+                        pressed.push(key_name(*key, *modifiers));
+                    }
+                    egui::Event::Text(text) => {
+                        typed.extend(
+                            text.chars()
+                                .filter(|c| !c.is_whitespace() && !c.is_control()),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            if shortcut {
+                typed.clear();
+            }
+            (pressed, typed)
         });
         for key in pressed {
             if let Some(line) = self.session.keymap.lookup(&key).map(str::to_owned) {
                 self.dispatch(&line);
             }
+        }
+        if !typed.is_empty() {
+            let filter = format!("{}{typed}", self.session.active_panel().filter);
+            self.last_error = self.session.execute(Command::Filter(filter)).is_err();
         }
     }
 
@@ -127,22 +154,75 @@ impl BluepaneUi {
         });
     }
 
+    /// Volume picker and editable path bar of one panel.
+    fn header_ui(&mut self, ui: &mut egui::Ui, index: usize) {
+        let is_active = self.session.active == index;
+        let current_volume = self.session.volume_of(index);
+        let mut chosen = None;
+        let path_id = egui::Id::new(("path-bar", index));
+        let editing = ui.ctx().memory(|m| m.has_focus(path_id));
+        if !editing {
+            self.path_text[index] = self.session.panels[index].cwd.display().to_string();
+        }
+
+        ui.horizontal(|ui| {
+            let selected_text = current_volume
+                .map(|i| self.session.volumes[i].name.clone())
+                .unwrap_or_else(|| "?".to_string());
+            egui::ComboBox::from_id_salt(("volume", index))
+                .selected_text(selected_text)
+                .show_ui(ui, |ui| {
+                    for (i, volume) in self.session.volumes.iter().enumerate() {
+                        let label = format!("{} {}", i + 1, volume.name);
+                        if ui
+                            .selectable_label(current_volume == Some(i), label)
+                            .clicked()
+                        {
+                            chosen = Some(i);
+                        }
+                    }
+                });
+
+            let mut edit = egui::TextEdit::singleline(&mut self.path_text[index])
+                .id(path_id)
+                .font(egui::TextStyle::Monospace)
+                .desired_width(f32::INFINITY);
+            if is_active {
+                edit = edit.text_color(Color32::from_rgb(120, 200, 255));
+            }
+            let response = ui.add(edit);
+            if response.gained_focus() {
+                self.session.active = index;
+            }
+            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.session.active = index;
+                let line = format!("cd {}", self.path_text[index]);
+                self.last_error = self.session.run_line(&line).is_err();
+            }
+        });
+
+        if let Some(i) = chosen {
+            self.session.active = index;
+            self.last_error = self
+                .session
+                .execute(Command::Volume((i + 1).to_string()))
+                .is_err();
+        }
+    }
+
     fn panel_ui(&mut self, ui: &mut egui::Ui, index: usize) {
         let is_active = self.session.active == index;
+        self.header_ui(ui, index);
         let panel: &Panel = &self.session.panels[index];
 
-        let header_color = if is_active {
-            Color32::from_rgb(120, 200, 255)
-        } else {
-            ui.visuals().text_color()
-        };
-        ui.label(
-            RichText::new(panel.cwd.display().to_string())
-                .strong()
-                .color(header_color),
-        );
         if let Some(err) = &panel.error {
             ui.colored_label(Color32::LIGHT_RED, err);
+        }
+        if !panel.filter.is_empty() {
+            ui.label(
+                RichText::new(format!("Filtr: {}  (Esc czyści)", panel.filter))
+                    .color(Color32::YELLOW),
+            );
         }
         ui.separator();
 
@@ -214,6 +294,22 @@ impl BluepaneUi {
     }
 }
 
+/// Key name as the engine's `Keymap` knows it: `F5`, `Alt+ArrowLeft`, `Ctrl+L`.
+fn key_name(key: egui::Key, modifiers: egui::Modifiers) -> String {
+    let mut name = String::new();
+    if modifiers.ctrl {
+        name.push_str("Ctrl+");
+    }
+    if modifiers.alt {
+        name.push_str("Alt+");
+    }
+    if modifiers.shift {
+        name.push_str("Shift+");
+    }
+    name.push_str(&format!("{key:?}"));
+    name
+}
+
 fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
@@ -249,6 +345,17 @@ fn format_age(modified: Option<SystemTime>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_names_carry_modifiers() {
+        let none = egui::Modifiers::NONE;
+        assert_eq!(key_name(egui::Key::F5, none), "F5");
+        assert_eq!(
+            key_name(egui::Key::ArrowLeft, egui::Modifiers::ALT),
+            "Alt+ArrowLeft"
+        );
+        assert_eq!(key_name(egui::Key::L, egui::Modifiers::CTRL), "Ctrl+L");
+    }
 
     #[test]
     fn sizes_are_human_readable() {
