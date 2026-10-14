@@ -128,14 +128,34 @@ pub enum RemoteOp {
     Delete {
         paths: Vec<String>,
     },
-    /// Copies these server paths into the local directory `dest`.
+    /// Copies these server paths into the local directory `dest`. With `remove_source` each
+    /// item is deleted on the server once it has arrived in full (a move). `view` marks a
+    /// download for the viewer (F3): the file lands in a temporary folder.
     Download {
         sources: Vec<String>,
         dest: PathBuf,
+        remove_source: bool,
+        view: bool,
     },
-    /// Copies these local paths into the server directory `dest`.
+    /// Copies these local paths into the server directory `dest`. With `remove_source` each
+    /// item goes to the local trash once it has been sent in full.
     Upload {
         sources: Vec<PathBuf>,
+        dest: String,
+        remove_source: bool,
+    },
+    /// Copies server paths to another server (the job's own connection is the source),
+    /// through a temporary folder. With `remove_source` the source is deleted afterwards.
+    Relay {
+        target: Arc<sftp::Connection>,
+        sources: Vec<String>,
+        dest: String,
+        remove_source: bool,
+    },
+    /// Moves server paths to another folder of the same server (a rename; nothing is
+    /// copied and nothing is replaced).
+    MoveWithin {
+        sources: Vec<String>,
         dest: String,
     },
 }

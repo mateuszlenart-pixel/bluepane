@@ -16,9 +16,9 @@ bluepane-rename.workspace = true
 bluepane-search.workspace = true
 bluepane-sftp.workspace = true
 chrono.workspace = true
+tempfile.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true

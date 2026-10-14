@@ -121,11 +121,50 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
             progress.set_total(0, paths.len() as u64);
             delete_all(&conn, paths, progress, &mut report)
         }
-        RemoteOp::Download { sources, dest } => {
-            download_all(&conn, sources, dest, progress, &mut host, &mut report)
-        }
-        RemoteOp::Upload { sources, dest } => {
-            upload_all(&conn, sources, dest, progress, &mut host, &mut report)
+        RemoteOp::Download {
+            sources,
+            dest,
+            remove_source,
+            ..
+        } => download_all(
+            &conn,
+            sources,
+            dest,
+            *remove_source,
+            progress,
+            &mut host,
+            &mut report,
+        ),
+        RemoteOp::Upload {
+            sources,
+            dest,
+            remove_source,
+        } => upload_all(
+            &conn,
+            sources,
+            dest,
+            *remove_source,
+            progress,
+            &mut host,
+            &mut report,
+        ),
+        RemoteOp::Relay {
+            target,
+            sources,
+            dest,
+            remove_source,
+        } => relay_all(
+            &conn,
+            target,
+            sources,
+            dest,
+            *remove_source,
+            progress,
+            &mut host,
+            &mut report,
+        ),
+        RemoteOp::MoveWithin { sources, dest } => {
+            move_within(&conn, sources, dest, progress, &mut report)
         }
     };
     match result {
@@ -211,10 +250,12 @@ fn measure_remote(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn download_all(
     conn: &Connection,
     sources: &[String],
     dest: &Path,
+    remove_source: bool,
     progress: &Progress,
     host: &mut WorkerHost,
     report: &mut Report,
@@ -224,11 +265,24 @@ fn download_all(
         measure_remote(conn, source, &mut files, &mut bytes)?;
     }
     progress.set_total(bytes, files);
+    fs::create_dir_all(dest)?;
     for source in sources {
         cancelled(progress)?;
         let name = remote_name(source);
+        let skipped_before = report.skipped;
         match download_tree(conn, source, &dest.join(name), progress, host, report) {
-            Ok(()) => report.done += 1,
+            Ok(()) => {
+                report.done += 1;
+                // A move deletes the original only when every file of it arrived: a skipped
+                // conflict keeps it.
+                if remove_source && report.skipped == skipped_before {
+                    if let Err(error) = delete_tree(conn, source, progress) {
+                        report.failed.push(format!(
+                            "{name}: pobrano, ale nie udało się usunąć z serwera: {error}"
+                        ));
+                    }
+                }
+            }
             Err(SftpError::Cancelled) => return Err(SftpError::Cancelled),
             Err(error) => report.failed.push(format!("{name}: {error}")),
         }
@@ -361,12 +415,105 @@ fn free_remote_name(conn: &Connection, path: &str) -> Result<String, SftpError> 
     unreachable!("an unused name exists")
 }
 
+// ---- server to server -------------------------------------------------------------
+
+/// Copies through a temporary local folder: a download, then an upload (so the progress
+/// counts every byte twice).
+#[allow(clippy::too_many_arguments)]
+fn relay_all(
+    from: &Connection,
+    to: &Connection,
+    sources: &[String],
+    dest: &str,
+    remove_source: bool,
+    progress: &Progress,
+    host: &mut WorkerHost,
+    report: &mut Report,
+) -> Result<(), SftpError> {
+    let (mut files, mut bytes) = (0, 0);
+    for source in sources {
+        measure_remote(from, source, &mut files, &mut bytes)?;
+    }
+    progress.set_total(bytes * 2, files * 2);
+    let temp = tempfile::Builder::new()
+        .prefix("bluepane-relay-")
+        .tempdir()?;
+    for source in sources {
+        cancelled(progress)?;
+        let name = remote_name(source);
+        let staged = temp.path().join(name);
+        let skipped_before = report.skipped;
+        // Nothing is staged before, so the download asks no questions; the upload asks them
+        // against the target server.
+        let result = download_tree(from, source, &staged, progress, host, report).and_then(|()| {
+            upload_tree(
+                to,
+                &staged,
+                &remote_join(dest, name),
+                progress,
+                host,
+                report,
+            )
+        });
+        let _ = fs::remove_dir_all(&staged);
+        let _ = fs::remove_file(&staged);
+        match result {
+            Ok(()) => {
+                report.done += 1;
+                if remove_source && report.skipped == skipped_before {
+                    if let Err(error) = delete_tree(from, source, progress) {
+                        report.failed.push(format!(
+                            "{name}: skopiowano, ale nie udało się usunąć z serwera: {error}"
+                        ));
+                    }
+                }
+            }
+            Err(SftpError::Cancelled) => return Err(SftpError::Cancelled),
+            Err(error) => report.failed.push(format!("{name}: {error}")),
+        }
+    }
+    Ok(())
+}
+
+fn move_within(
+    conn: &Connection,
+    sources: &[String],
+    dest: &str,
+    progress: &Progress,
+    report: &mut Report,
+) -> Result<(), SftpError> {
+    progress.set_total(0, sources.len() as u64);
+    for source in sources {
+        cancelled(progress)?;
+        let name = remote_name(source);
+        progress.set_current(name);
+        let target = remote_join(dest, name);
+        if &target == source {
+            report.skipped += 1;
+        } else if target.starts_with(&format!("{}/", source.trim_end_matches('/'))) {
+            report.failed.push(format!(
+                "{name}: nie można przenieść katalogu do jego wnętrza"
+            ));
+        } else {
+            // `rename` refuses to replace anything.
+            match conn.rename(source, &target) {
+                Ok(()) => report.done += 1,
+                Err(error) => report.failed.push(format!("{name}: {error}")),
+            }
+        }
+        progress.finish_item();
+    }
+    Ok(())
+}
+
 // ---- upload --------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn upload_all(
     conn: &Connection,
     sources: &[PathBuf],
     dest: &str,
+    remove_source: bool,
     progress: &Progress,
     host: &mut WorkerHost,
     report: &mut Report,
@@ -378,6 +525,7 @@ fn upload_all(
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
+        let skipped_before = report.skipped;
         match upload_tree(
             conn,
             source,
@@ -386,7 +534,16 @@ fn upload_all(
             host,
             report,
         ) {
-            Ok(()) => report.done += 1,
+            Ok(()) => {
+                report.done += 1;
+                if remove_source && report.skipped == skipped_before {
+                    if let Err(error) = bluepane_ops::delete_to_trash(source) {
+                        report.failed.push(format!(
+                            "{name}: wysłano, ale nie udało się przenieść do kosza: {error}"
+                        ));
+                    }
+                }
+            }
             Err(SftpError::Cancelled) => return Err(SftpError::Cancelled),
             Err(error) => report.failed.push(format!("{name}: {error}")),
         }
