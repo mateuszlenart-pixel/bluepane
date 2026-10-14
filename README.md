@@ -26,12 +26,13 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Strzałki, PageUp/PageDown | kursor |
 | Enter / Backspace | wejdź do katalogu / w górę (wiersz `..` też wychodzi w górę) |
 | Alt+← / Alt+→ | historia katalogów: wstecz / naprzód (osobna dla każdego panelu) |
-| litery | szybki filtr listy (nazwa zawiera wpisany tekst); Backspace skraca filtr, Esc czyści |
+| litery, spacja | szukanie w locie: lista zawęża się do nazw zawierających wpisany tekst (spacja jest częścią nazwy, gdy filtr już trwa); Backspace skraca filtr, Esc czyści; wiersz poleceń dostaje klawiaturę po kliknięciu lub Ctrl+L |
 | Enter na archiwum | wejdź do archiwum (zip, 7z, tar, tar.gz, tgz, także części `*.001`); `..` na górze wychodzi |
 | F5 w archiwum | rozpakuj zaznaczone do katalogu drugiego panelu |
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
+| Ctrl+S | witryny SFTP (zapisane połączenia) |
 | Ctrl+F, Alt+F7 | wyszukiwanie plików (okno; wyniki zostają po zamknięciu) |
 | Ctrl+F2 | zmiana nazw wielu plików (okno z podglądem nowych nazw) |
 | Alt+S | synchronizacja katalogów obu paneli (okno) |
@@ -62,7 +63,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`sync`, `syncrun`, `syncset`, `syncclose`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
+`sync`, `syncrun`, `syncset`, `syncclose`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -143,6 +144,22 @@ do katalogu z wersjami albo trwale (tylko na jawne życzenie). Pozycje niedostę
 są zgłaszane i nie są ruszane. Z wiersza poleceń:
 `sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
 `syncset <n> <kierunek>`, `syncrun`, `syncclose`.
+
+## SFTP (Ctrl+S)
+
+Panel może pokazywać katalog na serwerze SSH/SFTP jak zwykły katalog. Implementacja w czystym Rust (russh), bez zewnętrznych programów.
+
+- **Witryny (Ctrl+S):** zapisane połączenia: serwer, port, użytkownik, plik klucza (albo hasło), katalog startowy. Plik `sites.conf` w katalogu konfiguracji.
+- **Hasło:** „pytaj przy łączeniu” (nigdzie nie zapisywane), „zapisz lokalnie” (jawnym tekstem w `sites.conf`, plik tylko dla Ciebie na Linuksie) albo
+  **Bitwarden** (jeśli zainstalowany jest `bw`: hasło jest pobierane przy łączeniu, nic nie jest zapisywane w bluepane; sejf musi być odblokowany, `bw unlock`, a `BW_SESSION` ustawione).
+- **Klucz serwera:** pierwsze połączenie pokazuje odcisk klucza i pyta (Enter = zaufaj i zapamiętaj). Zmieniony klucz znanego serwera jest zawsze odrzucany z ostrzeżeniem.
+- **Praca w panelu:** Enter / Backspace / `cd` / F9 przeglądają serwer; F5 pobiera (z drugiego panelu) lub wysyła (do panelu serwera), także całe katalogi;
+  konflikty pytają jak przy kopiowaniu (nadpisz / starsze / pomiń / zachowaj oba); F7 nowy katalog, F2 zmiana nazwy, F8 usuwa **trwale** (serwer nie ma kosza, pytanie to mówi wprost).
+  Pobieranie i wysyłanie idzie przez plik `.bpart` i jest wznawiane po przerwaniu (tylko gdy plik częściowy jest nowszy niż źródło). Postęp i Anuluj jak przy zwykłym kopiowaniu.
+- **Nie ma jeszcze:** F6 (przenoszenie), F3/F4 pliku z serwera (pobierz F5), kopiowania między dwoma serwerami, FTP/FTPS, zakładek i historii na serwerze.
+
+Komendy: `sites`, `siteset <nazwa> <host|port|user|key|start|secret> <wartość>` (nazwa ze spacjami w cudzysłowie; `secret`: `ask`, `local:<hasło>`, `bitwarden:<element>`),
+`sitedel <nazwa>`, `connect <nazwa> [hasło]`, `disconnect`, `siteclose`.
 
 ## Wyszukiwanie (Ctrl+F lub Alt+F7)
 

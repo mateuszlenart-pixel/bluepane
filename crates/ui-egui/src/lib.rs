@@ -5,6 +5,7 @@
 
 mod find_ui;
 mod rename_ui;
+mod sites_ui;
 mod sync_ui;
 
 use std::time::Duration;
@@ -31,6 +32,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Alt+S", "Synchronizuj", "sync"),
     ("Ctrl+F2", "Zmień nazwy", "multirename"),
     ("Ctrl+F", "Szukaj", "find"),
+    ("Ctrl+S", "Witryny SFTP", "sites"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -50,6 +52,8 @@ pub struct BluepaneUi {
     rename_edit: Option<(usize, String)>,
     /// The selected row of the search results.
     find_selected: usize,
+    /// The site being edited in the site manager.
+    site_form: Option<sites_ui::SiteForm>,
 }
 
 impl BluepaneUi {
@@ -64,6 +68,7 @@ impl BluepaneUi {
             sync_form: None,
             rename_edit: None,
             find_selected: 0,
+            site_form: None,
         }
     }
 
@@ -94,6 +99,8 @@ impl BluepaneUi {
                 self.viewer_ui(ui);
             } else if self.session.sync.is_some() {
                 self.sync_ui(ui);
+            } else if self.session.sites_open {
+                self.sites_ui(ui);
             } else if self.session.rename.is_some() {
                 self.rename_ui(ui);
             } else if self.session.find.as_ref().is_some_and(|f| f.visible) {
@@ -128,8 +135,12 @@ impl BluepaneUi {
             InputKind::Rename(_) => "Zmień nazwę",
             InputKind::ViewerFind => "Szukaj w pliku",
             InputKind::ArchivePassword => "Hasło archiwum",
+            InputKind::SitePassword(_) => "Hasło do serwera SFTP",
         };
-        let secret = matches!(kind, InputKind::ArchivePassword);
+        let secret = matches!(
+            kind,
+            InputKind::ArchivePassword | InputKind::SitePassword(_)
+        );
         let (status, is_error) = (&session.status, session.status_is_error);
         let mut accepted = None;
         egui::Window::new(title)
@@ -567,6 +578,10 @@ impl BluepaneUi {
             }
             return;
         }
+        if self.session.sites_open {
+            self.sites_keys(&pressed);
+            return;
+        }
         if self.session.find.as_ref().is_some_and(|f| f.visible) {
             // Typing in the search window must not start the panel filter.
             self.find_keys(&pressed);
@@ -592,6 +607,12 @@ impl BluepaneUi {
             return;
         }
         for key in pressed {
+            // While a filter is being typed, Space is part of the name, not "select".
+            if key == "Space" && !self.session.active_panel().filter.is_empty() {
+                let filter = format!("{} ", self.session.active_panel().filter);
+                let _ = self.session.execute(Command::Filter(filter));
+                continue;
+            }
             if let Some(line) = self.session.keymap.lookup(&key).map(str::to_owned) {
                 self.dispatch(&line);
             }
@@ -622,7 +643,13 @@ impl BluepaneUi {
         // Conflicts and name dialogs have their own window; only yes/no questions use the bar.
         let simple_question = matches!(
             self.session.pending,
-            Some(Pending::Duplicate(_) | Pending::ConfirmDelete(_) | Pending::ConfirmRemove { .. })
+            Some(
+                Pending::Duplicate(_)
+                    | Pending::ConfirmDelete(_)
+                    | Pending::ConfirmRemove { .. }
+                    | Pending::TrustHost(_)
+                    | Pending::ConfirmRemoteDelete { .. }
+            )
         );
         if simple_question {
             ui.label(RichText::new(&self.session.status).color(Color32::YELLOW));

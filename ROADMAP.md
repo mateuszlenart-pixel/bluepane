@@ -16,7 +16,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 7 | Synchronizacja | ✅ | synchronizacja pokazuje zmiany przed wykonaniem |
 | 7b | Wyszukiwanie | ✅ | szukanie po nazwie i treści w wielu katalogach, dyskach i archiwach |
 | 7c | Grupowa zmiana nazw | ✅ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
-| 8 | Sieć i wtyczki | ⬜ | SFTP działa jak katalog lokalny |
+| 8 | Sieć i wtyczki | 🟡 | SFTP działa jak katalog lokalny |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
 
 ## Stan szkieletu (etap 1) i co dalej
@@ -98,12 +98,21 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [ ] Do sprawdzenia ręcznie (Linux i Windows): wygląd okna, klikanie w nową nazwę, nazwy niedozwolone w Windows
 
 ### Etap 8: FTP/SFTP
-Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**:
-- menedżer witryn z zapisanymi połączeniami, w tym rozbudowany wybór i konfiguracja
-  połączenia (protokół FTP / FTPS / SFTP, host, port, tryb logowania, dane uwierzytelniające,
-  katalog startowy; szczegóły do dopracowania przy starcie etapu),
-- kolejka transferów z postępem, wznawianie przerwanych transferów,
-- dialog konfliktów (nadpisz / pomiń / zmień nazwę).
+Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**: menedżer witryn, kolejka transferów z postępem, wznawianie, dialog konfliktów. Kolejność: najpierw SFTP (SSH).
+
+Zrobione (etap 8a, SFTP):
+- [x] Crate `bluepane-sftp` (russh + russh-sftp, czysty Rust, API blokujące): logowanie hasłem i kluczem, listowanie, mkdir/rename/usuwanie, pobieranie i wysyłanie z wznawianiem (`.bpart`, tylko świeże), znane klucze serwerów (nieznany: pytanie z odciskiem; zmieniony: odrzucony)
+- [x] Menedżer witryn (`sites.conf`), hasło: pytaj / lokalnie / Bitwarden CLI
+- [x] Panel serwera w silniku (`Panel::remote`), komendy `sites`, `siteset`, `sitedel`, `connect`, `disconnect`; transfery w kolejce zadań z postępem, anulowaniem i dialogiem konfliktów; okno witryn (Ctrl+S)
+- [x] Testy na serwerze SSH/SFTP uruchamianym w procesie testu (`bluepane_sftp::testing`), bez prawdziwych maszyn
+- [ ] Do sprawdzenia ręcznie: połączenie z prawdziwym serwerem (OpenSSH, Proxmox, Home Assistant), Windows (klucze, ścieżki), Bitwarden (`bw`)
+
+Do zrobienia (8b i dalej):
+- [ ] FTP i FTPS (osobny crate, ten sam interfejs panelu)
+- [ ] F6 (przenoszenie), podgląd F3 pliku z serwera (przez plik tymczasowy), kopiowanie serwer -> serwer, zakładki i historia na serwerze, uprawnienia/chmod
+- [ ] Osobna kolejka transferów w oknie (jak w FileZilli) z listą oczekujących, pauzą i ponawianiem
+- [ ] Wtyczki (druga połowa etapu 8 z tabeli)
+- [ ] Hasła w systemowym magazynie (Gnome Keyring / Windows Credential Manager) zamiast jawnego tekstu
 
 ## Znane uproszczenia szkieletu
 - Interfejs sprawdzony ręcznie na Linuksie (Linux Mint, X11, wgpu); **nie był jeszcze uruchamiany

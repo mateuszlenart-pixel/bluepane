@@ -298,6 +298,11 @@ impl Session {
             .remote_of(side)
             .map(|r| r.path.clone())
             .ok_or_else(|| EngineError("panel nie jest połączony z serwerem".into()))?;
+        // The path bar shows `sftp://user@host:22/dir`: take the part after the host.
+        let text = match text.strip_prefix("sftp://") {
+            Some(rest) => rest.find('/').map_or("/", |at| &rest[at..]),
+            None => text,
+        };
         let path = if text.starts_with('/') {
             text.to_string()
         } else {
