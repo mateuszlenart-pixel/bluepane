@@ -32,6 +32,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
+| Ctrl+F2 | zmiana nazw wielu plików (okno z podglądem nowych nazw) |
 | Alt+S | synchronizacja katalogów obu paneli (okno) |
 | Alt+F5 / Alt+F9 | pakuj (okno) / rozpakuj archiwum pod kursorem lub otwarte |
 | Ctrl+T / Ctrl+W | nowa zakładka (ten sam katalog) / zamknij zakładkę |
@@ -44,6 +45,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Ctrl+M / Ctrl+Shift+M | zaznacz / odznacz po masce (np. `*.txt;*.md`, `?` = jeden znak) |
 | Ctrl+F3 … F6 | sortuj po nazwie / rozszerzeniu / dacie / rozmiarze (drugi raz = odwrotnie); klik w nagłówek kolumny też |
 | Ctrl+L | wiersz poleceń z `cd ` (przejście do wpisanej ścieżki) |
+| Ctrl+klik / Shift+klik / Ctrl+Shift+klik | zaznacz wiersz / zakres od ostatnio klikniętego / dodaj zakres (jak w Windows; zwykły klik tylko przesuwa kursor); komenda `click <wiersz> [ctrl\|shift\|ctrlshift]` |
 | Spacja, Insert | zaznacz i przejdź niżej |
 | F2 | zmień nazwę (okno z bieżącą nazwą; nie nadpisuje istniejących) |
 | F3 | podgląd pliku (tekst lub hex, dowolnie duży) |
@@ -59,7 +61,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`sync`, `syncrun`, `syncset`, `syncclose`,
+`sync`, `syncrun`, `syncset`, `syncclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -140,6 +142,28 @@ do katalogu z wersjami albo trwale (tylko na jawne życzenie). Pozycje niedostę
 są zgłaszane i nie są ruszane. Z wiersza poleceń:
 `sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
 `syncset <n> <kierunek>`, `syncrun`, `syncclose`.
+
+## Zmiana nazw wielu plików (Ctrl+F2)
+
+Okno działa na zaznaczonych plikach (bez zaznaczenia: na pliku pod kursorem). Lista pokazuje
+**starą i nową nazwę na żywo**, nic nie jest zmieniane przed **Start** (F5); **Cofnij** (Ctrl+Z)
+przywraca poprzednie nazwy. Kliknięcie w nową nazwę pozwala wpisać ją ręcznie.
+
+- **Maska nazwy i rozszerzenia:** `[N]` nazwa, `[N2-5]` znaki od-do, `[N3-]` do końca, `[N2,3]` od-ile,
+  `[E]` rozszerzenie (też z zakresem), `[C]` licznik, `[C10+5:3]` licznik (start 10, krok 5, 3 cyfry),
+  `[Y]` `[M]` `[D]` `[h]` `[m]` `[s]` data i czas modyfikacji (też razem: `[YMD]`, `[hms]`),
+  `[P]` nazwa katalogu nadrzędnego, `[[]` i `[]]` to dosłowne nawiasy.
+- **Szukaj i zamień:** zwykły tekst albo wyrażenie regularne (RegWy; `$1` = grupa), tylko pierwsze
+  trafienie (1x), opcjonalnie razem z rozszerzeniem, bez rozróżniania wielkości liter.
+- **Duża/mała:** bez zmian, WIELKIE, małe, Każdy Wyraz Wielką, Pierwsza wielka.
+- **Bezpieczeństwo:** konflikty (te same nazwy, istniejący plik, niedozwolona nazwa) są zaznaczone
+  na czerwono i blokują Start; istniejące pliki nigdy nie są nadpisywane; zamiana nazw `a <-> b` działa;
+  gdy coś się nie uda w trakcie, wszystko wraca do stanu sprzed Start.
+
+Komendy: `multirename`, `mrset <pole> <wartość>` (pola: `name`, `ext`, `find`, `replace`, `regex`,
+`once`, `inclext`, `ignorecase`, `case`, `start`, `step`, `digits`, `reset`; wartość w cudzysłowie
+zachowuje spacje), `mrname <n> [nazwa]`, `mrrun`, `mrundo`, `mrclose`. Przykład bez okna:
+`bluepane-cli run <lewy> <prawy> "selectall" "multirename" "mrset name foto_[C]" "mrset digits 3" "mrrun"`.
 
 ## Kopiowanie i przenoszenie
 

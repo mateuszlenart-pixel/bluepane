@@ -222,6 +222,8 @@ pub struct Session {
     pub viewer: Option<Viewer>,
     /// The synchronization window (Alt+S); while it is set the UI shows it.
     pub sync: Option<SyncView>,
+    /// The multi-rename window (Ctrl+F2); while it is set the UI shows it.
+    pub rename: Option<crate::RenameView>,
     parked: [ParkedTabs; 2],
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
@@ -278,6 +280,7 @@ impl Session {
             auto_resolve: None,
             viewer: None,
             sync: None,
+            rename: None,
             parked: [ParkedTabs::default(), ParkedTabs::default()],
             current: None,
             queue: VecDeque::new(),
@@ -348,6 +351,18 @@ impl Session {
             Command::SyncRun => self.run_sync()?,
             Command::SyncSet(n, direction) => self.set_sync_direction(n, direction)?,
             Command::SyncClose => self.sync = None,
+            Command::MultiRename => self.start_multirename()?,
+            Command::MultiRenameSet(field, value) => self.multirename_set(&field, &value)?,
+            Command::MultiRenameName(n, name) => self.multirename_name(n, name)?,
+            Command::MultiRenameRun => self.multirename_run()?,
+            Command::MultiRenameUndo => self.multirename_undo()?,
+            Command::MultiRenameClose => self.rename = None,
+            Command::Click(row, mode) => {
+                if row > self.active_panel().entries.len() {
+                    return Err(EngineError(format!("click: nie ma wiersza {row}")));
+                }
+                self.active_panel_mut().click(row - 1, mode);
+            }
             Command::Tab(action) => self.tab_action(action)?,
             Command::Pack(args) => self.pack(args)?,
             Command::Unpack(args) => self.unpack(&args)?,

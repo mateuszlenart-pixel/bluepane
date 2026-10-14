@@ -15,7 +15,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 6 | Archiwa | ✅ | Enter wchodzi do archiwum, kopiowanie działa w obie strony |
 | 7 | Synchronizacja | ✅ | synchronizacja pokazuje zmiany przed wykonaniem |
 | 7b | Wyszukiwanie | ⬜ | szukanie po nazwie i treści w wielu katalogach, dyskach i archiwach |
-| 7c | Grupowa zmiana nazw | ⬜ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
+| 7c | Grupowa zmiana nazw | ✅ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
 | 8 | Sieć i wtyczki | ⬜ | SFTP działa jak katalog lokalny |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
 
@@ -89,12 +89,12 @@ Rozbudowane wyszukiwanie plików, najpierw silnik (komenda + testy), potem okno 
 - [ ] wewnątrz archiwów (ZIP, TAR, TAR.GZ, 7z, także z hasłem)
 - [ ] wyniki w oknie: przejście do pliku, podgląd (F3), wysłanie wyników do panelu; anulowanie i postęp
 
-### Etap 7c: grupowa zmiana nazw (wymaganie właściciela)
-Narzędzie wielokrotnej zmiany nazwy jak na dołączonym zrzucie ekranu (zaznaczone pliki -> maski nazwy i rozszerzenia z
-polami typu `[N]`, `[E]`, `[C]` licznik, `[Y]-[M]-[D]` data; szukaj/zamień, wielkość liter), z
-tabelą „stara nazwa -> nowa nazwa” **przed wykonaniem**, wykrywaniem kolizji nazw, cofnięciem ostatniej zmiany.
-- [ ] Silnik: parser masek i plan zmian (`Command` `multirename`), testy w katalogach tymczasowych
-- [ ] Okno z podglądem i edycją pojedynczych nowych nazw
+### Etap 7c: grupowa zmiana nazw
+- [x] Crate `bluepane-rename`: maski `[N]` `[E]` `[C]` `[Y][M][D][h][m][s]` `[P]` z zakresami, szukaj/zamień (tekst, regex, 1x, z rozszerzeniem), wielkość liter, plan z konfliktami
+- [x] Wykonanie dwufazowe (przez nazwy tymczasowe): zamiany `a <-> b`, zmiana samej wielkości liter, nigdy bez nadpisania, wycofanie przy błędzie; cofnięcie ostatniej zmiany
+- [x] Komendy `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`; okno Ctrl+F2 z listą stara/nowa nazwa na żywo i ręczną edycją pojedynczej nazwy
+- [ ] Nie ma: wtyczek `[=?]` (pole z zrzutu wzorca), zapisu/odczytu zestawów ustawień (F2 w oknie wzorca), kolumn sortowania w oknie, wstawiania pól w miejscu kursora (przyciski dopisują na końcu maski)
+- [ ] Do sprawdzenia ręcznie (Linux i Windows): wygląd okna, klikanie w nową nazwę, nazwy niedozwolone w Windows
 
 ### Etap 8: FTP/SFTP
 Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**:

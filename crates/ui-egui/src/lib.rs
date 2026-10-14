@@ -3,13 +3,14 @@
 //! The UI only translates input into command lines and draws the engine's state.
 //! It contains no file system logic.
 
+mod rename_ui;
 mod sync_ui;
 
 use std::time::Duration;
 
 use bluepane_engine::{
-    format_modified, human_size, name_parts, ArchiveFormat, Command, CompressionLevel, InputKind,
-    Panel, Pending, Session, SortKey, TabAction, ViewMode,
+    format_modified, human_size, name_parts, ArchiveFormat, ClickMode, Command, CompressionLevel,
+    InputKind, Panel, Pending, Session, SortKey, TabAction, ViewMode,
 };
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
@@ -27,6 +28,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Alt+F5", "Pakuj", "pack"),
     ("Alt+F9", "Rozpakuj", "unpack"),
     ("Alt+S", "Synchronizuj", "sync"),
+    ("Ctrl+F2", "Zmień nazwy", "multirename"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -42,6 +44,8 @@ pub struct BluepaneUi {
     path_text: [String; 2],
     /// Settings being edited in the synchronization window.
     sync_form: Option<sync_ui::SyncForm>,
+    /// The multi-rename row whose new name is being typed by hand, and the text so far.
+    rename_edit: Option<(usize, String)>,
 }
 
 impl BluepaneUi {
@@ -54,6 +58,7 @@ impl BluepaneUi {
             pack_focused: false,
             path_text: [String::new(), String::new()],
             sync_form: None,
+            rename_edit: None,
         }
     }
 
@@ -83,6 +88,8 @@ impl BluepaneUi {
                 self.viewer_ui(ui);
             } else if self.session.sync.is_some() {
                 self.sync_ui(ui);
+            } else if self.session.rename.is_some() {
+                self.rename_ui(ui);
             } else {
                 ui.columns(2, |columns| {
                     for (index, ui) in columns.iter_mut().enumerate() {
@@ -552,6 +559,11 @@ impl BluepaneUi {
             }
             return;
         }
+        if self.session.rename.is_some() {
+            // Typing in the multi-rename window must not start the panel filter.
+            self.rename_keys(&pressed);
+            return;
+        }
         if self.session.sync.is_some() {
             // The synchronization window has few keys; typing must not start the panel filter.
             let dirty = self.sync_form_is_dirty();
@@ -903,7 +915,8 @@ impl BluepaneUi {
                         format_modified(entry.modified),
                     );
                     if response.clicked() {
-                        clicked = Some(row);
+                        let m = ui.input(|i| i.modifiers);
+                        clicked = Some((row, (m.command, m.shift)));
                     }
                     if response.double_clicked() {
                         entered = Some(row);
@@ -911,9 +924,20 @@ impl BluepaneUi {
                 }
             });
 
-        if let Some(row) = clicked.or(entered) {
+        if let Some(row) = entered {
             self.session.active = index;
             self.session.panels[index].cursor = row;
+        }
+        if let Some((row, (ctrl, shift))) = clicked {
+            // Selecting with the mouse is a command like every other action.
+            self.session.active = index;
+            let mode = match (ctrl, shift) {
+                (false, false) => ClickMode::Plain,
+                (true, false) => ClickMode::Ctrl,
+                (false, true) => ClickMode::Shift,
+                (true, true) => ClickMode::CtrlShift,
+            };
+            let _ = self.session.execute(Command::Click(row + 1, mode));
         }
         if entered.is_some() {
             // Through the engine: Enter on an archive file opens it instead of doing nothing.

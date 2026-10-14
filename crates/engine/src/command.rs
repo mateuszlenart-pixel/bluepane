@@ -5,7 +5,7 @@ use bluepane_ops::Resolution;
 use bluepane_sync::{CompareBy, Deletion, Direction, Variant};
 use std::time::Duration;
 
-use crate::{EngineError, SortKey};
+use crate::{ClickMode, EngineError, SortKey};
 
 /// Names accepted at the command line (aliases excluded).
 pub const COMMAND_NAMES: &[&str] = &[
@@ -14,6 +14,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "enter",
     "cursor",
     "toggle",
+    "click",
     "select",
     "cd",
     "back",
@@ -34,6 +35,12 @@ pub const COMMAND_NAMES: &[&str] = &[
     "invert",
     "sort",
     "sync",
+    "multirename",
+    "mrset",
+    "mrname",
+    "mrrun",
+    "mrundo",
+    "mrclose",
 ];
 
 /// What the open file viewer should do.
@@ -131,6 +138,8 @@ pub enum Command {
     Cursor(i32),
     /// Toggle selection of the entry under the cursor and move down (Space, Insert).
     ToggleSelect,
+    /// A mouse click on a row of the active panel (1-based), with the keys held down.
+    Click(usize, ClickMode),
     /// Put the cursor on the entry with this name and select it.
     Select(String),
     /// Change directory in the active panel.
@@ -199,6 +208,18 @@ pub enum Command {
     SyncSet(usize, Direction),
     /// Close the synchronization view.
     SyncClose,
+    /// Open the multi-rename window for the selection (Ctrl+F2).
+    MultiRename,
+    /// Change one setting of the multi-rename window: `mrset name [N]_[C]`.
+    MultiRenameSet(String, String),
+    /// Set (or, without a name, clear) a hand-typed new name for row n (1-based).
+    MultiRenameName(usize, Option<String>),
+    /// Carry out the renames shown in the window.
+    MultiRenameRun,
+    /// Take back the last multi-rename run.
+    MultiRenameUndo,
+    /// Close the multi-rename window.
+    MultiRenameClose,
 }
 
 impl Command {
@@ -222,6 +243,7 @@ impl Command {
             "up" => Ok(Command::Up),
             "enter" => Ok(Command::Enter),
             "toggle" => Ok(Command::ToggleSelect),
+            "click" => parse_click(rest),
             "selmask" => need_arg("maska, np. *.txt").map(Command::SelectMask),
             "unselmask" => need_arg("maska, np. *.txt").map(Command::UnselectMask),
             "selectall" => Ok(Command::SelectAll),
@@ -249,6 +271,12 @@ impl Command {
             "syncrun" => Ok(Command::SyncRun),
             "syncset" => parse_syncset(rest),
             "syncclose" => Ok(Command::SyncClose),
+            "multirename" | "mr" => Ok(Command::MultiRename),
+            "mrset" => parse_mrset(rest),
+            "mrname" => parse_mrname(rest),
+            "mrrun" => Ok(Command::MultiRenameRun),
+            "mrundo" => Ok(Command::MultiRenameUndo),
+            "mrclose" => Ok(Command::MultiRenameClose),
             "view" | "f3" => Ok(Command::View),
             "edit" => Ok(Command::Edit),
             "viewer" => parse_viewer(rest).map(Command::Viewer),
@@ -490,6 +518,66 @@ fn parse_sync(args: &str) -> Result<SyncArgs, EngineError> {
         }
     }
     Ok(sync)
+}
+
+/// `mrset <field> <value>`; a value in double quotes keeps its spaces (`mrset replace " "`).
+fn parse_mrset(args: &str) -> Result<Command, EngineError> {
+    let usage = || {
+        EngineError(
+            "mrset: użycie: mrset <name|ext|find|replace|regex|once|inclext|ignorecase|case|start|step|digits|reset> <wartość>"
+                .into(),
+        )
+    };
+    let (field, value) = match args.split_once(char::is_whitespace) {
+        Some((field, value)) => (field, value.trim()),
+        None => (args, ""),
+    };
+    if field.is_empty() {
+        return Err(usage());
+    }
+    let value = value
+        .strip_prefix('"')
+        .and_then(|v| v.strip_suffix('"'))
+        .unwrap_or(value);
+    Ok(Command::MultiRenameSet(
+        field.to_ascii_lowercase(),
+        value.to_string(),
+    ))
+}
+
+/// `click <row> [ctrl|shift|ctrlshift]`
+fn parse_click(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("click: użycie: click <wiersz> [ctrl|shift|ctrlshift]".into());
+    let mut words = args.split_whitespace();
+    let row: usize = words
+        .next()
+        .and_then(|n| n.parse().ok())
+        .filter(|n| *n >= 1)
+        .ok_or_else(usage)?;
+    let mode = match words.next().map(str::to_ascii_lowercase).as_deref() {
+        None => ClickMode::Plain,
+        Some("ctrl") => ClickMode::Ctrl,
+        Some("shift") => ClickMode::Shift,
+        Some("ctrlshift") => ClickMode::CtrlShift,
+        Some(_) => return Err(usage()),
+    };
+    if words.next().is_some() {
+        return Err(usage());
+    }
+    Ok(Command::Click(row, mode))
+}
+
+fn parse_mrname(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("mrname: użycie: mrname <numer> [nowa nazwa]".into());
+    let (n, name) = match args.split_once(char::is_whitespace) {
+        Some((n, name)) => (n, Some(name.trim())),
+        None => (args, None),
+    };
+    let n: usize = n.parse().ok().filter(|n| *n >= 1).ok_or_else(usage)?;
+    Ok(Command::MultiRenameName(
+        n,
+        name.filter(|name| !name.is_empty()).map(str::to_string),
+    ))
 }
 
 fn parse_syncset(args: &str) -> Result<Command, EngineError> {
@@ -838,6 +926,65 @@ mod tests {
         assert!(Command::parse("").is_err());
         assert!(Command::parse("cursor x").is_err());
         assert!(Command::parse("frobnicate").is_err());
+    }
+
+    #[test]
+    fn multirename_commands_parse() {
+        assert_eq!(Command::parse("multirename"), Ok(Command::MultiRename));
+        assert_eq!(
+            Command::parse("mrset name [N]_[C]"),
+            Ok(Command::MultiRenameSet("name".into(), "[N]_[C]".into()))
+        );
+        assert_eq!(
+            Command::parse("mrset replace \" \""),
+            Ok(Command::MultiRenameSet("replace".into(), " ".into()))
+        );
+        assert_eq!(
+            Command::parse("mrset reset"),
+            Ok(Command::MultiRenameSet("reset".into(), String::new()))
+        );
+        assert!(Command::parse("mrset").is_err());
+        assert_eq!(
+            Command::parse("mrname 2 new.txt"),
+            Ok(Command::MultiRenameName(2, Some("new.txt".into())))
+        );
+        assert_eq!(
+            Command::parse("mrname 2"),
+            Ok(Command::MultiRenameName(2, None))
+        );
+        assert!(Command::parse("mrname x").is_err());
+        assert_eq!(Command::parse("mrrun"), Ok(Command::MultiRenameRun));
+        assert_eq!(Command::parse("mrundo"), Ok(Command::MultiRenameUndo));
+        assert_eq!(Command::parse("mrclose"), Ok(Command::MultiRenameClose));
+    }
+
+    #[test]
+    fn click_parses_row_and_modifier() {
+        assert_eq!(
+            Command::parse("click 3"),
+            Ok(Command::Click(3, ClickMode::Plain))
+        );
+        assert_eq!(
+            Command::parse("click 3 ctrl"),
+            Ok(Command::Click(3, ClickMode::Ctrl))
+        );
+        assert_eq!(
+            Command::parse("click 2 shift"),
+            Ok(Command::Click(2, ClickMode::Shift))
+        );
+        assert_eq!(
+            Command::parse("click 2 ctrlshift"),
+            Ok(Command::Click(2, ClickMode::CtrlShift))
+        );
+        for bad in [
+            "click",
+            "click 0",
+            "click x",
+            "click 1 alt",
+            "click 1 ctrl x",
+        ] {
+            assert!(Command::parse(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
