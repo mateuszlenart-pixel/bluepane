@@ -325,6 +325,15 @@ impl BluepaneUi {
             {
                 commands.push(Command::FindView(self.find_selected + 1));
             }
+            if ui
+                .add_enabled(count > 0, egui::Button::new("Do panelu"))
+                .on_hover_text(
+                    "pokaż wyniki jako listę w aktywnym panelu (kopiuj, przenoś, usuwaj)",
+                )
+                .clicked()
+            {
+                commands.push(Command::FindPanel);
+            }
             if ui.button("Ustawienia domyślne").clicked() {
                 commands.push(set("reset", String::new()));
             }

@@ -346,6 +346,43 @@ impl Session {
             .ok_or_else(|| EngineError(format!("nie ma wyniku {n}")))
     }
 
+    /// `findpanel`: every result as a list in the active panel.
+    pub(crate) fn find_panel(&mut self) -> Result<(), EngineError> {
+        let view = self
+            .find
+            .as_ref()
+            .ok_or_else(|| EngineError("najpierw otwórz wyszukiwanie (find)".into()))?;
+        let (paths, in_archives) = {
+            let data = view.data();
+            let mut paths: Vec<PathBuf> = Vec::new();
+            let mut in_archives = 0;
+            for hit in &data.hits {
+                match &hit.location {
+                    Location::File(path) => paths.push(path.clone()),
+                    Location::InArchive { .. } => in_archives += 1,
+                }
+            }
+            (paths, in_archives)
+        };
+        if paths.is_empty() {
+            return Err(EngineError(if in_archives > 0 {
+                "wyniki są tylko w archiwach: lista w panelu pokazuje zwykłe pliki".into()
+            } else {
+                "nie ma wyników do pokazania".into()
+            }));
+        }
+        let count = paths.len();
+        let title = format!("Wyniki wyszukiwania ({count})");
+        self.active_panel_mut().show_paths(title, paths);
+        self.find_close();
+        self.status = if in_archives > 0 {
+            format!("Lista wyników: {count} (pominięto {in_archives} z archiwów). Backspace wraca do katalogu")
+        } else {
+            format!("Lista wyników: {count}. Backspace wraca do katalogu")
+        };
+        Ok(())
+    }
+
     /// `findgo n`: show the result in the active panel.
     pub(crate) fn find_go(&mut self, n: usize) -> Result<(), EngineError> {
         let hit = self.find_hit(n)?;
@@ -510,6 +547,17 @@ mod tests {
     }
 
     #[test]
+    fn the_search_has_two_keys() {
+        let (_tmp, s) = session();
+        assert_eq!(s.keymap.lookup("Alt+F7"), Some("find"));
+        assert_eq!(
+            s.keymap.lookup("Ctrl+F"),
+            Some("find"),
+            "Alt+F7 is a window manager key on Linux"
+        );
+    }
+
+    #[test]
     fn bad_input_is_reported() {
         let (_tmp, mut s) = session();
         assert!(s.run_line("findrun").is_err(), "window is not open");
@@ -536,6 +584,83 @@ mod tests {
             view.data().error.is_some(),
             "a broken regex is reported by the search"
         );
+    }
+
+    #[test]
+    fn results_become_a_list_in_the_panel() {
+        let (tmp, mut s) = session();
+        s.run_line("find").unwrap();
+        s.run_line("findset roots both").unwrap();
+        s.run_line("findset text needle").unwrap();
+        s.run_line("findrun").unwrap();
+        finish(&s);
+        s.run_line("findpanel").unwrap();
+        assert!(!s.find.as_ref().unwrap().visible);
+        let panel = s.active_panel();
+        assert_eq!(panel.virtual_list.as_ref().unwrap().paths.len(), 3);
+        let names: Vec<_> = panel.entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["..", "a.txt", "c.md", "d.txt"]);
+        assert_eq!(panel.cwd, tmp.path().join("left"), "cwd stays where it was");
+
+        // Copy works on the listed files wherever they are.
+        s.run_line("selectall").unwrap();
+        s.panels[1] = crate::Panel::new(tmp.path().join("out"));
+        fs::create_dir_all(tmp.path().join("out")).unwrap();
+        s.panels[1].change_dir(tmp.path().join("out"));
+        s.run_line("copy").unwrap();
+        for _ in 0..500 {
+            s.poll();
+            if !s.is_busy() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let mut copied: Vec<_> = fs::read_dir(tmp.path().join("out"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        copied.sort();
+        assert_eq!(copied, ["a.txt", "c.md", "d.txt"]);
+
+        // Backspace leaves the list.
+        s.run_line("up").unwrap();
+        assert!(s.active_panel().virtual_list.is_none());
+        assert!(s.active_panel().entries.iter().any(|e| e.name == "sub"));
+    }
+
+    #[test]
+    fn a_list_drops_files_that_disappear_and_refuses_to_be_a_target() {
+        let (tmp, mut s) = session();
+        s.run_line("find").unwrap();
+        s.run_line("findset name *.txt").unwrap();
+        s.run_line("findrun").unwrap();
+        finish(&s);
+        s.run_line("findpanel").unwrap();
+        fs::remove_file(tmp.path().join("left/a.txt")).unwrap();
+        s.run_line("refresh").unwrap();
+        let names: Vec<_> = s
+            .active_panel()
+            .entries
+            .iter()
+            .map(|e| e.name.clone())
+            .collect();
+        assert_eq!(names, ["..", "b.txt"]);
+
+        // The other panel cannot copy into a list, nor create folders in it.
+        s.run_line("switch").unwrap();
+        s.run_line("select d.txt").unwrap();
+        assert!(s.run_line("copy").is_err());
+        s.run_line("switch").unwrap();
+        assert!(s.run_line("mkdir x").is_err());
+        assert!(!tmp.path().join("left/x").exists());
+    }
+
+    #[test]
+    fn archive_only_results_do_not_make_a_list() {
+        let (_tmp, mut s) = session();
+        assert!(s.run_line("findpanel").is_err(), "no search window");
+        s.run_line("find").unwrap();
+        assert!(s.run_line("findpanel").is_err(), "no results");
     }
 
     #[test]

@@ -86,7 +86,8 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] Wiele katalogów i dysków naraz (`all` = wszystkie wolumeny), bez podwójnego przeszukiwania zagnieżdżonych katalogów i bez śledzenia dowiązań
 - [x] Archiwa ZIP/TAR/TAR.GZ/7z bez rozpakowywania na dysk (`archive::visit`), hasła, zgłaszanie zaszyfrowanej zawartości
 - [x] Komendy `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`; osobny wątek (nie blokuje kolejki zadań); okno Alt+F7 z wynikami na żywo
-- [ ] Nie ma: wyników jako wirtualnego katalogu w panelu (kopiuj/usuń z wyników), zapisu zestawów kryteriów, wyszukiwania w archiwach zagnieżdżonych, podglądu pliku z archiwum prosto z wyniku (jest przejście do archiwum), kodowań innych niż UTF-8/16 i CP1250, indeksu (każde szukanie czyta dysk od nowa)
+- [x] Wyniki jako wirtualny katalog w panelu (`findpanel`, `Panel::show_paths`): kopiuj / przenieś / usuń / podgląd / zmiana nazw na liście; znikające pliki same odpadają z listy
+- [ ] Nie ma: zapisu zestawów kryteriów, wyszukiwania w archiwach zagnieżdżonych, podglądu pliku z archiwum prosto z wyniku (jest przejście do archiwum), kodowań innych niż UTF-8/16 i CP1250, indeksu (każde szukanie czyta dysk od nowa)
 - [ ] Do sprawdzenia ręcznie na Windows i Linuksie: wygląd okna, szukanie na „wszystkich dyskach”, duże drzewa (czas, pamięć)
 
 ### Etap 7c: grupowa zmiana nazw

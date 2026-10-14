@@ -30,7 +30,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Alt+F9", "Rozpakuj", "unpack"),
     ("Alt+S", "Synchronizuj", "sync"),
     ("Ctrl+F2", "Zmień nazwy", "multirename"),
-    ("Alt+F7", "Szukaj", "find"),
+    ("Ctrl+F", "Szukaj", "find"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -731,7 +731,11 @@ impl BluepaneUi {
         let path_id = egui::Id::new(("path-bar", index));
         let editing = ui.ctx().memory(|m| m.has_focus(path_id));
         if !editing {
-            self.path_text[index] = self.session.panels[index].location().display().to_string();
+            let panel = &self.session.panels[index];
+            self.path_text[index] = match &panel.virtual_list {
+                Some(list) => list.title.clone(),
+                None => panel.location().display().to_string(),
+            };
         }
 
         ui.horizontal(|ui| {
@@ -892,11 +896,17 @@ impl BluepaneUi {
                     };
                     let cols = Columns::split(rect);
                     let (stem, ext) = name_parts(&entry.name, entry.is_dir());
-                    let name = if entry.is_dir() {
+                    let mut name = if entry.is_dir() {
                         format!("[{stem}]")
                     } else {
                         stem.to_string()
                     };
+                    // In a list of results the folder is part of what identifies a row.
+                    if panel.virtual_list.is_some() && !bluepane_engine::is_parent_entry(entry) {
+                        if let Some(dir) = entry.path.parent() {
+                            name = format!("{name}    {}", dir.display());
+                        }
+                    }
                     let size = if entry.is_dir() {
                         "<DIR>".to_string()
                     } else {
