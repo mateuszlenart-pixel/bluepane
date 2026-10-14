@@ -190,10 +190,18 @@ pub fn scan(options: &ScanOptions, progress: &Progress, each: &mut dyn FnMut(Hos
         .flat_map(|ip| options.service_ports.iter().map(move |port| (*ip, *port)))
         .collect();
     progress.set_total(0, (probes.len() + pairs.len()) as u64);
+    // What the probes found open counts too, but only for ports the user asked about.
     let open: Mutex<HashMap<Ipv4Addr, BTreeSet<u16>>> = Mutex::new(
         found
             .iter()
-            .map(|(ip, (_, ports))| (*ip, ports.clone()))
+            .map(|(ip, (_, ports))| {
+                let wanted = ports
+                    .iter()
+                    .filter(|port| options.service_ports.contains(port))
+                    .copied()
+                    .collect();
+                (*ip, wanted)
+            })
             .collect(),
     );
     parallel(pairs.len(), options.threads, progress, &|index| {
@@ -298,6 +306,23 @@ mod tests {
         assert!(last.latency.is_some());
         // First "it is there", then the same host with its services.
         assert!(reports.len() >= 2 && reports[0].services.is_empty());
+    }
+
+    #[test]
+    fn only_the_requested_ports_are_listed() {
+        // The probe finds this port open, but the user asked about another one.
+        let (_open, probe) = listener();
+        let (_other, asked) = listener();
+        let (reports, summary) = run(&options(&[probe], &[asked]));
+        assert_eq!(summary.hosts, 1, "the probe still finds the host");
+        let ports: Vec<u16> = reports
+            .last()
+            .unwrap()
+            .services
+            .iter()
+            .map(|s| s.port)
+            .collect();
+        assert_eq!(ports, [asked]);
     }
 
     #[test]
