@@ -35,6 +35,8 @@ impl Default for Keymap {
             ("Alt+S", "sync"),
             ("Ctrl+F2", "multirename"),
             ("Alt+F7", "find"),
+            // Many Linux window managers (Cinnamon, KDE, ...) take Alt+F7 for moving windows.
+            ("Ctrl+F", "find"),
             ("F7", "mkdir"),
             ("F8", "delete"),
             ("F9", "refresh"),

@@ -32,7 +32,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
-| Alt+F7 | wyszukiwanie plików (okno; wyniki zostają po zamknięciu) |
+| Ctrl+F, Alt+F7 | wyszukiwanie plików (okno; wyniki zostają po zamknięciu) |
 | Ctrl+F2 | zmiana nazw wielu plików (okno z podglądem nowych nazw) |
 | Alt+S | synchronizacja katalogów obu paneli (okno) |
 | Alt+F5 / Alt+F9 | pakuj (okno) / rozpakuj archiwum pod kursorem lub otwarte |
@@ -144,9 +144,9 @@ są zgłaszane i nie są ruszane. Z wiersza poleceń:
 `sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
 `syncset <n> <kierunek>`, `syncrun`, `syncclose`.
 
-## Wyszukiwanie (Alt+F7)
+## Wyszukiwanie (Ctrl+F lub Alt+F7)
 
-Szuka w tle (równolegle z kopiowaniem itp.), a wyniki pojawiają się na bieżąco. Nic nie jest zapisywane.
+Alt+F7 bywa zajęty przez menedżer okien w Linuksie (przesuwanie okna), dlatego jest też Ctrl+F. Szuka w tle (równolegle z kopiowaniem itp.), a wyniki pojawiają się na bieżąco. Nic nie jest zapisywane.
 
 - **Nazwa:** maski (`*.rs;*.md`, `?` = jeden znak) albo wyrażenie regularne; z rozróżnianiem wielkości liter lub bez.
 - **Szukaj w:** aktywny panel, oba panele, **wszystkie dyski** albo lista katalogów oddzielonych `;`.
@@ -165,7 +165,7 @@ Szuka w tle (równolegle z kopiowaniem itp.), a wyniki pojawiają się na bież�
   (np. po przeniesieniu), same znikają z listy. Backspace lub `..` wraca do katalogu sprzed listy. Do listy nie da się kopiować ani zakładać
   w niej katalogów. Wyniki z archiwów nie trafiają na listę.
 - **Wyniki:** klik zaznacza, Enter lub dwuklik przechodzi do pliku w aktywnym panelu (w archiwum: do archiwum), F3 otwiera podgląd
-  w miejscu trafienia. Esc zatrzymuje szukanie, drugi Esc zamyka okno; wyniki zostają, `Alt+F7` pokazuje je znowu.
+  w miejscu trafienia. Esc zatrzymuje szukanie, drugi Esc zamyka okno; wyniki zostają, `Ctrl+F` pokazuje je znowu.
 
 Komendy: `find`, `findset <pole> <wartość>` (pola: `roots` (`here`, `both`, `all` lub ścieżki), `name`, `namergx`, `namecase`, `exclude`,
 `text`, `regex`, `case`, `words`, `enc` (`auto|utf8|cp1250|utf16`), `binary`, `archives`, `password`, `hidden`, `min`, `max`, `after`,

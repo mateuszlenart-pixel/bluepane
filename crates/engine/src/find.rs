@@ -547,6 +547,17 @@ mod tests {
     }
 
     #[test]
+    fn the_search_has_two_keys() {
+        let (_tmp, s) = session();
+        assert_eq!(s.keymap.lookup("Alt+F7"), Some("find"));
+        assert_eq!(
+            s.keymap.lookup("Ctrl+F"),
+            Some("find"),
+            "Alt+F7 is a window manager key on Linux"
+        );
+    }
+
+    #[test]
     fn bad_input_is_reported() {
         let (_tmp, mut s) = session();
         assert!(s.run_line("findrun").is_err(), "window is not open");

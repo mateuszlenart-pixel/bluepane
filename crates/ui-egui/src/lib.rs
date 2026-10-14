@@ -30,7 +30,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Alt+F9", "Rozpakuj", "unpack"),
     ("Alt+S", "Synchronizuj", "sync"),
     ("Ctrl+F2", "Zmień nazwy", "multirename"),
-    ("Alt+F7", "Szukaj", "find"),
+    ("Ctrl+F", "Szukaj", "find"),
     ("F9", "Odśwież", "refresh"),
 ];
 
