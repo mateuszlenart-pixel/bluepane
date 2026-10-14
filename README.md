@@ -32,6 +32,8 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
+| Ctrl+Shift+1 / 2 / 3 | skopiuj do schowka zaznaczone nazwy: bez rozszerzeń / z rozszerzeniami / pełne ścieżki (po jednej w linii; bez zaznaczenia: element pod kursorem) |
+| Ctrl+N | skaner sieci (urządzenia w zakresie adresów IP, ich porty i usługi) |
 | Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |
 | Ctrl+Shift+F4 | wyślij na serwer plik edytowany przez F4 |
 | Ctrl+S | serwery SFTP / FTP / FTPS (zapisane połączenia) |
@@ -65,7 +67,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`sync`, `syncrun`, `syncset`, `syncclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
+`sync`, `syncrun`, `syncset`, `syncclose`, `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -155,6 +157,21 @@ do katalogu z wersjami albo trwale (tylko na jawne życzenie). Pozycje niedostę
 są zgłaszane i nie są ruszane. Z wiersza poleceń:
 `sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
 `syncset <n> <kierunek>`, `syncrun`, `syncclose`.
+
+## Skaner sieci (Ctrl+N)
+
+Pokazuje urządzenia w podanym zakresie adresów IP, jak Advanced IP Scanner. Skanuje tylko to, co wskażesz (domyślnie Twoją sieć /24); nic nie wysyła,
+tylko nawiązuje i zrywa połączenia TCP, więc nie potrzeba uprawnień administratora.
+
+- **Zakres:** `192.168.0.1-254`, `192.168.0.90-110`, `10.0.0.0/24`, pojedyncze adresy, kilka po przecinku (najwyżej 65 536 adresów). Przycisk „Moja sieć” wstawia zakres tego komputera.
+- **Skąd wiadomo, że urządzenie jest:** przyjmuje połączenie, odmawia go (zamknięty port odpowiada, więc ktoś tam jest) albo ma wpis w tablicy ARP systemu
+  (urządzenie z zablokowanymi wszystkimi portami też odpowiada na ARP w sieci lokalnej). Ping ICMP nie jest używany (wymagałby uprawnień).
+- **Co o nim wiadomo:** adres IP, nazwa (odwrotny DNS, można wyłączyć), adres MAC (tylko w sieci lokalnej), producent (z wbudowanego rejestru IEEE), opóźnienie
+  i **usługi**: otwarte porty z nazwami (HTTP, HTTPS, SSH/SFTP, FTP, RDP, SMB, drukarki, Proxmox 8006, Home Assistant 8123 i inne; własna lista portów, np. `22,80,8000-8010`).
+- **Filtr** zawęża tabelę po nazwie, adresie, producencie, MACu i usługach. Wyniki zostają po zamknięciu okna (`Ctrl+N` pokazuje je znowu). Esc zatrzymuje skanowanie.
+- Na Windows tablica ARP jest czytana poleceniem `arp -a`, na Linuksie z `/proc/net/arp`.
+
+Komendy: `scan`, `scanset <pole> <wartość>` (pola: `range`, `ports`, `names`, `arp`, `filter`, `timeout`, `reset`), `scanrun`, `scanstop`, `scanclose`.
 
 ## Kolejka zadań (Ctrl+J)
 

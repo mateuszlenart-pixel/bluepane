@@ -13,8 +13,9 @@ use crate::job::{
     SyncJob,
 };
 use crate::{
-    is_parent_entry, name_parts, parse_size, Command, EngineError, Keymap, Mask, PackArgs, Panel,
-    SyncArgs, SyncFilter, SyncPreview, SyncSettings, TabAction, UnpackArgs, Viewer, ViewerAction,
+    is_parent_entry, name_parts, parse_size, Command, EngineError, Keymap, Mask, NameFormat,
+    PackArgs, Panel, SyncArgs, SyncFilter, SyncPreview, SyncSettings, TabAction, UnpackArgs,
+    Viewer, ViewerAction,
 };
 
 /// What a name dialog is for.
@@ -235,6 +236,8 @@ pub struct Session {
     pub find: Option<crate::FindView>,
     /// A document shown as pages (F3 on a PDF; Word, Excel, OpenDocument through LibreOffice).
     pub pages: Option<crate::PageViewer>,
+    /// The network scanner window (Ctrl+N).
+    pub scan: Option<crate::ScanView>,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
@@ -246,6 +249,8 @@ pub struct Session {
     pub(crate) remote_edit: Option<RemoteEdit>,
     /// The queue is paused: the running job finishes, the next ones wait.
     pub paused: bool,
+    /// Text the front end should put on the system clipboard (taken by `take_clipboard`).
+    clipboard: Option<String>,
     /// The queue window is open (Ctrl+J).
     pub queue_open: bool,
     /// The last finished jobs, newest first (for "retry" in the queue window).
@@ -378,12 +383,14 @@ impl Session {
             rename: None,
             find: None,
             pages: None,
+            scan: None,
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
             editor: Editor(std::sync::Arc::new(open_in_editor)),
             remote_edit: None,
             paused: false,
+            clipboard: None,
             queue_open: false,
             finished: VecDeque::new(),
             sites_open: false,
@@ -408,6 +415,37 @@ impl Session {
 
     pub fn active_panel_mut(&mut self) -> &mut Panel {
         &mut self.panels[self.active]
+    }
+
+    /// The text a `copynames` command asked to put on the clipboard, once. The window copies it
+    /// to the system clipboard (the engine knows nothing about the toolkit).
+    pub fn take_clipboard(&mut self) -> Option<String> {
+        self.clipboard.take()
+    }
+
+    /// `copynames`: the selection (or the entry under the cursor) as text, one per line.
+    fn copy_names(&mut self, format: NameFormat) -> Result<(), EngineError> {
+        let panel = self.active_panel();
+        let lines: Vec<String> = panel
+            .target_entries()
+            .into_iter()
+            .map(|entry| match format {
+                NameFormat::Stem => name_parts(&entry.name, entry.is_dir()).0.to_string(),
+                NameFormat::File => entry.name.clone(),
+                NameFormat::Path => entry.path.to_string_lossy().into_owned(),
+            })
+            .collect();
+        if lines.is_empty() {
+            return Err(EngineError("nic nie zaznaczono".into()));
+        }
+        let what = match format {
+            NameFormat::Stem => "nazw bez rozszerzeń",
+            NameFormat::File => "nazw z rozszerzeniami",
+            NameFormat::Path => "pełnych ścieżek",
+        };
+        self.status = format!("Skopiowano do schowka: {} {what}", lines.len());
+        self.clipboard = Some(lines.join("\n"));
+        Ok(())
     }
 
     /// Parses and executes a command line. On error the message is also put in `status`.
@@ -465,6 +503,12 @@ impl Session {
             Command::Page(target) => self.page_move(target)?,
             Command::PageZoom(change) => self.page_zoom(change)?,
             Command::PageClose => self.page_close(),
+            Command::CopyNames(format) => self.copy_names(format)?,
+            Command::Scan => self.open_scan(),
+            Command::ScanSet(field, value) => self.scan_set(&field, &value)?,
+            Command::ScanRun => self.scan_run()?,
+            Command::ScanStop => self.scan_stop(),
+            Command::ScanClose => self.scan_close(),
             Command::Queue => self.queue_open = true,
             Command::QueueClose => self.queue_open = false,
             Command::QueuePause => self.pause_queue(true),
@@ -4232,5 +4276,73 @@ mod tests {
         s.run_line("syncclose").unwrap();
         assert!(s.sync.is_none());
         assert_eq!(s.keymap.lookup("Alt+S"), Some("sync"));
+    }
+}
+
+#[cfg(test)]
+mod clipboard_tests {
+    use super::*;
+
+    fn session() -> (tempfile::TempDir, Session) {
+        let tmp = tempfile::tempdir().unwrap();
+        let left = tmp.path().join("left");
+        std::fs::create_dir_all(left.join("folder.v2")).unwrap();
+        std::fs::write(left.join("report.final.txt"), "x").unwrap();
+        std::fs::write(left.join("Makefile"), "x").unwrap();
+        std::fs::write(left.join("data.csv"), "x").unwrap();
+        let session = Session::new(left, tmp.path().join("right"));
+        (tmp, session)
+    }
+
+    #[test]
+    fn names_are_copied_in_three_shapes_one_per_line() {
+        let (tmp, mut s) = session();
+        s.run_line("select data.csv").unwrap();
+        s.run_line("select report.final.txt").unwrap();
+        s.run_line("select folder.v2").unwrap();
+        s.run_line("select Makefile").unwrap();
+        s.run_line("copynames stem").unwrap();
+        assert_eq!(
+            s.take_clipboard().as_deref(),
+            Some("folder.v2\ndata\nMakefile\nreport.final"),
+            "folders and files without an extension keep their whole name"
+        );
+        assert!(s.take_clipboard().is_none(), "taken once");
+        s.run_line("copynames file").unwrap();
+        assert_eq!(
+            s.take_clipboard().as_deref(),
+            Some("folder.v2\ndata.csv\nMakefile\nreport.final.txt")
+        );
+        s.run_line("copynames").unwrap();
+        assert!(
+            s.take_clipboard().is_some(),
+            "the default is the name with its extension"
+        );
+        s.run_line("copynames path").unwrap();
+        let paths = s.take_clipboard().unwrap();
+        let first = tmp.path().join("left").join("folder.v2");
+        assert_eq!(paths.lines().next().unwrap(), first.to_string_lossy());
+        assert_eq!(paths.lines().count(), 4);
+        assert!(s.status.contains("pełnych ścieżek"), "{}", s.status);
+    }
+
+    #[test]
+    fn without_a_selection_the_entry_under_the_cursor_is_used() {
+        let (_tmp, mut s) = session();
+        s.run_line("select data.csv").unwrap();
+        s.run_line("unselectall").unwrap();
+        s.run_line("copynames file").unwrap();
+        assert_eq!(s.take_clipboard().as_deref(), Some("data.csv"));
+    }
+
+    #[test]
+    fn nothing_to_copy_and_bad_words_are_errors() {
+        let (_tmp, mut s) = session();
+        assert!(s.run_line("copynames").is_err(), "the cursor is on ..");
+        assert!(s.take_clipboard().is_none());
+        assert!(s.run_line("copynames bogus").is_err());
+        assert_eq!(s.keymap.lookup("Ctrl+Shift+Num1"), Some("copynames stem"));
+        assert_eq!(s.keymap.lookup("Ctrl+Shift+Num2"), Some("copynames file"));
+        assert_eq!(s.keymap.lookup("Ctrl+Shift+Num3"), Some("copynames path"));
     }
 }

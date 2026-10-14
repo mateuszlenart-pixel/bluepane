@@ -1,21 +1,22 @@
 //! Platform-specific code. Exactly one of the two modules is compiled in.
 
+mod arp;
 mod verbatim;
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
 pub use windows::{
-    copy_symlink, extended_path, file_mode, is_hidden, make_writable, set_mode, volumes,
-    DEFAULT_OPENER,
+    copy_symlink, extended_path, file_mode, is_hidden, make_writable, neighbours, set_mode,
+    volumes, DEFAULT_OPENER,
 };
 
 #[cfg(not(windows))]
 mod linux;
 #[cfg(not(windows))]
 pub use linux::{
-    copy_symlink, extended_path, file_mode, is_hidden, make_writable, set_mode, volumes,
-    DEFAULT_OPENER,
+    copy_symlink, extended_path, file_mode, is_hidden, make_writable, neighbours, set_mode,
+    volumes, DEFAULT_OPENER,
 };
 
 use std::ffi::OsString;

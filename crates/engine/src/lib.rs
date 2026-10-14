@@ -17,11 +17,13 @@ mod panel;
 mod queue;
 mod remote;
 mod remote_job;
+mod scan;
 mod session;
 mod viewer;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
 pub use bluepane_docs::PageImage;
+pub use bluepane_netscan::{local_range, Host as ScanHost, ScanSummary, Service as ScanService};
 pub use bluepane_ops::Resolution;
 pub use bluepane_remote::{bitwarden_available, Protocol, SecretServices, SecretStore, Site};
 pub use bluepane_rename::{
@@ -39,7 +41,8 @@ pub use bluepane_sync::{
     Variant as SyncVariant,
 };
 pub use command::{
-    parse_size, Command, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
+    parse_size, Command, NameFormat, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction,
+    COMMAND_NAMES,
 };
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};
@@ -56,6 +59,7 @@ pub use panel::{
     PARENT_NAME,
 };
 pub use queue::{FinishedJob, QueueLine};
+pub use scan::{ScanData, ScanForm, ScanView};
 pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };

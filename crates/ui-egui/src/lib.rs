@@ -7,6 +7,7 @@ mod find_ui;
 mod pages_ui;
 mod queue_ui;
 mod rename_ui;
+mod scan_ui;
 mod sites_ui;
 mod sync_ui;
 
@@ -36,6 +37,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Ctrl+F", "Szukaj", "find"),
     ("Ctrl+S", "Serwery", "sites"),
     ("Ctrl+J", "Kolejka", "queue"),
+    ("Ctrl+N", "Skaner", "scan"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -85,9 +87,14 @@ impl BluepaneUi {
     /// Draws one frame. Call this from `eframe::App::ui`.
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // Text a command wants on the clipboard (`copynames`).
+        if let Some(text) = self.session.take_clipboard() {
+            ctx.copy_text(text);
+        }
         // Collect what the background job reported; keep redrawing while it runs.
         self.session.poll();
-        let searching = self.session.find.as_ref().is_some_and(|f| f.is_running());
+        let searching = self.session.find.as_ref().is_some_and(|f| f.is_running())
+            || self.session.scan.as_ref().is_some_and(|v| v.is_running());
         if self.session.is_busy() || searching {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
@@ -107,6 +114,8 @@ impl BluepaneUi {
                 self.viewer_ui(ui);
             } else if self.session.sync.is_some() {
                 self.sync_ui(ui);
+            } else if self.session.scan.as_ref().is_some_and(|v| v.visible) {
+                self.scan_ui(ui);
             } else if self.session.queue_open {
                 self.queue_ui(ui);
             } else if self.session.sites_open {
@@ -590,6 +599,10 @@ impl BluepaneUi {
                     self.dispatch(&line);
                 }
             }
+            return;
+        }
+        if self.session.scan.as_ref().is_some_and(|v| v.visible) {
+            self.scan_keys(&pressed);
             return;
         }
         if self.session.queue_open {

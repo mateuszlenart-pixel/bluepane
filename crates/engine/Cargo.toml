@@ -16,6 +16,7 @@ bluepane-rename.workspace = true
 bluepane-search.workspace = true
 bluepane-remote.workspace = true
 bluepane-docs.workspace = true
+bluepane-netscan.workspace = true
 chrono.workspace = true
 tempfile.workspace = true
 

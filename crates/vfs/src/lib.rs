@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub use platform::{
-    config_dir, copy_symlink, extended_path, file_mode, home_dir, make_writable, open_external,
-    set_mode, volumes,
+    config_dir, copy_symlink, extended_path, file_mode, home_dir, make_writable, neighbours,
+    open_external, set_mode, volumes,
 };
 
 /// What a directory entry is, from the user's point of view.

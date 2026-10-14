@@ -43,6 +43,12 @@ pub const COMMAND_NAMES: &[&str] = &[
     "page",
     "pagezoom",
     "pageclose",
+    "copynames",
+    "scan",
+    "scanset",
+    "scanrun",
+    "scanstop",
+    "scanclose",
     "queue",
     "queueclose",
     "queuepause",
@@ -69,6 +75,17 @@ pub const COMMAND_NAMES: &[&str] = &[
     "mrundo",
     "mrclose",
 ];
+
+/// What `copynames` puts on the clipboard for each selected entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameFormat {
+    /// The name without its extension (`report`).
+    Stem,
+    /// The name with its extension (`report.txt`).
+    File,
+    /// The full path (`/home/me/docs/report.txt`).
+    Path,
+}
 
 /// What the open file viewer should do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -240,6 +257,13 @@ pub enum Command {
     /// Create a saved site or change one field of it: `siteset Proxmox host 10.0.0.2`.
     SiteSet(String, String, String),
     SiteDelete(String),
+    /// Open the network scanner (Ctrl+N), or show the last one again.
+    Scan,
+    /// Change one setting of the scanner: `scanset range 192.168.0.1-254`.
+    ScanSet(String, String),
+    ScanRun,
+    ScanStop,
+    ScanClose,
     /// Open the queue window (Ctrl+J): what runs, what waits, what finished.
     Queue,
     QueueClose,
@@ -258,6 +282,8 @@ pub enum Command {
     PageZoom(ZoomChange),
     /// Close the page view.
     PageClose,
+    /// Copy the names (or paths) of the selected entries, one per line, to the clipboard.
+    CopyNames(NameFormat),
     /// Send the file edited with F4 on a server back to it (Ctrl+Shift+F4).
     EditSend,
     /// Save the password of a site where its secret is kept (system store, Bitwarden, or
@@ -356,6 +382,22 @@ impl Command {
             "page" => parse_page(rest).map(Command::Page),
             "pagezoom" => parse_pagezoom(rest).map(Command::PageZoom),
             "pageclose" => Ok(Command::PageClose),
+            "copynames" => match rest.to_ascii_lowercase().as_str() {
+                "" | "file" | "name" | "ext" => Ok(Command::CopyNames(NameFormat::File)),
+                "stem" | "short" => Ok(Command::CopyNames(NameFormat::Stem)),
+                "path" | "full" => Ok(Command::CopyNames(NameFormat::Path)),
+                _ => Err(EngineError(
+                    "copynames: użycie: copynames [stem|file|path] (bez rozszerzenia, z rozszerzeniem, pełna ścieżka)".into(),
+                )),
+            },
+            "scan" => Ok(Command::Scan),
+            "scanset" => parse_mrset(rest).map(|c| match c {
+                Command::MultiRenameSet(f, v) => Command::ScanSet(f, v),
+                other => other,
+            }),
+            "scanrun" => Ok(Command::ScanRun),
+            "scanstop" => Ok(Command::ScanStop),
+            "scanclose" => Ok(Command::ScanClose),
             "queue" => Ok(Command::Queue),
             "queueclose" => Ok(Command::QueueClose),
             "queuepause" => Ok(Command::QueuePause),

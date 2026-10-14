@@ -19,6 +19,7 @@ const ALLOWED: &[(&str, &[&str])] = &[
     ("bluepane-rename", &["bluepane-ops"]),
     ("bluepane-remote", &["bluepane-ops", "bluepane-vfs"]),
     ("bluepane-docs", &[]),
+    ("bluepane-netscan", &["bluepane-ops", "bluepane-vfs"]),
     (
         "bluepane-search",
         &["bluepane-ops", "bluepane-vfs", "bluepane-archive"],
@@ -34,6 +35,7 @@ const ALLOWED: &[(&str, &[&str])] = &[
             "bluepane-search",
             "bluepane-remote",
             "bluepane-docs",
+            "bluepane-netscan",
         ],
     ),
     ("bluepane-ui-egui", &["bluepane-engine"]),

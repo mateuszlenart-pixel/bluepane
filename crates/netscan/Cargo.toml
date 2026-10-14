@@ -1,0 +1,17 @@
+[package]
+name = "bluepane-netscan"
+description = "Network scanner: hosts in an address range, open ports and services, names and manufacturers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bluepane-ops.workspace = true
+bluepane-vfs.workspace = true
+dns-lookup.workspace = true
+oui-data.workspace = true
+
+[lints]
+workspace = true

@@ -19,6 +19,7 @@ bluepane-rename = { path = "crates/rename" }
 bluepane-search = { path = "crates/search" }
 bluepane-remote = { path = "crates/remote" }
 bluepane-docs = { path = "crates/docs" }
+bluepane-netscan = { path = "crates/netscan" }
 bluepane-engine = { path = "crates/engine" }
 bluepane-ui-egui = { path = "crates/ui-egui" }
 
@@ -51,6 +52,9 @@ keyring = "4"
 # Text of PDF files for the fallback preview, and PDF page rendering (both pure Rust).
 pdf-extract = "0.12"
 hayro = { version = "0.8", features = ["embed-fonts"] }
+# Network scanner: reverse DNS names and the manufacturer behind a MAC address.
+dns-lookup = "4"
+oui-data = "0.2"
 # Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
