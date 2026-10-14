@@ -5,6 +5,7 @@
 //! without a window.
 
 mod command;
+mod documents;
 mod find;
 mod format;
 mod job;

@@ -1,0 +1,18 @@
+[package]
+name = "bluepane-docs"
+description = "Text of documents for the viewer: Word (DOCX), OpenDocument (ODT, ODS), Excel (XLSX) and PDF"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+zip.workspace = true
+pdf-extract.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

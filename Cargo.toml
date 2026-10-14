@@ -18,6 +18,7 @@ bluepane-sync = { path = "crates/sync" }
 bluepane-rename = { path = "crates/rename" }
 bluepane-search = { path = "crates/search" }
 bluepane-remote = { path = "crates/remote" }
+bluepane-docs = { path = "crates/docs" }
 bluepane-engine = { path = "crates/engine" }
 bluepane-ui-egui = { path = "crates/ui-egui" }
 
@@ -47,6 +48,8 @@ sha2 = "0.10"
 rcgen = "0.14"
 # System password store (Secret Service on Linux via pure-Rust zbus, Credential Manager on Windows).
 keyring = "4"
+# Text of PDF files for the preview (pure Rust).
+pdf-extract = "0.12"
 # Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

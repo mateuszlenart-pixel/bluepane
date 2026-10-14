@@ -807,7 +807,7 @@ impl Session {
             } => {
                 let file = dest.join(sources.first().map_or("", |s| remote_name(s)));
                 if report.done == 1 && report.failed.is_empty() {
-                    match crate::Viewer::open(&file) {
+                    match crate::documents::viewer_for_file(&file, dest) {
                         Ok(viewer) => {
                             self.remove_preview_dir();
                             self.preview_dir = Some(dest.clone());

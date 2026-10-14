@@ -1586,7 +1586,7 @@ impl Session {
             return self.preview_from_archive();
         }
         let path = self.entry_to_open()?;
-        let viewer = Viewer::open(&path)?;
+        let viewer = self.viewer_for_local(&path)?;
         self.status = format!(
             "Podgląd: {}",
             path.file_name()
@@ -1712,7 +1712,7 @@ impl Session {
                 Some(dir.join(relative))
             })
             .unwrap_or_else(|| dir.clone());
-        match Viewer::open(&file) {
+        match crate::documents::viewer_for_file(&file, &dir) {
             Ok(viewer) => {
                 self.remove_preview_dir();
                 self.preview_dir = Some(dir);

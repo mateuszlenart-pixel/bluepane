@@ -15,10 +15,12 @@ bluepane-sync.workspace = true
 bluepane-rename.workspace = true
 bluepane-search.workspace = true
 bluepane-remote.workspace = true
+bluepane-docs.workspace = true
 chrono.workspace = true
 tempfile.workspace = true
 
 [dev-dependencies]
+zip.workspace = true
 
 [lints]
 workspace = true
