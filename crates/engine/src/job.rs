@@ -13,6 +13,7 @@ use bluepane_archive::{
     Selection, VerifyReport,
 };
 use bluepane_ops::{self as ops, Conflict, OpError, Outcome, Progress, Resolution};
+use bluepane_sftp as sftp;
 use bluepane_sync as sync;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +38,8 @@ pub enum JobKind {
     SyncCompare,
     /// Carries out a synchronization plan.
     SyncApply,
+    /// Something on an SFTP server: connect, list, transfer, delete, make a folder.
+    Remote,
 }
 
 impl JobKind {
@@ -54,6 +57,7 @@ impl JobKind {
             JobKind::ModifyArchive => "Zmiana archiwum",
             JobKind::SyncCompare => "Porównywanie folderów",
             JobKind::SyncApply => "Synchronizacja",
+            JobKind::Remote => "SFTP",
         }
     }
 
@@ -71,6 +75,7 @@ impl JobKind {
             JobKind::ModifyArchive => "Zmieniono archiwum",
             JobKind::SyncCompare => "Porównano",
             JobKind::SyncApply => "Zsynchronizowano",
+            JobKind::Remote => "Wykonano",
         }
     }
 }
@@ -97,6 +102,63 @@ pub struct SyncJob {
     pub preview: Option<Arc<sync::Preview>>,
 }
 
+/// What a [`JobKind::Remote`] job does on the server.
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)] // one value per job, short-lived
+pub enum RemoteOp {
+    /// Log in; the secret is looked up from the site when it is `None`. On success the job
+    /// also lists the start directory.
+    Connect {
+        site: sftp::Site,
+        secret: Option<String>,
+        trust: Option<String>,
+        known: sftp::KnownHosts,
+    },
+    List {
+        path: String,
+    },
+    Mkdir {
+        path: String,
+    },
+    Rename {
+        from: String,
+        to: String,
+    },
+    /// Removes files and, recursively, folders. Nothing is recoverable.
+    Delete {
+        paths: Vec<String>,
+    },
+    /// Copies these server paths into the local directory `dest`.
+    Download {
+        sources: Vec<String>,
+        dest: PathBuf,
+    },
+    /// Copies these local paths into the server directory `dest`.
+    Upload {
+        sources: Vec<PathBuf>,
+        dest: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct RemoteJob {
+    pub conn: Option<Arc<sftp::Connection>>,
+    pub op: RemoteOp,
+    /// The panel (0 or 1) that asked.
+    pub side: usize,
+}
+
+/// A server whose key is not remembered yet: the user decides whether to trust it.
+#[derive(Debug, Clone)]
+pub struct HostPrompt {
+    pub site: sftp::Site,
+    pub secret: Option<String>,
+    pub host: String,
+    pub port: u16,
+    pub algorithm: String,
+    pub fingerprint: String,
+}
+
 /// The extra settings of the archive and synchronization jobs.
 #[derive(Debug, Clone, Default)]
 pub struct ArchiveJob {
@@ -112,6 +174,8 @@ pub struct ArchiveJob {
     pub change: Option<Change>,
     /// Sync jobs.
     pub sync: Option<SyncJob>,
+    /// Remote (SFTP) jobs.
+    pub remote: Option<RemoteJob>,
     /// Open: the side (0 or 1) that asked.
     pub side: usize,
     /// Extract: this is a preview (F3), so show the file in the viewer once it is out.
@@ -178,6 +242,12 @@ pub struct Report {
     pub sync_preview: Option<Arc<sync::Preview>>,
     /// SyncApply: what was done.
     pub sync_done: Option<sync::ExecReport>,
+    /// Remote connect: the new session.
+    pub connected: Option<Arc<sftp::Connection>>,
+    /// Remote connect / list: the folder and what is in it.
+    pub remote_listing: Option<(String, Vec<sftp::RemoteEntry>)>,
+    /// Remote connect: the server's key is unknown.
+    pub host_prompt: Option<HostPrompt>,
     /// Pack: the files that make up the new archive.
     pub created: Vec<PathBuf>,
     /// Extract / pack: files written.
@@ -185,6 +255,7 @@ pub struct Report {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)] // one `Finished` per job; boxing would only add noise
 pub enum Event {
     Conflict {
         conflict: Conflict,
@@ -243,11 +314,11 @@ impl RunningJob {
 
 /// The worker's side of [`ops::Host`]: asks the session about conflicts and uses the
 /// platform helpers from `vfs`.
-struct WorkerHost {
-    tx: Sender<Event>,
-    progress: Progress,
+pub(crate) struct WorkerHost {
+    pub(crate) tx: Sender<Event>,
+    pub(crate) progress: Progress,
     /// Set by an "all" answer.
-    sticky: Option<Resolution>,
+    pub(crate) sticky: Option<Resolution>,
 }
 
 impl ops::Host for WorkerHost {
@@ -450,6 +521,9 @@ fn run_sync(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
 }
 
 fn run(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
+    if spec.kind == JobKind::Remote {
+        return crate::remote_job::run_remote(spec, progress, tx);
+    }
     if matches!(spec.kind, JobKind::SyncCompare | JobKind::SyncApply) {
         return run_sync(spec, progress, tx);
     }

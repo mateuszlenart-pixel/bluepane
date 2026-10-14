@@ -35,6 +35,12 @@ pub const COMMAND_NAMES: &[&str] = &[
     "invert",
     "sort",
     "sync",
+    "sites",
+    "siteset",
+    "sitedel",
+    "siteclose",
+    "connect",
+    "disconnect",
     "find",
     "findset",
     "findrun",
@@ -216,6 +222,18 @@ pub enum Command {
     SyncSet(usize, Direction),
     /// Close the synchronization view.
     SyncClose,
+    /// Open the site manager (Ctrl+S).
+    Sites,
+    /// Create a saved site or change one field of it: `siteset Proxmox host 10.0.0.2`.
+    SiteSet(String, String, String),
+    SiteDelete(String),
+    /// Close the site manager.
+    SiteClose,
+    /// Connect the active panel to a saved site; the optional text is the password (or the
+    /// key's passphrase).
+    Connect(String, Option<String>),
+    /// Leave the server and show the folder the panel was in before.
+    Disconnect,
     /// Open the search window (Alt+F7), or show the last one again.
     Find,
     /// Change one setting of the search window: `findset text needle`.
@@ -296,6 +314,13 @@ impl Command {
             "syncrun" => Ok(Command::SyncRun),
             "syncset" => parse_syncset(rest),
             "syncclose" => Ok(Command::SyncClose),
+            "sites" => Ok(Command::Sites),
+            "siteclose" => Ok(Command::SiteClose),
+            "siteset" => parse_siteset(rest),
+            "sitedel" => take_name("sitedel", rest).map(|(name, _)| Command::SiteDelete(name)),
+            "connect" => take_name("connect", rest)
+                .map(|(name, tail)| Command::Connect(name, Some(tail).filter(|t| !t.is_empty()))),
+            "disconnect" => Ok(Command::Disconnect),
             "find" => Ok(Command::Find),
             "findset" => parse_findset(rest),
             "findrun" => Ok(Command::FindRun),
@@ -551,6 +576,52 @@ fn parse_sync(args: &str) -> Result<SyncArgs, EngineError> {
         }
     }
     Ok(sync)
+}
+
+/// A site name at the start of `text`: one word, or several in double quotes
+/// (`"Home Assistant" rest`). Returns the name and what follows it.
+fn take_name(command: &str, text: &str) -> Result<(String, String), EngineError> {
+    let text = text.trim();
+    let (name, tail) = if let Some(quoted) = text.strip_prefix('"') {
+        match quoted.split_once('"') {
+            Some((name, tail)) => (name, tail),
+            None => (quoted, ""),
+        }
+    } else {
+        match text.split_once(char::is_whitespace) {
+            Some((name, tail)) => (name, tail),
+            None => (text, ""),
+        }
+    };
+    if name.trim().is_empty() {
+        return Err(EngineError(format!(
+            "{command}: podaj nazwę witryny (w cudzysłowie, jeśli ma spacje)"
+        )));
+    }
+    Ok((name.trim().to_string(), tail.trim().to_string()))
+}
+
+/// `siteset <name> <field> <value>` with fields host, port, user, key, start, secret.
+fn parse_siteset(args: &str) -> Result<Command, EngineError> {
+    let usage = || {
+        EngineError(
+            "siteset: użycie: siteset <nazwa> <host|port|user|key|start|secret> <wartość> (secret: ask, local:<hasło> albo bitwarden:<element>)"
+                .into(),
+        )
+    };
+    let (name, tail) = take_name("siteset", args)?;
+    let (field, value) = match tail.split_once(char::is_whitespace) {
+        Some((field, value)) => (field, value.trim()),
+        None => (tail.as_str(), ""),
+    };
+    if field.is_empty() {
+        return Err(usage());
+    }
+    Ok(Command::SiteSet(
+        name,
+        field.to_ascii_lowercase(),
+        value.to_string(),
+    ))
 }
 
 /// `findset <field> <value>`; quotes around the value are removed like for `mrset`.

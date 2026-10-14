@@ -14,6 +14,7 @@ bluepane-archive.workspace = true
 bluepane-sync.workspace = true
 bluepane-rename.workspace = true
 bluepane-search.workspace = true
+bluepane-sftp.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]

@@ -28,6 +28,8 @@ pub enum InputKind {
     ViewerFind,
     /// The password of an archive; the UI hides what is typed.
     ArchivePassword,
+    /// The password (or key passphrase) of this saved SFTP site; hidden like the above.
+    SitePassword(String),
 }
 
 /// The settings dialog of `pack` (Alt+F5). The UI edits the fields; `confirm` validates them.
@@ -121,6 +123,10 @@ pub enum Pending {
     Conflict(ConflictPrompt),
     /// The settings of an archive about to be created.
     Pack(PackForm),
+    /// An SFTP server with an unknown key: trust it and remember the key?
+    TrustHost(crate::job::HostPrompt),
+    /// Delete these server paths for good (panel `side` shows the server).
+    ConfirmRemoteDelete { side: usize, paths: Vec<String> },
 }
 
 /// What the progress bar shows about the running job.
@@ -227,6 +233,12 @@ pub struct Session {
     /// The search window (Alt+F7). Its search runs on its own thread, apart from the job
     /// queue, so copying and the like keep working meanwhile.
     pub find: Option<crate::FindView>,
+    /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
+    pub sites: bluepane_sftp::Sites,
+    pub known_hosts: bluepane_sftp::KnownHosts,
+    /// The site manager window is open.
+    pub sites_open: bool,
+    pub(crate) config_loaded: bool,
     parked: [ParkedTabs; 2],
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
@@ -285,6 +297,10 @@ impl Session {
             sync: None,
             rename: None,
             find: None,
+            sites: bluepane_sftp::Sites::in_memory(),
+            known_hosts: bluepane_sftp::KnownHosts::in_memory(),
+            sites_open: false,
+            config_loaded: false,
             parked: [ParkedTabs::default(), ParkedTabs::default()],
             current: None,
             queue: VecDeque::new(),
@@ -355,6 +371,12 @@ impl Session {
             Command::SyncRun => self.run_sync()?,
             Command::SyncSet(n, direction) => self.set_sync_direction(n, direction)?,
             Command::SyncClose => self.sync = None,
+            Command::Sites => self.open_sites(),
+            Command::SiteSet(name, field, value) => self.site_set(&name, &field, &value)?,
+            Command::SiteDelete(name) => self.site_delete(&name)?,
+            Command::SiteClose => self.sites_open = false,
+            Command::Connect(name, password) => self.connect_site(&name, password)?,
+            Command::Disconnect => self.disconnect()?,
             Command::Find => self.open_find(),
             Command::FindSet(field, value) => self.find_set(&field, &value)?,
             Command::FindRun => self.find_run()?,
@@ -386,7 +408,11 @@ impl Session {
             Command::Up => {
                 let panel = self.active_panel_mut();
                 if !panel.filter_backspace() {
-                    panel.up();
+                    if panel.remote.is_some() {
+                        self.remote_up();
+                    } else {
+                        self.active_panel_mut().up();
+                    }
                 }
             }
             Command::Enter => self.enter_current(),
@@ -395,6 +421,12 @@ impl Session {
             Command::Refresh => {
                 self.volumes = bluepane_vfs::volumes();
                 self.panels.iter_mut().for_each(Panel::reload);
+                self.remote_refresh_all();
+            }
+            Command::Back | Command::Forward if self.active_panel().remote.is_some() => {
+                return Err(EngineError(
+                    "historia katalogów nie działa na serwerze (Backspace idzie wyżej)".into(),
+                ));
             }
             Command::Back => self.active_panel_mut().back()?,
             Command::Forward => self.active_panel_mut().forward()?,
@@ -426,6 +458,9 @@ impl Session {
                 };
                 panel.cursor = index;
                 panel.selected.insert(panel.entries[index].path.clone());
+            }
+            Command::Cd(path) if self.active_panel().remote.is_some() => {
+                self.remote_cd(&path.to_string_lossy())?;
             }
             Command::Cd(path) => {
                 let panel = self.active_panel_mut();
@@ -512,6 +547,9 @@ impl Session {
 
     /// Copy or move the active panel's targets into the other panel's directory.
     fn transfer(&mut self, remove_source: bool) -> Result<(), EngineError> {
+        if self.panels.iter().any(|p| p.remote.is_some()) {
+            return self.remote_transfer(remove_source);
+        }
         if self.panels[1 - self.active].archive.is_some() {
             if self.active_panel().archive.is_some() {
                 return Err(EngineError(
@@ -586,6 +624,9 @@ impl Session {
 
     /// F8: ask first, then move to the trash.
     fn propose_delete(&mut self) -> Result<(), EngineError> {
+        if self.active_panel().remote.is_some() {
+            return self.remote_propose_delete();
+        }
         if self.active_panel().archive.is_some() {
             return self.propose_archive_removal();
         }
@@ -640,6 +681,14 @@ impl Session {
                 }
                 self.retry_with_password(text)?;
             }
+            Some(Pending::TrustHost(prompt)) => self.trust_host(prompt)?,
+            Some(Pending::ConfirmRemoteDelete { side, paths }) => {
+                self.remote_delete(side, paths)?
+            }
+            Some(Pending::Input {
+                kind: InputKind::SitePassword(site),
+                text,
+            }) => self.connect_site(&site, Some(text))?,
             Some(Pending::Pack(mut form)) => {
                 if let Err(err) = self.start_pack(&form) {
                     form.error = Some(err.0.clone());
@@ -654,7 +703,9 @@ impl Session {
                     InputKind::ViewerFind => {
                         self.viewer_action(ViewerAction::Find(Some(text.clone())))
                     }
-                    InputKind::ArchivePassword => unreachable!("handled in the arm above"),
+                    InputKind::ArchivePassword | InputKind::SitePassword(_) => {
+                        unreachable!("handled in the arms above")
+                    }
                 };
                 if let Err(err) = result {
                     // Keep the dialog open so the name can be corrected.
@@ -735,6 +786,11 @@ impl Session {
     /// Runs the job now, or queues it behind the running one.
     fn enqueue(&mut self, spec: JobSpec) {
         self.active_panel_mut().selected.clear();
+        self.enqueue_quiet(spec);
+    }
+
+    /// Queues a job without touching the selection (listings and connects).
+    pub(crate) fn enqueue_quiet(&mut self, spec: JobSpec) {
         if self.current.is_none() {
             self.start(spec);
         } else {
@@ -817,7 +873,9 @@ impl Session {
             return;
         }
 
-        let (text, is_error) = if matches!(spec.kind, JobKind::SyncCompare | JobKind::SyncApply) {
+        let (text, is_error) = if spec.kind == JobKind::Remote {
+            self.remote_result(&spec, report)
+        } else if matches!(spec.kind, JobKind::SyncCompare | JobKind::SyncApply) {
             self.sync_result(&spec, report)
         } else if matches!(
             spec.kind,
@@ -920,6 +978,7 @@ impl Session {
 
     /// `sync`: compare the two panels' directories (nothing is written).
     fn start_sync(&mut self, args: SyncArgs) -> Result<(), EngineError> {
+        self.deny_remote("synchronizacja")?;
         if self.panels.iter().any(|p| p.virtual_list.is_some()) {
             return Err(EngineError(
                 "synchronizacja działa na katalogach, nie na liście wyników".into(),
@@ -1366,6 +1425,7 @@ impl Session {
 
     /// F3: opens the built-in viewer on the file under the cursor.
     fn open_viewer(&mut self) -> Result<(), EngineError> {
+        self.deny_remote("podgląd (F3)")?;
         if self.active_panel().archive.is_some() {
             return self.preview_from_archive();
         }
@@ -1383,6 +1443,7 @@ impl Session {
 
     /// F4: opens the file in `BLUEPANE_EDITOR`, or the system's default application.
     fn edit_file(&mut self) -> Result<(), EngineError> {
+        self.deny_remote("edycja (F4)")?;
         self.deny_in_archive("edycja")?;
         let path = self.entry_to_open()?;
         let editor = std::env::var("BLUEPANE_EDITOR").ok();
@@ -1529,6 +1590,10 @@ impl Session {
 
     /// Enter: opens an archive file in the panel, or enters the directory under the cursor.
     fn enter_current(&mut self) {
+        if self.active_panel().remote.is_some() {
+            self.remote_enter();
+            return;
+        }
         let panel = self.active_panel();
         if panel.archive.is_none() {
             let archive = panel
@@ -1583,8 +1648,13 @@ impl Session {
     }
 
     /// The other panel's directory, as the place to extract or pack into.
-    fn other_directory(&self) -> Result<PathBuf, EngineError> {
+    pub(crate) fn other_directory(&self) -> Result<PathBuf, EngineError> {
         let other = &self.panels[1 - self.active];
+        if other.remote.is_some() {
+            return Err(EngineError(
+                "drugi panel pokazuje serwer SFTP: wybierz w nim zwykły katalog".into(),
+            ));
+        }
         if other.virtual_list.is_some() {
             return Err(EngineError(
                 "drugi panel pokazuje listę wyników: wybierz w nim zwykły katalog".into(),
@@ -1630,6 +1700,7 @@ impl Session {
 
     /// `unpack`: the whole archive into the other panel's directory.
     fn unpack(&mut self, args: &UnpackArgs) -> Result<(), EngineError> {
+        self.deny_remote("rozpakowanie")?;
         let (archive, listing, known_password) = self.archive_target()?;
         let base = self.other_directory()?;
         let dest = if args.subfolder {
@@ -1657,6 +1728,7 @@ impl Session {
 
     /// `testarchive`: read the whole archive and report damaged files.
     fn test_archive(&mut self, password: Option<String>) -> Result<(), EngineError> {
+        self.deny_remote("sprawdzanie archiwum")?;
         let (archive, _listing, known_password) = self.archive_target()?;
         self.enqueue(JobSpec {
             kind: JobKind::VerifyArchive,
@@ -1672,6 +1744,8 @@ impl Session {
 
     /// `pack`: without arguments open the settings dialog, with arguments start right away.
     fn pack(&mut self, args: Option<PackArgs>) -> Result<(), EngineError> {
+        self.deny_remote("pakowanie")?;
+        self.deny_remote("pakowanie")?;
         self.deny_in_archive("pakowanie")?;
         let dest = self.other_directory()?;
         let sources = self.active_panel().targets();
@@ -1799,6 +1873,9 @@ impl Session {
     }
 
     fn make_dir(&mut self, name: &str) -> Result<(), EngineError> {
+        if self.active_panel().remote.is_some() {
+            return self.remote_mkdir(name);
+        }
         if self.active_panel().archive.is_some() {
             return self.make_archive_dir(name);
         }
@@ -1934,6 +2011,9 @@ impl Session {
     }
 
     fn rename_entry(&mut self, path: &Path, new_name: &str) -> Result<(), EngineError> {
+        if self.active_panel().remote.is_some() {
+            return self.remote_rename(path, new_name);
+        }
         if self.active_panel().archive.is_some() {
             return self.rename_in_archive(path, new_name);
         }

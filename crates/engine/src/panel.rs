@@ -117,6 +117,25 @@ fn parent_inner(inner: &str) -> &str {
 
 /// One of the two file panels.
 ///
+/// A panel that shows a folder on an SFTP server.
+#[derive(Debug, Clone)]
+pub struct RemoteView {
+    /// The saved site's name.
+    pub site: String,
+    /// `user@host:port`, for the path bar.
+    pub label: String,
+    /// The server folder being shown (`/` separated).
+    pub path: String,
+    pub conn: std::sync::Arc<bluepane_sftp::Connection>,
+}
+
+impl RemoteView {
+    /// Where the panel "is", for the path bar: `sftp://user@host:22/dir`.
+    pub fn location(&self) -> PathBuf {
+        PathBuf::from(format!("sftp://{}{}", self.label, self.path))
+    }
+}
+
 /// A panel that shows a list of files from anywhere (search results) instead of a directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VirtualList {
@@ -156,6 +175,9 @@ pub struct Panel {
     /// Set while the panel shows a list of files (search results); `cwd` stays where the
     /// panel was, and leaving the list goes back there.
     pub virtual_list: Option<VirtualList>,
+    /// Set while the panel shows a folder on an SFTP server; the listing is replaced by
+    /// the session when a background listing finishes.
+    pub remote: Option<RemoteView>,
     /// Set when the current directory could not be listed.
     pub error: Option<String>,
     /// The whole directory listing, before filtering and without the `..` row.
@@ -182,6 +204,7 @@ impl Panel {
             },
             archive: None,
             virtual_list: None,
+            remote: None,
             error: None,
             listing: Vec::new(),
         };
@@ -204,6 +227,7 @@ impl Panel {
             },
             archive: None,
             virtual_list: None,
+            remote: None,
             error: None,
             listing: Vec::new(),
             history: Vec::new(),
@@ -213,6 +237,15 @@ impl Panel {
 
     /// Re-reads the directory, keeping the cursor entry and the still-valid selection.
     pub fn reload(&mut self) {
+        if self.remote.is_some() {
+            // The server is only asked by a background job (`Session::remote_refresh`).
+            let present: HashSet<&Path> = self.listing.iter().map(|e| e.path.as_path()).collect();
+            self.selected
+                .retain(|path| present.contains(path.as_path()));
+            let keep = self.current().map(|e| e.path.clone());
+            self.rebuild(keep.as_deref());
+            return;
+        }
         let listed = match (&self.archive, &self.virtual_list) {
             (Some(view), _) => Ok(archive_entries(view)),
             // Entries that no longer exist (deleted, moved) drop out of the list.
@@ -350,6 +383,11 @@ impl Panel {
         let parent = match &self.archive {
             // The `..` row of a list leaves it, back to the directory it was opened from.
             None if self.virtual_list.is_some() => Some(self.cwd.clone()),
+            None if self.remote.is_some() => self
+                .remote
+                .as_ref()
+                .filter(|r| r.path != "/")
+                .map(|r| PathBuf::from(crate::remote_job::remote_parent(&r.path))),
             // In an archive the `..` row always exists: it leads up a level or out of it.
             Some(view) if view.inner.is_empty() => Some(self.cwd.clone()),
             Some(view) => Some(view.archive.join(parent_inner(&view.inner))),
@@ -432,6 +470,7 @@ impl Panel {
     fn show_dir(&mut self, dir: PathBuf) {
         self.archive = None;
         self.virtual_list = None;
+        self.remote = None;
         self.cwd = dir;
         self.cursor = 0;
         self.selected.clear();
@@ -544,9 +583,26 @@ impl Panel {
 
     /// Where the panel is: the directory, or `archive/inner` while browsing an archive.
     pub fn location(&self) -> PathBuf {
+        if let Some(remote) = &self.remote {
+            return remote.location();
+        }
         self.archive
             .as_ref()
             .map_or_else(|| self.cwd.clone(), ArchiveView::location)
+    }
+
+    /// Shows the content of a server folder (a background listing finished).
+    pub fn show_remote(&mut self, path: String, entries: Vec<bluepane_vfs::Entry>) {
+        if let Some(remote) = &mut self.remote {
+            remote.path = path;
+        }
+        self.listing = entries;
+        self.sort_listing();
+        self.selected.clear();
+        self.filter.clear();
+        self.cursor = 0;
+        self.error = None;
+        self.rebuild(None);
     }
 
     /// Starts browsing the inside of `archive` (which lies in `cwd`).
