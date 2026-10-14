@@ -9,12 +9,17 @@ mod format;
 mod job;
 mod keymap;
 mod mask;
+mod multirename;
 mod panel;
 mod session;
 mod viewer;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
 pub use bluepane_ops::Resolution;
+pub use bluepane_rename::{
+    CaseMode as RenameCase, Item as RenameItem, Plan as RenamePlan, Row as RenameRow,
+    Settings as RenameSettings, Status as RenameStatus,
+};
 pub use bluepane_sync::{
     Action as SyncAction, Category as SyncCategory, CompareBy, Deletion as SyncDeletion,
     Direction as SyncDirection, ExecReport as SyncReport, Filter as SyncFilter, Kind as SyncKind,
@@ -31,6 +36,7 @@ pub use job::{
 };
 pub use keymap::Keymap;
 pub use mask::Mask;
+pub use multirename::{RenameEntry, RenameView};
 pub use panel::{is_parent_entry, ArchiveView, Panel, Sort, SortKey, PARENT_NAME};
 pub use session::{
     ConflictPrompt, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,

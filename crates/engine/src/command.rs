@@ -34,6 +34,12 @@ pub const COMMAND_NAMES: &[&str] = &[
     "invert",
     "sort",
     "sync",
+    "multirename",
+    "mrset",
+    "mrname",
+    "mrrun",
+    "mrundo",
+    "mrclose",
 ];
 
 /// What the open file viewer should do.
@@ -199,6 +205,18 @@ pub enum Command {
     SyncSet(usize, Direction),
     /// Close the synchronization view.
     SyncClose,
+    /// Open the multi-rename window for the selection (Ctrl+F2).
+    MultiRename,
+    /// Change one setting of the multi-rename window: `mrset name [N]_[C]`.
+    MultiRenameSet(String, String),
+    /// Set (or, without a name, clear) a hand-typed new name for row n (1-based).
+    MultiRenameName(usize, Option<String>),
+    /// Carry out the renames shown in the window.
+    MultiRenameRun,
+    /// Take back the last multi-rename run.
+    MultiRenameUndo,
+    /// Close the multi-rename window.
+    MultiRenameClose,
 }
 
 impl Command {
@@ -249,6 +267,12 @@ impl Command {
             "syncrun" => Ok(Command::SyncRun),
             "syncset" => parse_syncset(rest),
             "syncclose" => Ok(Command::SyncClose),
+            "multirename" | "mr" => Ok(Command::MultiRename),
+            "mrset" => parse_mrset(rest),
+            "mrname" => parse_mrname(rest),
+            "mrrun" => Ok(Command::MultiRenameRun),
+            "mrundo" => Ok(Command::MultiRenameUndo),
+            "mrclose" => Ok(Command::MultiRenameClose),
             "view" | "f3" => Ok(Command::View),
             "edit" => Ok(Command::Edit),
             "viewer" => parse_viewer(rest).map(Command::Viewer),
@@ -490,6 +514,44 @@ fn parse_sync(args: &str) -> Result<SyncArgs, EngineError> {
         }
     }
     Ok(sync)
+}
+
+/// `mrset <field> <value>`; a value in double quotes keeps its spaces (`mrset replace " "`).
+fn parse_mrset(args: &str) -> Result<Command, EngineError> {
+    let usage = || {
+        EngineError(
+            "mrset: użycie: mrset <name|ext|find|replace|regex|once|inclext|ignorecase|case|start|step|digits|reset> <wartość>"
+                .into(),
+        )
+    };
+    let (field, value) = match args.split_once(char::is_whitespace) {
+        Some((field, value)) => (field, value.trim()),
+        None => (args, ""),
+    };
+    if field.is_empty() {
+        return Err(usage());
+    }
+    let value = value
+        .strip_prefix('"')
+        .and_then(|v| v.strip_suffix('"'))
+        .unwrap_or(value);
+    Ok(Command::MultiRenameSet(
+        field.to_ascii_lowercase(),
+        value.to_string(),
+    ))
+}
+
+fn parse_mrname(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("mrname: użycie: mrname <numer> [nowa nazwa]".into());
+    let (n, name) = match args.split_once(char::is_whitespace) {
+        Some((n, name)) => (n, Some(name.trim())),
+        None => (args, None),
+    };
+    let n: usize = n.parse().ok().filter(|n| *n >= 1).ok_or_else(usage)?;
+    Ok(Command::MultiRenameName(
+        n,
+        name.filter(|name| !name.is_empty()).map(str::to_string),
+    ))
 }
 
 fn parse_syncset(args: &str) -> Result<Command, EngineError> {
