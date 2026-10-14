@@ -903,6 +903,36 @@ mod tests {
     }
 
     #[test]
+    fn multirename_commands_parse() {
+        assert_eq!(Command::parse("multirename"), Ok(Command::MultiRename));
+        assert_eq!(
+            Command::parse("mrset name [N]_[C]"),
+            Ok(Command::MultiRenameSet("name".into(), "[N]_[C]".into()))
+        );
+        assert_eq!(
+            Command::parse("mrset replace \" \""),
+            Ok(Command::MultiRenameSet("replace".into(), " ".into()))
+        );
+        assert_eq!(
+            Command::parse("mrset reset"),
+            Ok(Command::MultiRenameSet("reset".into(), String::new()))
+        );
+        assert!(Command::parse("mrset").is_err());
+        assert_eq!(
+            Command::parse("mrname 2 new.txt"),
+            Ok(Command::MultiRenameName(2, Some("new.txt".into())))
+        );
+        assert_eq!(
+            Command::parse("mrname 2"),
+            Ok(Command::MultiRenameName(2, None))
+        );
+        assert!(Command::parse("mrname x").is_err());
+        assert_eq!(Command::parse("mrrun"), Ok(Command::MultiRenameRun));
+        assert_eq!(Command::parse("mrundo"), Ok(Command::MultiRenameUndo));
+        assert_eq!(Command::parse("mrclose"), Ok(Command::MultiRenameClose));
+    }
+
+    #[test]
     fn every_listed_name_parses_or_needs_an_argument() {
         for name in COMMAND_NAMES {
             match Command::parse(name) {

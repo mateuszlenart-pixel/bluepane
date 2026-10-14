@@ -3,6 +3,7 @@
 //! The UI only translates input into command lines and draws the engine's state.
 //! It contains no file system logic.
 
+mod rename_ui;
 mod sync_ui;
 
 use std::time::Duration;
@@ -27,6 +28,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Alt+F5", "Pakuj", "pack"),
     ("Alt+F9", "Rozpakuj", "unpack"),
     ("Alt+S", "Synchronizuj", "sync"),
+    ("Ctrl+F2", "Zmień nazwy", "multirename"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -42,6 +44,8 @@ pub struct BluepaneUi {
     path_text: [String; 2],
     /// Settings being edited in the synchronization window.
     sync_form: Option<sync_ui::SyncForm>,
+    /// The multi-rename row whose new name is being typed by hand, and the text so far.
+    rename_edit: Option<(usize, String)>,
 }
 
 impl BluepaneUi {
@@ -54,6 +58,7 @@ impl BluepaneUi {
             pack_focused: false,
             path_text: [String::new(), String::new()],
             sync_form: None,
+            rename_edit: None,
         }
     }
 
@@ -83,6 +88,8 @@ impl BluepaneUi {
                 self.viewer_ui(ui);
             } else if self.session.sync.is_some() {
                 self.sync_ui(ui);
+            } else if self.session.rename.is_some() {
+                self.rename_ui(ui);
             } else {
                 ui.columns(2, |columns| {
                     for (index, ui) in columns.iter_mut().enumerate() {
@@ -550,6 +557,11 @@ impl BluepaneUi {
                     self.dispatch(&line);
                 }
             }
+            return;
+        }
+        if self.session.rename.is_some() {
+            // Typing in the multi-rename window must not start the panel filter.
+            self.rename_keys(&pressed);
             return;
         }
         if self.session.sync.is_some() {
