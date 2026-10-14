@@ -81,6 +81,10 @@ impl BluepaneUi {
     /// Draws one frame. Call this from `eframe::App::ui`.
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // Text a command wants on the clipboard (`copynames`).
+        if let Some(text) = self.session.take_clipboard() {
+            ctx.copy_text(text);
+        }
         // Collect what the background job reported; keep redrawing while it runs.
         self.session.poll();
         let searching = self.session.find.as_ref().is_some_and(|f| f.is_running());

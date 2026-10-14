@@ -39,6 +39,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "siteset",
     "sitedel",
     "editsend",
+    "copynames",
     "queue",
     "queueclose",
     "queuepause",
@@ -65,6 +66,17 @@ pub const COMMAND_NAMES: &[&str] = &[
     "mrundo",
     "mrclose",
 ];
+
+/// What `copynames` puts on the clipboard for each selected entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameFormat {
+    /// The name without its extension (`report`).
+    Stem,
+    /// The name with its extension (`report.txt`).
+    File,
+    /// The full path (`/home/me/docs/report.txt`).
+    Path,
+}
 
 /// What the open file viewer should do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -248,6 +260,8 @@ pub enum Command {
     QueueRetry(usize),
     /// Forget the list of finished jobs.
     QueueClear,
+    /// Copy the names (or paths) of the selected entries, one per line, to the clipboard.
+    CopyNames(NameFormat),
     /// Send the file edited with F4 on a server back to it (Ctrl+Shift+F4).
     EditSend,
     /// Save the password of a site where its secret is kept (system store, Bitwarden, or
@@ -343,6 +357,14 @@ impl Command {
             "sites" => Ok(Command::Sites),
             "siteclose" => Ok(Command::SiteClose),
             "editsend" => Ok(Command::EditSend),
+            "copynames" => match rest.to_ascii_lowercase().as_str() {
+                "" | "file" | "name" | "ext" => Ok(Command::CopyNames(NameFormat::File)),
+                "stem" | "short" => Ok(Command::CopyNames(NameFormat::Stem)),
+                "path" | "full" => Ok(Command::CopyNames(NameFormat::Path)),
+                _ => Err(EngineError(
+                    "copynames: użycie: copynames [stem|file|path] (bez rozszerzenia, z rozszerzeniem, pełna ścieżka)".into(),
+                )),
+            },
             "queue" => Ok(Command::Queue),
             "queueclose" => Ok(Command::QueueClose),
             "queuepause" => Ok(Command::QueuePause),

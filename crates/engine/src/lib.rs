@@ -36,7 +36,8 @@ pub use bluepane_sync::{
     Variant as SyncVariant,
 };
 pub use command::{
-    parse_size, Command, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
+    parse_size, Command, NameFormat, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction,
+    COMMAND_NAMES,
 };
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};
