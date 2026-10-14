@@ -114,7 +114,8 @@ Do zrobienia (8b i dalej):
 - [ ] F4 pliku z serwera, zakładki i historia na serwerze, uprawnienia/chmod
 - [ ] Osobna kolejka transferów w oknie (jak w FileZilli) z listą oczekujących, pauzą i ponawianiem
 - [ ] ~~Wtyczki~~ pominięte (decyzja właściciela); w zamian ewentualnie osobny etap: skaner sieci IP
-- [ ] Hasła w systemowym magazynie (Gnome Keyring / Windows Credential Manager) zamiast jawnego tekstu
+- [x] Hasła w systemowym magazynie (Secret Service / Menedżer poświadczeń) i zapis nowego hasła do Bitwarden (`bw create item`); `sitepassword`; testy na atrapach (bez prawdziwego keyringu i Bitwarden)
+- [ ] Do sprawdzenia ręcznie: prawdziwy keyring (Linux Mint: Gnome Keyring), Windows Credential Manager, `bw` z odblokowanym sejfem
 
 ## Znane uproszczenia szkieletu
 - Interfejs sprawdzony ręcznie na Linuksie (Linux Mint, X11, wgpu); **nie był jeszcze uruchamiany

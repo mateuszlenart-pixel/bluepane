@@ -113,6 +113,14 @@ pub enum RemoteOp {
         secret: Option<String>,
         trust: Option<String>,
         known: sftp::KnownHosts,
+        services: Arc<dyn sftp::SecretServices>,
+    },
+    /// Saves a site's password in the store its secret points at (Bitwarden can take a
+    /// moment, so this is not done on the interface thread).
+    SaveSecret {
+        site: sftp::Site,
+        password: String,
+        services: Arc<dyn sftp::SecretServices>,
     },
     List {
         path: String,

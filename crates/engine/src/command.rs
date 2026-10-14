@@ -38,6 +38,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "sites",
     "siteset",
     "sitedel",
+    "sitepassword",
     "siteclose",
     "connect",
     "disconnect",
@@ -227,6 +228,9 @@ pub enum Command {
     /// Create a saved site or change one field of it: `siteset Proxmox host 10.0.0.2`.
     SiteSet(String, String, String),
     SiteDelete(String),
+    /// Save the password of a site where its secret is kept (system store, Bitwarden, or
+    /// the sites file): `sitepassword Proxmox <password>`.
+    SitePassword(String, String),
     /// Close the site manager.
     SiteClose,
     /// Connect the active panel to a saved site; the optional text is the password (or the
@@ -318,6 +322,15 @@ impl Command {
             "siteclose" => Ok(Command::SiteClose),
             "siteset" => parse_siteset(rest),
             "sitedel" => take_name("sitedel", rest).map(|(name, _)| Command::SiteDelete(name)),
+            "sitepassword" => take_name("sitepassword", rest).and_then(|(name, password)| {
+                if password.is_empty() {
+                    Err(EngineError(
+                        "sitepassword: użycie: sitepassword <nazwa> <hasło>".into(),
+                    ))
+                } else {
+                    Ok(Command::SitePassword(name, password))
+                }
+            }),
             "connect" => take_name("connect", rest)
                 .map(|(name, tail)| Command::Connect(name, Some(tail).filter(|t| !t.is_empty()))),
             "disconnect" => Ok(Command::Disconnect),

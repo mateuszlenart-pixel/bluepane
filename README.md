@@ -150,8 +150,13 @@ są zgłaszane i nie są ruszane. Z wiersza poleceń:
 Panel może pokazywać katalog na serwerze jak zwykły katalog. Obsługiwane: **SFTP** (SSH), **FTP** i **FTPS** (jawny, `AUTH TLS`, oraz niejawny, zwykle port 990). Implementacja w Rust (russh, suppaftp, rustls z ring), bez zewnętrznych programów ani bibliotek do doinstalowania.
 
 - **Witryny (Ctrl+S):** zapisane połączenia: serwer, port, użytkownik, plik klucza (albo hasło), katalog startowy. Plik `sites.conf` w katalogu konfiguracji.
-- **Hasło:** „pytaj przy łączeniu” (nigdzie nie zapisywane), „zapisz lokalnie” (jawnym tekstem w `sites.conf`, plik tylko dla Ciebie na Linuksie) albo
-  **Bitwarden** (jeśli zainstalowany jest `bw`: hasło jest pobierane przy łączeniu, nic nie jest zapisywane w bluepane; sejf musi być odblokowany, `bw unlock`, a `BW_SESSION` ustawione).
+- **Hasło** (dla klucza: fraza klucza), cztery sposoby do wyboru przy każdej witrynie:
+  - „pytaj przy łączeniu”: nigdzie nie zapisywane;
+  - „w pliku witryn”: jawnym tekstem w `sites.conf` (plik tylko dla Ciebie na Linuksie; okno ostrzega);
+  - **magazyn haseł systemu** (Gnome Keyring / KWallet przez Secret Service na Linuksie, Menedżer poświadczeń na Windows): hasło nie trafia do pliku witryn;
+  - **Bitwarden** (program `bw`): hasło jest pobierane z istniejącego elementu przy łączeniu, a wpisane w oknie nowe hasło **zapisuje się jako nowy element**
+    („bluepane: <nazwa>” albo nazwa, którą podasz); istniejącego elementu bluepane nigdy nie nadpisuje. Sejf musi być odblokowany (`bw unlock`), a `BW_SESSION` ustawione.
+  Zapis do magazynu systemu i do Bitwarden dzieje się w tle; komunikaty nigdy nie zawierają hasła.
 - **Klucz serwera:** pierwsze połączenie pokazuje odcisk klucza i pyta (Enter = zaufaj i zapamiętaj). Zmieniony klucz znanego serwera jest zawsze odrzucany z ostrzeżeniem.
   W FTPS to samo dotyczy certyfikatu serwera: nie sprawdzamy urzędów certyfikacji (serwery domowe mają własne certyfikaty), tylko przypinamy odcisk SHA-256 certyfikatu.
 - **FTP bez szyfrowania:** hasło i pliki idą otwartym tekstem (okno witryny ostrzega); używaj w zaufanej sieci albo wybierz FTPS. Klucze SSH działają tylko z SFTP.
@@ -164,8 +169,8 @@ Panel może pokazywać katalog na serwerze jak zwykły katalog. Obsługiwane: **
 - **F5 między dwoma serwerami** kopiuje przez katalog tymczasowy (każdy bajt idzie dwa razy; potrzebne miejsce na dysku na największy element).
 - **Nie ma jeszcze:** F4 pliku z serwera (pobierz F5), zakładek i historii na serwerze, uprawnień (chmod), trybu aktywnego FTP.
 
-Komendy: `sites`, `siteset <nazwa> <protocol|host|port|user|key|start|secret> <wartość>` (`protocol`: `sftp`, `ftp`, `ftps`, `ftps-implicit`) (nazwa ze spacjami w cudzysłowie; `secret`: `ask`, `local:<hasło>`, `bitwarden:<element>`),
-`sitedel <nazwa>`, `connect <nazwa> [hasło]`, `disconnect`, `siteclose`.
+Komendy: `sites`, `siteset <nazwa> <protocol|host|port|user|key|start|secret> <wartość>` (`secret`: `ask`, `local:<hasło>`, `keyring`, `bitwarden:<element>`; `protocol`: `sftp`, `ftp`, `ftps`, `ftps-implicit`) (nazwa ze spacjami w cudzysłowie; `secret`: `ask`, `local:<hasło>`, `bitwarden:<element>`),
+`sitepassword <nazwa> <hasło>` (zapis hasła tam, gdzie witryna je trzyma), `sitedel <nazwa>`, `connect <nazwa> [hasło]`, `disconnect`, `siteclose`.
 
 ## Wyszukiwanie (Ctrl+F lub Alt+F7)
 

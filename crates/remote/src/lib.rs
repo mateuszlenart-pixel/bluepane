@@ -17,6 +17,7 @@ mod error;
 mod fs;
 mod ftp;
 mod known_hosts;
+mod secrets;
 mod sftp;
 mod sftp_transfer;
 mod sites;
@@ -28,5 +29,10 @@ pub mod testing;
 pub use error::RemoteError;
 pub use fs::{Protocol, RemoteEntry, RemoteFs, TransferOptions};
 pub use known_hosts::{HostKeyStatus, KnownHosts};
+pub use secrets::{
+    base64, bitwarden_available, bitwarden_create, bitwarden_responds, bitwarden_secret,
+    json_string, BitwardenCli, CliOutput, KeyStore, SecretServices, SystemBitwarden, SystemKeyring,
+    SystemServices, KEYRING_SERVICE,
+};
 pub use sftp::{Auth, ConnectParams, SftpConnection};
-pub use sites::{bitwarden_available, bitwarden_secret, SecretStore, Site, Sites};
+pub use sites::{SecretStore, Site, Sites};

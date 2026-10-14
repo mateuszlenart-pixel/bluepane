@@ -16,6 +16,7 @@ rand.workspace = true
 suppaftp.workspace = true
 rustls.workspace = true
 sha2.workspace = true
+keyring.workspace = true
 rcgen.workspace = true
 tokio.workspace = true
 

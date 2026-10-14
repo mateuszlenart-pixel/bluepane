@@ -117,20 +117,23 @@ impl Session {
             "secret" => {
                 site.secret = if let Some(secret) = value.strip_prefix("local:") {
                     SecretStore::Local(secret.to_string())
+                } else if value.trim().eq_ignore_ascii_case("keyring") {
+                    SecretStore::Keyring
                 } else if let Some(item) = value.strip_prefix("bitwarden:") {
                     SecretStore::Bitwarden(item.trim().to_string())
                 } else if value.trim().eq_ignore_ascii_case("ask") || value.trim().is_empty() {
                     SecretStore::Ask
                 } else {
                     return Err(EngineError(
-                        "siteset secret: ask, local:<hasło> albo bitwarden:<element>".into(),
+                        "siteset secret: ask, local:<hasło>, keyring albo bitwarden:<element>"
+                            .into(),
                     ));
                 };
             }
             _ => return Err(EngineError(format!("siteset: nieznane pole {field}"))),
         }
         if let SecretStore::Bitwarden(_) = site.secret {
-            if !bluepane_remote::bitwarden_available() {
+            if !bluepane_remote::bitwarden_responds(self.secrets.bitwarden()) {
                 self.status = "Uwaga: nie znaleziono Bitwarden CLI (`bw`); połączenie się nie uda, dopóki go nie zainstalujesz".into();
             }
         }
@@ -143,6 +146,47 @@ impl Session {
         self.sites
             .upsert(site)
             .map_err(|e| EngineError(format!("nie udało się zapisać witryn: {e}")))
+    }
+
+    /// `sitepassword <site> <password>`: saves the password where the site keeps its secret.
+    pub(crate) fn site_password(
+        &mut self,
+        name: &str,
+        password: String,
+    ) -> Result<(), EngineError> {
+        self.load_config();
+        let site = self
+            .sites
+            .get(name)
+            .cloned()
+            .ok_or_else(|| EngineError(format!("nie ma witryny {name} (komenda sites)")))?;
+        match &site.secret {
+            SecretStore::Local(_) => {
+                let mut site = site;
+                site.secret = SecretStore::Local(password);
+                self.sites
+                    .upsert(site)
+                    .map_err(|e| EngineError(format!("nie udało się zapisać witryn: {e}")))?;
+                self.status = format!("Zapisano hasło w pliku witryn ({name})");
+                Ok(())
+            }
+            SecretStore::Ask => Err(EngineError(
+                "ta witryna pyta o hasło przy łączeniu: wybierz najpierw, gdzie je zapisać (siteset <nazwa> secret keyring|bitwarden:<element>|local:...)".into(),
+            )),
+            SecretStore::Keyring | SecretStore::Bitwarden(_) => {
+                self.status = format!("Zapisywanie hasła ({name})…");
+                self.enqueue_quiet(Self::remote_spec(
+                    self.active,
+                    None,
+                    RemoteOp::SaveSecret {
+                        site,
+                        password,
+                        services: self.secrets.clone(),
+                    },
+                ));
+                Ok(())
+            }
+        }
     }
 
     pub(crate) fn site_delete(&mut self, name: &str) -> Result<(), EngineError> {
@@ -208,6 +252,7 @@ impl Session {
                 secret,
                 trust,
                 known: self.known_hosts.clone(),
+                services: self.secrets.clone(),
             },
         ));
     }
@@ -557,6 +602,18 @@ impl Session {
                     ),
                 }
             }
+            RemoteOp::SaveSecret { site, .. } => match failure(report) {
+                None => (
+                    match &site.secret {
+                        SecretStore::Bitwarden(item) => {
+                            format!("Zapisano hasło w Bitwarden (element „{item}”)")
+                        }
+                        _ => "Zapisano hasło w magazynie haseł systemu".to_string(),
+                    },
+                    false,
+                ),
+                Some(error) => (format!("Nie zapisano hasła: {error}"), true),
+            },
             RemoteOp::List { .. } => match &report.remote_listing {
                 Some((path, list)) => {
                     let same = job.conn.as_ref().is_some_and(|c| {
@@ -1283,6 +1340,128 @@ mod tests {
         assert!(s.run_line("siteset A protocol gopher").is_err());
         s.run_line("siteset A protocol ftp").unwrap();
         assert!(s.run_line("siteset A key /k").is_err(), "keys are SSH only");
+    }
+
+    #[test]
+    fn a_password_can_live_in_the_system_store_and_is_used_to_connect() {
+        use bluepane_remote::testing::MemoryServices;
+        use bluepane_remote::KeyStore;
+        let mut r = rig("ask");
+        let services = Arc::new(MemoryServices::default());
+        r.session.secrets = services.clone();
+        r.session.run_line("siteset Test secret keyring").unwrap();
+        // Nothing saved yet: the connection explains what is missing.
+        r.session.run_line("connect Test").unwrap();
+        settle(&mut r.session);
+        assert!(r.session.status_is_error);
+        assert!(
+            r.session.status.contains("magazynie haseł"),
+            "{}",
+            r.session.status
+        );
+
+        r.session.run_line("sitepassword Test secret").unwrap();
+        settle(&mut r.session);
+        assert!(
+            r.session.status.contains("magazynie haseł systemu"),
+            "{}",
+            r.session.status
+        );
+        let user = r.session.sites.get("Test").unwrap().keyring_user();
+        assert_eq!(
+            services.keys.get("bluepane", &user).unwrap().as_deref(),
+            Some("secret")
+        );
+        connect(&mut r);
+        assert!(r.session.panels[0].remote.is_some(), "{}", r.session.status);
+        // The sites file does not hold the password.
+        let text = fs::read_to_string(r.tmp.path().join("config/sites.conf")).unwrap();
+        assert!(
+            text.contains("secret = keyring") && !text.contains("secret\n\n"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_password_can_be_saved_to_bitwarden_and_read_back_from_it() {
+        use bluepane_remote::testing::MemoryServices;
+        let mut r = rig("ask");
+        let services = Arc::new(MemoryServices::default());
+        r.session.secrets = services.clone();
+        r.session
+            .run_line("siteset Test secret bitwarden:bluepane: Test")
+            .unwrap();
+        r.session.run_line("sitepassword Test secret").unwrap();
+        settle(&mut r.session);
+        assert!(
+            r.session.status.contains("Bitwarden"),
+            "{}",
+            r.session.status
+        );
+        assert_eq!(
+            services.bitwarden.password_of("bluepane: Test").as_deref(),
+            Some("secret")
+        );
+        let json = services.bitwarden.created.lock().unwrap()[0].clone();
+        assert!(json.contains("\"username\":\"alice\""), "{json}");
+        assert!(json.contains("sftp://127.0.0.1:"), "{json}");
+        connect(&mut r);
+        assert!(r.session.panels[0].remote.is_some(), "{}", r.session.status);
+        // A second save does not overwrite the item.
+        r.session.run_line("sitepassword Test other").unwrap();
+        settle(&mut r.session);
+        assert!(r.session.status_is_error);
+        assert_eq!(
+            services.bitwarden.password_of("bluepane: Test").as_deref(),
+            Some("secret")
+        );
+    }
+
+    #[test]
+    fn saving_a_password_reports_a_locked_vault_without_leaking_it() {
+        use bluepane_remote::testing::{FakeBitwarden, MemoryServices};
+        let mut r = rig("ask");
+        r.session.secrets = Arc::new(MemoryServices {
+            bitwarden: FakeBitwarden {
+                locked: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        r.session
+            .run_line("siteset Test secret bitwarden:item")
+            .unwrap();
+        r.session.run_line("sitepassword Test hunter2").unwrap();
+        settle(&mut r.session);
+        assert!(r.session.status_is_error);
+        assert!(
+            r.session.status.contains("bw unlock"),
+            "{}",
+            r.session.status
+        );
+        assert!(!r.session.status.contains("hunter2"));
+    }
+
+    #[test]
+    fn sitepassword_follows_where_the_site_keeps_its_secret() {
+        let mut r = rig("ask");
+        assert!(
+            r.session.run_line("sitepassword Test pw").is_err(),
+            "asked every time"
+        );
+        assert!(
+            r.session.run_line("sitepassword Test").is_err(),
+            "no password given"
+        );
+        assert!(r.session.run_line("sitepassword Missing pw").is_err());
+        r.session.run_line("siteset Test secret local:old").unwrap();
+        r.session
+            .run_line("sitepassword Test new password")
+            .unwrap();
+        assert_eq!(
+            r.session.sites.get("Test").unwrap().secret,
+            SecretStore::Local("new password".into())
+        );
     }
 
     #[test]
