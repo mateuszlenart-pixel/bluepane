@@ -78,3 +78,16 @@ pub fn file_mode(_path: &Path) -> Option<u32> {
 pub fn set_mode(_path: &Path, _mode: u32) -> io::Result<()> {
     Ok(())
 }
+
+/// The neighbours (IP address, MAC address) Windows has resolved lately (`arp -a`).
+pub fn neighbours() -> Vec<(std::net::Ipv4Addr, String)> {
+    use std::os::windows::process::CommandExt;
+    // No console window flashing up.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new("arp")
+        .arg("-a")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map(|out| super::arp::parse_arp_a(&String::from_utf8_lossy(&out.stdout)))
+        .unwrap_or_default()
+}

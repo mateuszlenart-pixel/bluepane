@@ -39,6 +39,11 @@ pub const COMMAND_NAMES: &[&str] = &[
     "siteset",
     "sitedel",
     "editsend",
+    "scan",
+    "scanset",
+    "scanrun",
+    "scanstop",
+    "scanclose",
     "queue",
     "queueclose",
     "queuepause",
@@ -236,6 +241,13 @@ pub enum Command {
     /// Create a saved site or change one field of it: `siteset Proxmox host 10.0.0.2`.
     SiteSet(String, String, String),
     SiteDelete(String),
+    /// Open the network scanner (Ctrl+N), or show the last one again.
+    Scan,
+    /// Change one setting of the scanner: `scanset range 192.168.0.1-254`.
+    ScanSet(String, String),
+    ScanRun,
+    ScanStop,
+    ScanClose,
     /// Open the queue window (Ctrl+J): what runs, what waits, what finished.
     Queue,
     QueueClose,
@@ -343,6 +355,14 @@ impl Command {
             "sites" => Ok(Command::Sites),
             "siteclose" => Ok(Command::SiteClose),
             "editsend" => Ok(Command::EditSend),
+            "scan" => Ok(Command::Scan),
+            "scanset" => parse_mrset(rest).map(|c| match c {
+                Command::MultiRenameSet(f, v) => Command::ScanSet(f, v),
+                other => other,
+            }),
+            "scanrun" => Ok(Command::ScanRun),
+            "scanstop" => Ok(Command::ScanStop),
+            "scanclose" => Ok(Command::ScanClose),
             "queue" => Ok(Command::Queue),
             "queueclose" => Ok(Command::QueueClose),
             "queuepause" => Ok(Command::QueuePause),

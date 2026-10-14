@@ -233,6 +233,8 @@ pub struct Session {
     /// The search window (Alt+F7). Its search runs on its own thread, apart from the job
     /// queue, so copying and the like keep working meanwhile.
     pub find: Option<crate::FindView>,
+    /// The network scanner window (Ctrl+N).
+    pub scan: Option<crate::ScanView>,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
@@ -375,6 +377,7 @@ impl Session {
             sync: None,
             rename: None,
             find: None,
+            scan: None,
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
@@ -459,6 +462,11 @@ impl Session {
             Command::SiteSet(name, field, value) => self.site_set(&name, &field, &value)?,
             Command::SiteDelete(name) => self.site_delete(&name)?,
             Command::EditSend => self.remote_edit_send()?,
+            Command::Scan => self.open_scan(),
+            Command::ScanSet(field, value) => self.scan_set(&field, &value)?,
+            Command::ScanRun => self.scan_run()?,
+            Command::ScanStop => self.scan_stop(),
+            Command::ScanClose => self.scan_close(),
             Command::Queue => self.queue_open = true,
             Command::QueueClose => self.queue_open = false,
             Command::QueuePause => self.pause_queue(true),
