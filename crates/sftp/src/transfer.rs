@@ -3,7 +3,7 @@
 use std::fs;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use bluepane_ops::Progress;
 use russh_sftp::protocol::OpenFlags;
@@ -22,6 +22,11 @@ pub struct TransferOptions {
     pub resume: bool,
     /// Replace an existing target. Without it an existing target is an error.
     pub overwrite: bool,
+}
+
+/// Whole seconds since the epoch (SFTP times have no finer resolution).
+fn secs(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
 fn part_of_local(path: &Path) -> PathBuf {
@@ -49,8 +54,14 @@ impl Connection {
             let size = meta.len();
             let mut offset = 0;
             if options.resume {
+                // Only a partial file written after the source last changed can be continued:
+                // an older one may be the start of a different version of the file.
                 if let Ok(existing) = fs::metadata(&part) {
-                    if existing.len() < size {
+                    let fresh = match (existing.modified(), meta.modified()) {
+                        (Ok(part_time), Ok(source_time)) => secs(part_time) >= secs(source_time),
+                        _ => false,
+                    };
+                    if existing.len() < size && fresh {
                         offset = existing.len();
                     }
                 }
@@ -113,7 +124,11 @@ impl Connection {
             let mut offset = 0;
             if options.resume {
                 if let Some(existing) = self.stat_async(&part).await? {
-                    if existing.size < size {
+                    let fresh = match (existing.modified, meta.modified()) {
+                        (Some(part_time), Ok(source_time)) => secs(part_time) >= secs(source_time),
+                        _ => false,
+                    };
+                    if existing.size < size && fresh {
                         offset = existing.size;
                     }
                 }

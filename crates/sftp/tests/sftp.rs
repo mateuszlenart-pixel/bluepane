@@ -388,3 +388,36 @@ fn key_login_works() {
         Connection::connect(&bad, &KnownHosts::in_memory(), Some(&server.fingerprint)).unwrap_err();
     assert!(matches!(err, SftpError::Key(_)), "{err}");
 }
+
+#[test]
+fn a_partial_file_older_than_the_source_is_not_continued() {
+    let fx = fixture();
+    let conn = connect(&fx);
+    let local = tempfile::tempdir().unwrap();
+    let target = local.path().join("hello.txt");
+    // The partial file is from long ago: the remote file may have changed since.
+    let part = local.path().join("hello.txt.bpart");
+    fs::write(&part, "STALE").unwrap();
+    let long_ago = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&part)
+        .unwrap()
+        .set_modified(long_ago)
+        .unwrap();
+    conn.download(
+        "/hello.txt",
+        &target,
+        &Progress::new(),
+        TransferOptions {
+            resume: true,
+            ..TransferOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read_to_string(&target).unwrap(),
+        "hello world",
+        "started over"
+    );
+}
