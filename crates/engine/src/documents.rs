@@ -74,6 +74,8 @@ mod tests {
 
     #[test]
     fn f3_on_a_document_shows_its_text_and_cleans_up() {
+        // Without LibreOffice (which a machine running the tests may have) the text is shown.
+        std::env::set_var("BLUEPANE_NO_OFFICE", "1");
         let tmp = tempfile::tempdir().unwrap();
         let left = tmp.path().join("left");
         std::fs::create_dir_all(&left).unwrap();
@@ -97,6 +99,7 @@ mod tests {
 
     #[test]
     fn a_broken_document_is_an_error_and_leaves_nothing_behind() {
+        std::env::set_var("BLUEPANE_NO_OFFICE", "1");
         let tmp = tempfile::tempdir().unwrap();
         let left = tmp.path().join("left");
         std::fs::create_dir_all(&left).unwrap();
