@@ -5,7 +5,7 @@ members = ["crates/*", "apps/*", "xtask"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.92"
 license = "MIT OR Apache-2.0"
 publish = false
 
@@ -48,8 +48,9 @@ sha2 = "0.10"
 rcgen = "0.14"
 # System password store (Secret Service on Linux via pure-Rust zbus, Credential Manager on Windows).
 keyring = "4"
-# Text of PDF files for the preview (pure Rust).
+# Text of PDF files for the fallback preview, and PDF page rendering (both pure Rust).
 pdf-extract = "0.12"
+hayro = { version = "0.8", features = ["embed-fonts"] }
 # Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

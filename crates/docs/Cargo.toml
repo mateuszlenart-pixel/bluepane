@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 zip.workspace = true
 pdf-extract.workspace = true
+hayro.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

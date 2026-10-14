@@ -4,6 +4,7 @@
 //! It contains no file system logic.
 
 mod find_ui;
+mod pages_ui;
 mod queue_ui;
 mod rename_ui;
 mod sites_ui;
@@ -54,6 +55,8 @@ pub struct BluepaneUi {
     rename_edit: Option<(usize, String)>,
     /// The selected row of the search results.
     find_selected: usize,
+    /// The picture of the page on screen (see `pages_ui`).
+    page_texture: Option<(pages_ui::TextureKey, egui::TextureHandle)>,
     /// The site being edited in the site manager.
     site_form: Option<sites_ui::SiteForm>,
 }
@@ -70,6 +73,7 @@ impl BluepaneUi {
             sync_form: None,
             rename_edit: None,
             find_selected: 0,
+            page_texture: None,
             site_form: None,
         }
     }
@@ -97,7 +101,9 @@ impl BluepaneUi {
             self.bottom_bar(ui, cmd_id);
         });
         egui::CentralPanel::default_margins().show(ui, |ui| {
-            if self.session.viewer.is_some() {
+            if self.session.pages.is_some() {
+                self.pages_ui(ui);
+            } else if self.session.viewer.is_some() {
                 self.viewer_ui(ui);
             } else if self.session.sync.is_some() {
                 self.sync_ui(ui);
@@ -571,6 +577,10 @@ impl BluepaneUi {
                     _ => {}
                 }
             }
+            return;
+        }
+        if self.session.pages.is_some() {
+            self.pages_keys(&pressed);
             return;
         }
         if self.session.viewer.is_some() {

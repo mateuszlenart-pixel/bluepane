@@ -44,9 +44,9 @@ pub(crate) fn extract(path: &Path) -> Result<String, DocError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     /// A one-page PDF with the text `Hello PDF world`, with a correct cross-reference table.
-    fn tiny_pdf(text: &str) -> Vec<u8> {
+    pub(crate) fn tiny_pdf(text: &str) -> Vec<u8> {
         let stream = format!("BT /F1 18 Tf 72 720 Td ({text}) Tj ET");
         let objects = [
             "<< /Type /Catalog /Pages 2 0 R >>".to_string(),

@@ -5,9 +5,14 @@
 
 mod docx;
 mod odf;
+mod office;
 mod pdf;
+mod render;
 mod xlsx;
 mod xml;
+
+pub use office::{office_program, to_pdf};
+pub use render::{PageImage, PdfDocument};
 
 use std::fmt;
 use std::fs;
