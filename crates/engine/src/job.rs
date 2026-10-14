@@ -13,6 +13,7 @@ use bluepane_archive::{
     Selection, VerifyReport,
 };
 use bluepane_ops::{self as ops, Conflict, OpError, Outcome, Progress, Resolution};
+use bluepane_sync as sync;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobKind {
@@ -32,6 +33,10 @@ pub enum JobKind {
     VerifyArchive,
     /// Adds to, removes from or renames inside an existing archive.
     ModifyArchive,
+    /// Compares two folders and plans a synchronization (writes nothing).
+    SyncCompare,
+    /// Carries out a synchronization plan.
+    SyncApply,
 }
 
 impl JobKind {
@@ -47,6 +52,8 @@ impl JobKind {
             JobKind::Pack => "Pakowanie",
             JobKind::VerifyArchive => "Sprawdzanie archiwum",
             JobKind::ModifyArchive => "Zmiana archiwum",
+            JobKind::SyncCompare => "Porównywanie folderów",
+            JobKind::SyncApply => "Synchronizacja",
         }
     }
 
@@ -62,6 +69,8 @@ impl JobKind {
             JobKind::Pack => "Spakowano",
             JobKind::VerifyArchive => "Sprawdzono",
             JobKind::ModifyArchive => "Zmieniono archiwum",
+            JobKind::SyncCompare => "Porównano",
+            JobKind::SyncApply => "Zsynchronizowano",
         }
     }
 }
@@ -78,7 +87,17 @@ pub struct PackOptions {
     pub output_name: String,
 }
 
-/// The extra settings of the archive jobs.
+/// What a synchronization job works on.
+#[derive(Debug, Clone)]
+pub struct SyncJob {
+    pub left: PathBuf,
+    pub right: PathBuf,
+    pub settings: sync::Settings,
+    /// Apply: the plan to carry out.
+    pub preview: Option<Arc<sync::Preview>>,
+}
+
+/// The extra settings of the archive and synchronization jobs.
 #[derive(Debug, Clone, Default)]
 pub struct ArchiveJob {
     /// Extract: the items to extract (inside the archive); empty means all.
@@ -91,6 +110,8 @@ pub struct ArchiveJob {
     pub pack: Option<PackOptions>,
     /// Modify: what to do with the archive.
     pub change: Option<Change>,
+    /// Sync jobs.
+    pub sync: Option<SyncJob>,
     /// Open: the side (0 or 1) that asked.
     pub side: usize,
     /// Extract: this is a preview (F3), so show the file in the viewer once it is out.
@@ -153,6 +174,10 @@ pub struct Report {
     pub verify: Option<VerifyReport>,
     /// Modify: what was changed (the new table of contents is in `listing`).
     pub modified: Option<ModifyReport>,
+    /// SyncCompare: what a synchronization would do.
+    pub sync_preview: Option<Arc<sync::Preview>>,
+    /// SyncApply: what was done.
+    pub sync_done: Option<sync::ExecReport>,
     /// Pack: the files that make up the new archive.
     pub created: Vec<PathBuf>,
     /// Extract / pack: files written.
@@ -386,7 +411,48 @@ fn run_archive(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Repor
     report
 }
 
+/// The synchronization jobs: compare (read only) and apply.
+fn run_sync(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
+    let mut report = Report::default();
+    let Some(job) = spec.archive.as_ref().and_then(|a| a.sync.as_ref()) else {
+        report.failed.push("brak ustawień synchronizacji".into());
+        return report;
+    };
+    let mut host = WorkerHost {
+        tx: tx.clone(),
+        progress: progress.clone(),
+        sticky: None,
+    };
+    let result: Result<(), OpError> = match (spec.kind, &job.preview) {
+        (JobKind::SyncCompare, _) => sync::preview(&job.left, &job.right, &job.settings, progress)
+            .map(|preview| {
+                report.sync_preview = Some(Arc::new(preview));
+            }),
+        (_, Some(preview)) => sync::apply(
+            preview,
+            &job.left,
+            &job.right,
+            &job.settings,
+            progress,
+            &mut host,
+        )
+        .map(|done| {
+            report.sync_done = Some(done);
+        }),
+        (_, None) => Err(OpError::InvalidName("brak planu synchronizacji".into())),
+    };
+    match result {
+        Ok(()) => report.done = 1,
+        Err(OpError::Cancelled) => report.cancelled = true,
+        Err(error) => report.failed.push(error.to_string()),
+    }
+    report
+}
+
 fn run(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>) -> Report {
+    if matches!(spec.kind, JobKind::SyncCompare | JobKind::SyncApply) {
+        return run_sync(spec, progress, tx);
+    }
     if matches!(
         spec.kind,
         JobKind::OpenArchive

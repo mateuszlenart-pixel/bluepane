@@ -541,6 +541,7 @@ version = "0.1.0"
 dependencies = [
  "bluepane-archive",
  "bluepane-ops",
+ "bluepane-sync",
  "bluepane-vfs",
  "chrono",
  "tempfile",
@@ -552,6 +553,14 @@ version = "0.1.0"
 dependencies = [
  "tempfile",
  "trash",
+]
+
+[[package]]
+name = "bluepane-sync"
+version = "0.1.0"
+dependencies = [
+ "bluepane-ops",
+ "tempfile",
 ]
 
 [[package]]

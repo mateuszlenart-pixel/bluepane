@@ -14,6 +14,7 @@ publish = false
 bluepane-vfs = { path = "crates/vfs" }
 bluepane-ops = { path = "crates/ops" }
 bluepane-archive = { path = "crates/archive" }
+bluepane-sync = { path = "crates/sync" }
 bluepane-engine = { path = "crates/engine" }
 bluepane-ui-egui = { path = "crates/ui-egui" }
 

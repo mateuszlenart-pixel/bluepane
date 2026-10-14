@@ -15,17 +15,26 @@ mod viewer;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
 pub use bluepane_ops::Resolution;
+pub use bluepane_sync::{
+    Action as SyncAction, Category as SyncCategory, CompareBy, Deletion as SyncDeletion,
+    Direction as SyncDirection, ExecReport as SyncReport, Filter as SyncFilter, Kind as SyncKind,
+    Node as SyncNode, Op as SyncOp, Preview as SyncPreview, Settings as SyncSettings,
+    Variant as SyncVariant,
+};
 pub use command::{
-    parse_size, Command, PackArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
+    parse_size, Command, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
 pub use format::{format_modified, human_size, name_parts};
 pub use job::{
     Answer, ArchiveJob, Event, JobKind, JobSpec, PackOptions, PasswordProblem, Report, RunningJob,
+    SyncJob,
 };
 pub use keymap::Keymap;
 pub use mask::Mask;
 pub use panel::{is_parent_entry, ArchiveView, Panel, Sort, SortKey, PARENT_NAME};
-pub use session::{ConflictPrompt, InputKind, JobStatus, PackForm, Pending, Session, TabStrip};
+pub use session::{
+    ConflictPrompt, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
+};
 pub use viewer::{Row, ViewMode, Viewer};
 
 use std::fmt;
