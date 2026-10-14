@@ -328,7 +328,11 @@ mod tests {
     #[test]
     fn a_refusing_host_is_still_a_host() {
         let dead = closed_port();
-        let (reports, summary) = run(&options(&[dead], &[dead]));
+        let mut o = options(&[dead], &[dead]);
+        // Windows takes a couple of seconds to give up on a closed port of its own machine
+        // (it retries the connection), so the wait must be long here; Linux answers at once.
+        o.timeout = Duration::from_secs(5);
+        let (reports, summary) = run(&o);
         assert_eq!(summary.hosts, 1, "a reset means somebody is there");
         assert!(reports.last().unwrap().services.is_empty());
     }
