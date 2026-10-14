@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 bluepane-ops.workspace = true
+bluepane-vfs.workspace = true
 russh.workspace = true
 russh-sftp.workspace = true
 tokio.workspace = true

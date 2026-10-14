@@ -674,6 +674,7 @@ name = "bluepane-sftp"
 version = "0.1.0"
 dependencies = [
  "bluepane-ops",
+ "bluepane-vfs",
  "rand",
  "russh",
  "russh-sftp",

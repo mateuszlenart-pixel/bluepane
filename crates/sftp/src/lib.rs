@@ -13,9 +13,11 @@
 mod connection;
 mod error;
 mod known_hosts;
+mod sites;
 mod transfer;
 
 pub use connection::{Auth, ConnectParams, Connection, RemoteEntry};
 pub use error::SftpError;
 pub use known_hosts::{HostKeyStatus, KnownHosts};
+pub use sites::{bitwarden_available, bitwarden_secret, SecretStore, Site, Sites};
 pub use transfer::TransferOptions;
