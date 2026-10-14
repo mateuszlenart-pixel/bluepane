@@ -159,8 +159,8 @@ impl BluepaneUi {
             ui.label("Wariant:");
             for (variant, label) in [
                 (SyncVariant::TwoWay, "Dwukierunkowa"),
-                (SyncVariant::Mirror, "Lustro (lewy → prawy)"),
-                (SyncVariant::Update, "Aktualizacja (lewy → prawy)"),
+                (SyncVariant::Mirror, "Lustro (lewy -> prawy)"),
+                (SyncVariant::Update, "Aktualizacja (lewy -> prawy)"),
             ] {
                 ui.selectable_value(&mut form.variant, variant, label);
             }

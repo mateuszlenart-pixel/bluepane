@@ -32,6 +32,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
+| Alt+S | synchronizacja katalogów obu paneli (okno) |
 | Alt+F5 / Alt+F9 | pakuj (okno) / rozpakuj archiwum pod kursorem lub otwarte |
 | Ctrl+T / Ctrl+W | nowa zakładka (ten sam katalog) / zamknij zakładkę |
 | Ctrl+↑ | katalog pod kursorem w nowej zakładce |
@@ -58,6 +59,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
+`sync`, `syncrun`, `syncset`, `syncclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -126,6 +128,18 @@ pack tajne -t7z -psekret -mhe             # 7z z hasłem i ukrytymi nazwami plik
   Anuluj). Archiwa wieloczęściowe zostają podzielone na części tej samej wielkości, a szyfrowanie
   i ukryte nazwy w 7z są zachowane. Konflikt nazw przy dodawaniu pyta jak przy kopiowaniu.
   Archiwum zmienione na dysku po otwarciu trzeba otworzyć ponownie (program tego pilnuje).
+
+## Synchronizacja katalogów (Alt+S)
+
+Porównuje katalogi obu paneli i **pokazuje listę zmian przed wykonaniem**; nic nie jest
+kopiowane ani usuwane, dopóki nie uruchomisz synchronizacji. Warianty: dwukierunkowa, lustro
+(lewy -> prawy, z usuwaniem nadmiarowych), aktualizacja (lewy -> prawy, bez usuwania). Porównanie
+po czasie (z tolerancją), rozmiarze albo zawartości; filtry wzorców „uwzględnij” / „pomiń”.
+Kierunek pojedynczej pozycji można zmienić ręcznie. Usuwanie: do kosza (domyślnie),
+do katalogu z wersjami albo trwale (tylko na jawne życzenie). Pozycje niedostępne do odczytu
+są zgłaszane i nie są ruszane. Z wiersza poleceń:
+`sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
+`syncset <n> <kierunek>`, `syncrun`, `syncclose`.
 
 ## Kopiowanie i przenoszenie
 

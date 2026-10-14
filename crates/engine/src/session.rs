@@ -931,6 +931,8 @@ impl Session {
         }
         view.settings.filter = SyncFilter::new(&view.include, &view.exclude);
         view.preview = None;
+        // A manual comparison starts a fresh report.
+        view.summary = None;
         let spec = Self::sync_spec(&view, JobKind::SyncCompare, None);
         self.sync = Some(view);
         self.enqueue(spec);
@@ -1016,6 +1018,10 @@ impl Session {
                 }
                 let is_error = !preview.unreadable.is_empty();
                 if let Some(view) = &mut self.sync {
+                    // Right after a run, keep saying what it did, then what is still left.
+                    if let Some(summary) = &view.summary {
+                        text = format!("{summary}. Pozostało: {}", text.to_lowercase());
+                    }
                     view.preview = Some(preview);
                 }
                 (text, is_error)
