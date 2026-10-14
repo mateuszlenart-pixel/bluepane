@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bluepane_sftp::{KnownHosts, RemoteEntry, SecretStore, Site, Sites};
+use bluepane_remote::{KnownHosts, RemoteEntry, SecretStore, Site, Sites};
 use bluepane_vfs::{Entry, EntryKind};
 
 use crate::job::{ArchiveJob, JobKind, JobSpec, RemoteJob, RemoteOp, Report};
@@ -114,7 +114,7 @@ impl Session {
             _ => return Err(EngineError(format!("siteset: nieznane pole {field}"))),
         }
         if let SecretStore::Bitwarden(_) = site.secret {
-            if !bluepane_sftp::bitwarden_available() {
+            if !bluepane_remote::bitwarden_available() {
                 self.status = "Uwaga: nie znaleziono Bitwarden CLI (`bw`); połączenie się nie uda, dopóki go nie zainstalujesz".into();
             }
         }
@@ -213,7 +213,7 @@ impl Session {
 
     fn remote_spec(
         side: usize,
-        conn: Option<Arc<bluepane_sftp::Connection>>,
+        conn: Option<Arc<bluepane_remote::Connection>>,
         op: RemoteOp,
     ) -> JobSpec {
         JobSpec {
@@ -648,7 +648,7 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bluepane_sftp::testing::{start, write_file, Settings, TestServer};
+    use bluepane_remote::testing::{start, write_file, Settings, TestServer};
     use std::fs;
     use std::time::Duration;
 

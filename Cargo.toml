@@ -5,7 +5,7 @@ members = ["crates/*", "apps/*", "xtask"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 publish = false
 
@@ -17,7 +17,7 @@ bluepane-archive = { path = "crates/archive" }
 bluepane-sync = { path = "crates/sync" }
 bluepane-rename = { path = "crates/rename" }
 bluepane-search = { path = "crates/search" }
-bluepane-sftp = { path = "crates/sftp" }
+bluepane-remote = { path = "crates/remote" }
 bluepane-engine = { path = "crates/engine" }
 bluepane-ui-egui = { path = "crates/ui-egui" }
 
@@ -40,6 +40,11 @@ russh = { version = "0.63", default-features = false, features = ["ring", "rsa",
 russh-sftp = "3"
 rand = "0.10"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "time", "io-util", "sync", "macros"] }
+# FTP and FTPS (TLS through rustls with ring, no C library to install).
+suppaftp = { version = "12", default-features = false, features = ["rustls-ring", "deprecated"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+sha2 = "0.10"
+rcgen = "0.14"
 # Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

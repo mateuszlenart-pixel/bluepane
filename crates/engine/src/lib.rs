@@ -27,7 +27,7 @@ pub use bluepane_search::{
     Encoding as FindEncoding, Hit as FindHit, LineHit as FindLine, Location as FindLocation,
     Summary as FindSummary,
 };
-pub use bluepane_sftp::{bitwarden_available, SecretStore, Site};
+pub use bluepane_remote::{bitwarden_available, SecretStore, Site};
 pub use bluepane_sync::{
     Action as SyncAction, Category as SyncCategory, CompareBy, Deletion as SyncDeletion,
     Direction as SyncDirection, ExecReport as SyncReport, Filter as SyncFilter, Kind as SyncKind,

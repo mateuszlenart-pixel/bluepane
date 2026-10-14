@@ -1,15 +1,16 @@
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use russh::client;
 use russh::keys::{load_secret_key, HashAlg, PrivateKeyWithHashAlg, PublicKeyOrCertificate};
 use russh_sftp::client::SftpSession;
 use tokio::runtime::Runtime;
 
+use crate::fs::{Protocol, RemoteEntry, RemoteFs, TransferOptions};
 use crate::known_hosts::{HostKeyStatus, KnownHosts};
-use crate::SftpError;
+use crate::RemoteError;
 
 /// How to log in.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,18 +43,6 @@ impl ConnectParams {
             timeout: Duration::from_secs(20),
         }
     }
-}
-
-/// One file or directory on the server.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoteEntry {
-    pub name: String,
-    pub is_dir: bool,
-    pub is_symlink: bool,
-    pub size: u64,
-    pub modified: Option<SystemTime>,
-    /// Unix permission bits when the server reports them.
-    pub permissions: Option<u32>,
 }
 
 /// What the key check saw, so a refused connection can say why.
@@ -102,8 +91,8 @@ impl client::Handler for Handler {
     }
 }
 
-/// A logged-in SFTP session. Calls block the calling thread.
-pub struct Connection {
+/// A logged-in SFTP session.
+pub struct SftpConnection {
     pub(crate) rt: Runtime,
     pub(crate) sftp: SftpSession,
     // Keeps the SSH connection alive.
@@ -112,9 +101,9 @@ pub struct Connection {
     pub port: u16,
 }
 
-impl std::fmt::Debug for Connection {
+impl std::fmt::Debug for SftpConnection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Connection({}:{})", self.host, self.port)
+        write!(f, "SftpConnection({}:{})", self.host, self.port)
     }
 }
 
@@ -123,11 +112,11 @@ fn connect_error(
     observed: Option<Observed>,
     host: &str,
     port: u16,
-) -> SftpError {
+) -> RemoteError {
     if let Some(seen) = observed {
         match seen.status {
             HostKeyStatus::Unknown => {
-                return SftpError::UnknownHost {
+                return RemoteError::UnknownHost {
                     host: host.to_string(),
                     port,
                     algorithm: seen.algorithm,
@@ -135,7 +124,7 @@ fn connect_error(
                 };
             }
             HostKeyStatus::Changed { expected } => {
-                return SftpError::HostKeyChanged {
+                return RemoteError::HostKeyChanged {
                     host: host.to_string(),
                     port,
                     expected,
@@ -145,17 +134,17 @@ fn connect_error(
             HostKeyStatus::Known => {}
         }
     }
-    SftpError::Connect(error.to_string())
+    RemoteError::Connect(error.to_string())
 }
 
-impl Connection {
+impl SftpConnection {
     /// Connects and logs in. `known` is the list of remembered keys; `trust` is the
     /// fingerprint of an unknown key that the user has just confirmed.
     pub fn connect(
         params: &ConnectParams,
         known: &KnownHosts,
         trust: Option<&str>,
-    ) -> Result<Connection, SftpError> {
+    ) -> Result<SftpConnection, RemoteError> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -178,7 +167,7 @@ impl Connection {
             let mut handle =
                 tokio::time::timeout(params_.timeout, client::connect(config, address, handler))
                     .await
-                    .map_err(|_| SftpError::Connect("przekroczono czas oczekiwania".into()))?
+                    .map_err(|_| RemoteError::Connect("przekroczono czas oczekiwania".into()))?
                     .map_err(|e| {
                         let seen = observed.lock().unwrap_or_else(|e| e.into_inner()).clone();
                         connect_error(&e, seen, &params_.host, params_.port)
@@ -188,14 +177,14 @@ impl Connection {
                 Auth::Password(password) => handle
                     .authenticate_password(params_.user.clone(), password.clone())
                     .await
-                    .map_err(|e| SftpError::Auth(e.to_string()))?,
+                    .map_err(|e| RemoteError::Auth(e.to_string()))?,
                 Auth::Key { path, passphrase } => {
                     let key = load_secret_key(path, passphrase.as_deref())
-                        .map_err(|e| SftpError::Key(format!("{}: {e}", path.display())))?;
+                        .map_err(|e| RemoteError::Key(format!("{}: {e}", path.display())))?;
                     let hash = handle
                         .best_supported_rsa_hash()
                         .await
-                        .map_err(|e| SftpError::Auth(e.to_string()))?
+                        .map_err(|e| RemoteError::Auth(e.to_string()))?
                         .flatten();
                     handle
                         .authenticate_publickey(
@@ -203,28 +192,28 @@ impl Connection {
                             PrivateKeyWithHashAlg::new(Arc::new(key), hash),
                         )
                         .await
-                        .map_err(|e| SftpError::Auth(e.to_string()))?
+                        .map_err(|e| RemoteError::Auth(e.to_string()))?
                 }
             };
             if !result.success() {
-                return Err(SftpError::Auth(
+                return Err(RemoteError::Auth(
                     "błędne hasło, klucz albo nazwa użytkownika".into(),
                 ));
             }
             let channel = handle
                 .channel_open_session()
                 .await
-                .map_err(|e| SftpError::Connect(e.to_string()))?;
+                .map_err(|e| RemoteError::Connect(e.to_string()))?;
             channel
                 .request_subsystem(true, "sftp")
                 .await
-                .map_err(|e| SftpError::Connect(format!("serwer nie udostępnia SFTP: {e}")))?;
+                .map_err(|e| RemoteError::Connect(format!("serwer nie udostępnia SFTP: {e}")))?;
             let sftp = SftpSession::new(channel.into_stream())
                 .await
-                .map_err(|e| SftpError::Connect(format!("SFTP: {e}")))?;
-            Ok::<_, SftpError>((handle, sftp))
+                .map_err(|e| RemoteError::Connect(format!("SFTP: {e}")))?;
+            Ok::<_, RemoteError>((handle, sftp))
         })?;
-        Ok(Connection {
+        Ok(SftpConnection {
             rt,
             sftp,
             _handle: handle,
@@ -238,17 +227,17 @@ impl Connection {
     }
 
     /// The server's idea of the login directory (`.` resolved).
-    pub fn home(&self) -> Result<String, SftpError> {
+    pub fn home(&self) -> Result<String, RemoteError> {
         Ok(self.run(self.sftp.canonicalize("."))?)
     }
 
     /// Resolves `..` and symlinks in a path.
-    pub fn canonical(&self, path: &str) -> Result<String, SftpError> {
+    pub fn canonical(&self, path: &str) -> Result<String, RemoteError> {
         Ok(self.run(self.sftp.canonicalize(path))?)
     }
 
     /// The entries of a directory, without `.` and `..`, in the server's order.
-    pub fn list(&self, path: &str) -> Result<Vec<RemoteEntry>, SftpError> {
+    pub fn list(&self, path: &str) -> Result<Vec<RemoteEntry>, RemoteError> {
         self.run(async {
             let mut out = Vec::new();
             for item in self.sftp.read_dir(path).await? {
@@ -283,11 +272,11 @@ impl Connection {
     }
 
     /// One path, or `None` when it does not exist.
-    pub fn stat(&self, path: &str) -> Result<Option<RemoteEntry>, SftpError> {
+    pub fn stat(&self, path: &str) -> Result<Option<RemoteEntry>, RemoteError> {
         self.run(self.stat_async(path))
     }
 
-    pub(crate) async fn stat_async(&self, path: &str) -> Result<Option<RemoteEntry>, SftpError> {
+    pub(crate) async fn stat_async(&self, path: &str) -> Result<Option<RemoteEntry>, RemoteError> {
         if !self.sftp.try_exists(path).await? {
             return Ok(None);
         }
@@ -303,22 +292,22 @@ impl Connection {
         }))
     }
 
-    pub fn mkdir(&self, path: &str) -> Result<(), SftpError> {
+    pub fn mkdir(&self, path: &str) -> Result<(), RemoteError> {
         Ok(self.run(self.sftp.create_dir(path))?)
     }
 
-    pub fn remove_file(&self, path: &str) -> Result<(), SftpError> {
+    pub fn remove_file(&self, path: &str) -> Result<(), RemoteError> {
         Ok(self.run(self.sftp.remove_file(path))?)
     }
 
-    pub fn remove_dir(&self, path: &str) -> Result<(), SftpError> {
+    pub fn remove_dir(&self, path: &str) -> Result<(), RemoteError> {
         Ok(self.run(self.sftp.remove_dir(path))?)
     }
 
     /// Renames within the server. Never replaces an existing target.
-    pub fn rename(&self, from: &str, to: &str) -> Result<(), SftpError> {
+    pub fn rename(&self, from: &str, to: &str) -> Result<(), RemoteError> {
         if self.stat(to)?.is_some() {
-            return Err(SftpError::Exists(to.to_string()));
+            return Err(RemoteError::Exists(to.to_string()));
         }
         Ok(self.run(self.sftp.rename(from, to))?)
     }
@@ -326,5 +315,63 @@ impl Connection {
     /// Ends the session.
     pub fn close(self) {
         let _ = self.rt.block_on(self.sftp.close());
+    }
+}
+
+impl RemoteFs for SftpConnection {
+    fn protocol(&self) -> Protocol {
+        Protocol::Sftp
+    }
+
+    fn home(&self) -> Result<String, RemoteError> {
+        SftpConnection::home(self)
+    }
+
+    fn canonical(&self, path: &str) -> Result<String, RemoteError> {
+        SftpConnection::canonical(self, path)
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<RemoteEntry>, RemoteError> {
+        SftpConnection::list(self, path)
+    }
+
+    fn stat(&self, path: &str) -> Result<Option<RemoteEntry>, RemoteError> {
+        SftpConnection::stat(self, path)
+    }
+
+    fn mkdir(&self, path: &str) -> Result<(), RemoteError> {
+        SftpConnection::mkdir(self, path)
+    }
+
+    fn remove_file(&self, path: &str) -> Result<(), RemoteError> {
+        SftpConnection::remove_file(self, path)
+    }
+
+    fn remove_dir(&self, path: &str) -> Result<(), RemoteError> {
+        SftpConnection::remove_dir(self, path)
+    }
+
+    fn rename(&self, from: &str, to: &str) -> Result<(), RemoteError> {
+        SftpConnection::rename(self, from, to)
+    }
+
+    fn download(
+        &self,
+        remote: &str,
+        local: &std::path::Path,
+        progress: &bluepane_ops::Progress,
+        options: TransferOptions,
+    ) -> Result<(), RemoteError> {
+        SftpConnection::download(self, remote, local, progress, options)
+    }
+
+    fn upload(
+        &self,
+        local: &std::path::Path,
+        remote: &str,
+        progress: &bluepane_ops::Progress,
+        options: TransferOptions,
+    ) -> Result<(), RemoteError> {
+        SftpConnection::upload(self, local, remote, progress, options)
     }
 }

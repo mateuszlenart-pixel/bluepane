@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bluepane_ops::{Conflict, Host, OpError, Progress, Resolution};
-use bluepane_sftp::{Connection, SftpError, TransferOptions};
+use bluepane_remote::{Connection, RemoteError, TransferOptions};
 
 use crate::job::{Event, HostPrompt, JobSpec, RemoteOp, Report, WorkerHost};
 
@@ -82,7 +82,7 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
                     Err(error) => report.failed.push(error.to_string()),
                 }
             }
-            Err(SftpError::UnknownHost {
+            Err(RemoteError::UnknownHost {
                 host,
                 port,
                 algorithm,
@@ -169,24 +169,24 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
     };
     match result {
         Ok(()) => {}
-        Err(SftpError::Cancelled) => report.cancelled = true,
+        Err(RemoteError::Cancelled) => report.cancelled = true,
         Err(error) => report.failed.push(error.to_string()),
     }
     report
 }
 
-fn cancelled(progress: &Progress) -> Result<(), SftpError> {
+fn cancelled(progress: &Progress) -> Result<(), RemoteError> {
     if progress.is_cancelled() {
-        Err(SftpError::Cancelled)
+        Err(RemoteError::Cancelled)
     } else {
         Ok(())
     }
 }
 
-fn op_error(error: OpError) -> SftpError {
+fn op_error(error: OpError) -> RemoteError {
     match error {
-        OpError::Cancelled => SftpError::Cancelled,
-        other => SftpError::Remote(other.to_string()),
+        OpError::Cancelled => RemoteError::Cancelled,
+        other => RemoteError::Remote(other.to_string()),
     }
 }
 
@@ -197,13 +197,13 @@ fn delete_all(
     paths: &[String],
     progress: &Progress,
     report: &mut Report,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     for path in paths {
         cancelled(progress)?;
         progress.set_current(remote_name(path));
         match delete_tree(conn, path, progress) {
             Ok(()) => report.done += 1,
-            Err(SftpError::Cancelled) => return Err(SftpError::Cancelled),
+            Err(RemoteError::Cancelled) => return Err(RemoteError::Cancelled),
             Err(error) => report
                 .failed
                 .push(format!("{}: {error}", remote_name(path))),
@@ -213,7 +213,7 @@ fn delete_all(
     Ok(())
 }
 
-fn delete_tree(conn: &Connection, path: &str, progress: &Progress) -> Result<(), SftpError> {
+fn delete_tree(conn: &Connection, path: &str, progress: &Progress) -> Result<(), RemoteError> {
     cancelled(progress)?;
     let Some(entry) = conn.stat(path)? else {
         return Ok(());
@@ -235,7 +235,7 @@ fn measure_remote(
     path: &str,
     files: &mut u64,
     bytes: &mut u64,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     let Some(entry) = conn.stat(path)? else {
         return Ok(());
     };
@@ -259,7 +259,7 @@ fn download_all(
     progress: &Progress,
     host: &mut WorkerHost,
     report: &mut Report,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     let (mut files, mut bytes) = (0, 0);
     for source in sources {
         measure_remote(conn, source, &mut files, &mut bytes)?;
@@ -283,7 +283,7 @@ fn download_all(
                     }
                 }
             }
-            Err(SftpError::Cancelled) => return Err(SftpError::Cancelled),
+            Err(RemoteError::Cancelled) => return Err(RemoteError::Cancelled),
             Err(error) => report.failed.push(format!("{name}: {error}")),
         }
     }
@@ -297,15 +297,15 @@ fn download_tree(
     progress: &Progress,
     host: &mut WorkerHost,
     report: &mut Report,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     cancelled(progress)?;
     let Some(entry) = conn.stat(remote)? else {
-        return Err(SftpError::Remote("plik zniknął z serwera".into()));
+        return Err(RemoteError::Remote("plik zniknął z serwera".into()));
     };
     if entry.is_dir {
         match fs::metadata(local) {
             Ok(meta) if meta.is_dir() => {}
-            Ok(_) => return Err(SftpError::Exists(local.display().to_string())),
+            Ok(_) => return Err(RemoteError::Exists(local.display().to_string())),
             Err(_) => fs::create_dir_all(local)?,
         }
         for child in conn.list(remote)? {
@@ -404,7 +404,7 @@ fn free_local_name(path: &Path) -> PathBuf {
         .expect("an unused name exists")
 }
 
-fn free_remote_name(conn: &Connection, path: &str) -> Result<String, SftpError> {
+fn free_remote_name(conn: &Connection, path: &str) -> Result<String, RemoteError> {
     let (dir, name) = (remote_parent(path), remote_name(path).to_string());
     for n in 1.. {
         let candidate = remote_join(&dir, &kopia_name(&name, n));
@@ -429,7 +429,7 @@ fn relay_all(
     progress: &Progress,
     host: &mut WorkerHost,
     report: &mut Report,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     let (mut files, mut bytes) = (0, 0);
     for source in sources {
         measure_remote(from, source, &mut files, &mut bytes)?;
@@ -468,7 +468,7 @@ fn relay_all(
                     }
                 }
             }
-            Err(SftpError::Cancelled) => return Err(SftpError::Cancelled),
+            Err(RemoteError::Cancelled) => return Err(RemoteError::Cancelled),
             Err(error) => report.failed.push(format!("{name}: {error}")),
         }
     }
@@ -481,7 +481,7 @@ fn move_within(
     dest: &str,
     progress: &Progress,
     report: &mut Report,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     progress.set_total(0, sources.len() as u64);
     for source in sources {
         cancelled(progress)?;
@@ -517,7 +517,7 @@ fn upload_all(
     progress: &Progress,
     host: &mut WorkerHost,
     report: &mut Report,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     bluepane_ops::measure(sources, progress).map_err(op_error)?;
     for source in sources {
         cancelled(progress)?;
@@ -544,7 +544,7 @@ fn upload_all(
                     }
                 }
             }
-            Err(SftpError::Cancelled) => return Err(SftpError::Cancelled),
+            Err(RemoteError::Cancelled) => return Err(RemoteError::Cancelled),
             Err(error) => report.failed.push(format!("{name}: {error}")),
         }
     }
@@ -558,13 +558,13 @@ fn upload_tree(
     progress: &Progress,
     host: &mut WorkerHost,
     report: &mut Report,
-) -> Result<(), SftpError> {
+) -> Result<(), RemoteError> {
     cancelled(progress)?;
     let meta = fs::metadata(local)?;
     if meta.is_dir() {
         match conn.stat(remote)? {
             Some(existing) if existing.is_dir => {}
-            Some(_) => return Err(SftpError::Exists(remote.to_string())),
+            Some(_) => return Err(RemoteError::Exists(remote.to_string())),
             None => conn.mkdir(remote)?,
         }
         let mut children: Vec<_> = fs::read_dir(local)?.filter_map(Result::ok).collect();

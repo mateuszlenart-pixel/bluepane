@@ -13,7 +13,7 @@ use bluepane_archive::{
     Selection, VerifyReport,
 };
 use bluepane_ops::{self as ops, Conflict, OpError, Outcome, Progress, Resolution};
-use bluepane_sftp as sftp;
+use bluepane_remote as sftp;
 use bluepane_sync as sync;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

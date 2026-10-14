@@ -4,6 +4,7 @@
 //!
 //! ```text
 //! [Proxmox]
+//! protocol = sftp
 //! host = 192.168.1.10
 //! port = 22
 //! user = root
@@ -22,7 +23,11 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::{Auth, ConnectParams, SftpError};
+use std::sync::Arc;
+use std::time::Duration;
+
+use crate::ftp::FtpConnection;
+use crate::{Auth, ConnectParams, KnownHosts, Protocol, RemoteError, RemoteFs, SftpConnection};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SecretStore {
@@ -38,6 +43,7 @@ pub enum SecretStore {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Site {
     pub name: String,
+    pub protocol: Protocol,
     pub host: String,
     pub port: u16,
     pub user: String,
@@ -52,6 +58,7 @@ impl Site {
     pub fn new(name: impl Into<String>, host: impl Into<String>, user: impl Into<String>) -> Site {
         Site {
             name: name.into(),
+            protocol: Protocol::Sftp,
             host: host.into(),
             port: 22,
             user: user.into(),
@@ -78,7 +85,45 @@ impl Site {
         None
     }
 
-    /// Connection parameters; `secret` is the password or the key's passphrase.
+    /// Connects with this site's protocol. `secret` is the password (or the key's
+    /// passphrase); `trust` is the fingerprint of an unknown key or certificate that the user
+    /// has just confirmed.
+    pub fn connect(
+        &self,
+        secret: Option<String>,
+        known: &KnownHosts,
+        trust: Option<&str>,
+    ) -> Result<Arc<dyn RemoteFs>, RemoteError> {
+        match self.protocol {
+            Protocol::Sftp => {
+                let conn = SftpConnection::connect(&self.params(secret), known, trust)?;
+                Ok(Arc::new(conn))
+            }
+            protocol => {
+                // Anonymous logins want some text as the "password".
+                let password = secret.filter(|s| !s.is_empty()).unwrap_or_else(|| {
+                    if self.user.eq_ignore_ascii_case("anonymous") || self.user == "ftp" {
+                        "anonymous@".to_string()
+                    } else {
+                        String::new()
+                    }
+                });
+                let conn = FtpConnection::connect(
+                    protocol,
+                    &self.host,
+                    self.port,
+                    &self.user,
+                    &password,
+                    Duration::from_secs(20),
+                    known,
+                    trust,
+                )?;
+                Ok(Arc::new(conn))
+            }
+        }
+    }
+
+    /// Connection parameters for SFTP; `secret` is the password or the key's passphrase.
     pub fn params(&self, secret: Option<String>) -> ConnectParams {
         let auth = match &self.key {
             Some(path) => Auth::Key {
@@ -94,7 +139,7 @@ impl Site {
     }
 
     /// The stored secret, if it can be had without asking: `Ok(None)` means "ask".
-    pub fn stored_secret(&self) -> Result<Option<String>, SftpError> {
+    pub fn stored_secret(&self) -> Result<Option<String>, RemoteError> {
         match &self.secret {
             SecretStore::Ask => Ok(None),
             SecretStore::Local(secret) => Ok(Some(secret.clone())),
@@ -162,6 +207,7 @@ impl Sites {
             };
             let value = unescape(value.trim_start());
             match key.trim() {
+                "protocol" => site.protocol = Protocol::from_word(&value).unwrap_or_default(),
                 "host" => site.host = value,
                 "port" => site.port = value.trim().parse().unwrap_or(22),
                 "user" => site.user = value,
@@ -226,6 +272,7 @@ impl Sites {
         let mut text = String::new();
         for site in &self.sites {
             text.push_str(&format!("[{}]\n", escape(&site.name)));
+            text.push_str(&format!("protocol = {}\n", site.protocol.word()));
             text.push_str(&format!("host = {}\n", escape(&site.host)));
             text.push_str(&format!("port = {}\n", site.port));
             text.push_str(&format!("user = {}\n", escape(&site.user)));
@@ -264,18 +311,18 @@ pub fn bitwarden_available() -> bool {
 
 /// The password of a Bitwarden item. The vault has to be unlocked for the CLI
 /// (`bw unlock`, then `BW_SESSION` set in the environment bluepane runs in).
-pub fn bitwarden_secret(item: &str) -> Result<String, SftpError> {
+pub fn bitwarden_secret(item: &str) -> Result<String, RemoteError> {
     let out = Command::new(bw_command())
         .args(["get", "password", item, "--raw", "--nointeraction"])
         .output()
         .map_err(|e| {
-            SftpError::Auth(format!(
+            RemoteError::Auth(format!(
                 "nie da się uruchomić Bitwarden CLI ({e}); zainstaluj `bw` albo wybierz inny sposób zapisu hasła"
             ))
         })?;
     if !out.status.success() {
         let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(SftpError::Auth(format!(
+        return Err(RemoteError::Auth(format!(
             "Bitwarden: {}. Odblokuj sejf (`bw unlock`) i ustaw BW_SESSION przed uruchomieniem bluepane",
             if why.is_empty() { "brak hasła dla elementu".to_string() } else { why }
         )));
