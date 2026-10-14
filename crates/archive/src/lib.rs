@@ -18,6 +18,7 @@ mod seven;
 mod sink;
 mod split;
 mod time;
+mod visit;
 
 use std::fmt;
 use std::io;
@@ -29,6 +30,7 @@ pub use format::{detect, volumes_of, Format};
 pub use listing::{ArchiveEntry, Listing};
 pub use modify::{modify, Change, ModifyReport};
 pub use read::{extract, list, verify, ExtractReport, Selection, VerifyReport};
+pub use visit::{visit, VisitReport, VisitedEntry};
 
 #[derive(Debug)]
 pub enum ArchiveError {

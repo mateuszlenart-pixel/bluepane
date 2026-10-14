@@ -13,6 +13,7 @@ bluepane-ops.workspace = true
 bluepane-archive.workspace = true
 bluepane-sync.workspace = true
 bluepane-rename.workspace = true
+bluepane-search.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]
