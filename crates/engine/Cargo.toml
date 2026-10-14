@@ -12,6 +12,7 @@ bluepane-vfs.workspace = true
 bluepane-ops.workspace = true
 bluepane-archive.workspace = true
 bluepane-sync.workspace = true
+bluepane-rename.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]

@@ -16,6 +16,7 @@ const ALLOWED: &[(&str, &[&str])] = &[
     ("bluepane-ops", &[]),
     ("bluepane-archive", &["bluepane-ops"]),
     ("bluepane-sync", &["bluepane-ops"]),
+    ("bluepane-rename", &["bluepane-ops"]),
     (
         "bluepane-engine",
         &[
@@ -23,6 +24,7 @@ const ALLOWED: &[(&str, &[&str])] = &[
             "bluepane-ops",
             "bluepane-archive",
             "bluepane-sync",
+            "bluepane-rename",
         ],
     ),
     ("bluepane-ui-egui", &["bluepane-engine"]),

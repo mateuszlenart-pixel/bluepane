@@ -1,0 +1,18 @@
+[package]
+name = "bluepane-rename"
+description = "Multi-rename: name masks, search and replace, counters, a preview plan and a safe two-phase apply"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bluepane-ops.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

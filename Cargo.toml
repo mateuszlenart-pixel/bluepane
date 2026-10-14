@@ -15,6 +15,7 @@ bluepane-vfs = { path = "crates/vfs" }
 bluepane-ops = { path = "crates/ops" }
 bluepane-archive = { path = "crates/archive" }
 bluepane-sync = { path = "crates/sync" }
+bluepane-rename = { path = "crates/rename" }
 bluepane-engine = { path = "crates/engine" }
 bluepane-ui-egui = { path = "crates/ui-egui" }
 
@@ -29,6 +30,8 @@ tar = { version = "0.4", default-features = false }
 flate2 = "1"
 # 7z (pure Rust): LZMA/LZMA2, AES-256 and header encryption. No BZip2/PPMd: they pull in C code.
 sevenz-rust2 = { version = "0.24", default-features = false, features = ["aes256", "compress"] }
+# Regular expressions for multi-rename search and replace.
+regex = "1"
 # Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

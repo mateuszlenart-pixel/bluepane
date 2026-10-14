@@ -748,6 +748,11 @@ fn check_name(name: &str) -> Result<&str, OpError> {
     Ok(name)
 }
 
+/// Whether `name` is acceptable as a single file or directory name on this system.
+pub fn is_valid_name(name: &str) -> bool {
+    check_name(name).is_ok_and(|checked| checked == name)
+}
+
 /// Creates a directory called `name` inside `parent`.
 pub fn mkdir(parent: &Path, name: &str) -> Result<PathBuf, OpError> {
     let name = check_name(name)?;
