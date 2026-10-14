@@ -105,7 +105,7 @@ pub(crate) fn op_failure(progress: &Progress, error: OpError, encrypted: bool) -
     }
 }
 
-fn open_zip(volumes: &[PathBuf]) -> Result<ZipArchive<Joined>, ArchiveError> {
+pub(crate) fn open_zip(volumes: &[PathBuf]) -> Result<ZipArchive<Joined>, ArchiveError> {
     let joined = Joined::open(volumes)?;
     ZipArchive::new(joined).map_err(zip_error)
 }
@@ -202,7 +202,7 @@ pub(crate) fn stream_tar(
     Ok(())
 }
 
-fn format_of(path: &Path) -> Result<Format, ArchiveError> {
+pub(crate) fn format_of(path: &Path) -> Result<Format, ArchiveError> {
     detect(path).ok_or_else(|| ArchiveError::Unsupported("nieznany format archiwum".into()))
 }
 

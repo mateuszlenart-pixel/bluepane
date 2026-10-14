@@ -16,6 +16,7 @@ bluepane-ops = { path = "crates/ops" }
 bluepane-archive = { path = "crates/archive" }
 bluepane-sync = { path = "crates/sync" }
 bluepane-rename = { path = "crates/rename" }
+bluepane-search = { path = "crates/search" }
 bluepane-engine = { path = "crates/engine" }
 bluepane-ui-egui = { path = "crates/ui-egui" }
 

@@ -224,6 +224,9 @@ pub struct Session {
     pub sync: Option<SyncView>,
     /// The multi-rename window (Ctrl+F2); while it is set the UI shows it.
     pub rename: Option<crate::RenameView>,
+    /// The search window (Alt+F7). Its search runs on its own thread, apart from the job
+    /// queue, so copying and the like keep working meanwhile.
+    pub find: Option<crate::FindView>,
     parked: [ParkedTabs; 2],
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
@@ -281,6 +284,7 @@ impl Session {
             viewer: None,
             sync: None,
             rename: None,
+            find: None,
             parked: [ParkedTabs::default(), ParkedTabs::default()],
             current: None,
             queue: VecDeque::new(),
@@ -351,6 +355,13 @@ impl Session {
             Command::SyncRun => self.run_sync()?,
             Command::SyncSet(n, direction) => self.set_sync_direction(n, direction)?,
             Command::SyncClose => self.sync = None,
+            Command::Find => self.open_find(),
+            Command::FindSet(field, value) => self.find_set(&field, &value)?,
+            Command::FindRun => self.find_run()?,
+            Command::FindStop => self.find_stop(),
+            Command::FindGo(n) => self.find_go(n)?,
+            Command::FindView(n) => self.find_view(n)?,
+            Command::FindClose => self.find_close(),
             Command::MultiRename => self.start_multirename()?,
             Command::MultiRenameSet(field, value) => self.multirename_set(&field, &value)?,
             Command::MultiRenameName(n, name) => self.multirename_name(n, name)?,

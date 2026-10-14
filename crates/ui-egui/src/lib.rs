@@ -3,6 +3,7 @@
 //! The UI only translates input into command lines and draws the engine's state.
 //! It contains no file system logic.
 
+mod find_ui;
 mod rename_ui;
 mod sync_ui;
 
@@ -29,6 +30,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Alt+F9", "Rozpakuj", "unpack"),
     ("Alt+S", "Synchronizuj", "sync"),
     ("Ctrl+F2", "Zmień nazwy", "multirename"),
+    ("Alt+F7", "Szukaj", "find"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -46,6 +48,8 @@ pub struct BluepaneUi {
     sync_form: Option<sync_ui::SyncForm>,
     /// The multi-rename row whose new name is being typed by hand, and the text so far.
     rename_edit: Option<(usize, String)>,
+    /// The selected row of the search results.
+    find_selected: usize,
 }
 
 impl BluepaneUi {
@@ -59,6 +63,7 @@ impl BluepaneUi {
             path_text: [String::new(), String::new()],
             sync_form: None,
             rename_edit: None,
+            find_selected: 0,
         }
     }
 
@@ -71,7 +76,8 @@ impl BluepaneUi {
         let ctx = ui.ctx().clone();
         // Collect what the background job reported; keep redrawing while it runs.
         self.session.poll();
-        if self.session.is_busy() {
+        let searching = self.session.find.as_ref().is_some_and(|f| f.is_running());
+        if self.session.is_busy() || searching {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
         let cmd_id = egui::Id::new(CMD_LINE_ID);
@@ -90,6 +96,8 @@ impl BluepaneUi {
                 self.sync_ui(ui);
             } else if self.session.rename.is_some() {
                 self.rename_ui(ui);
+            } else if self.session.find.as_ref().is_some_and(|f| f.visible) {
+                self.find_ui(ui);
             } else {
                 ui.columns(2, |columns| {
                     for (index, ui) in columns.iter_mut().enumerate() {
@@ -557,6 +565,11 @@ impl BluepaneUi {
                     self.dispatch(&line);
                 }
             }
+            return;
+        }
+        if self.session.find.as_ref().is_some_and(|f| f.visible) {
+            // Typing in the search window must not start the panel filter.
+            self.find_keys(&pressed);
             return;
         }
         if self.session.rename.is_some() {

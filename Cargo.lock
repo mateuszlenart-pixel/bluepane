@@ -551,6 +551,7 @@ dependencies = [
  "bluepane-archive",
  "bluepane-ops",
  "bluepane-rename",
+ "bluepane-search",
  "bluepane-sync",
  "bluepane-vfs",
  "chrono",
@@ -570,6 +571,17 @@ name = "bluepane-rename"
 version = "0.1.0"
 dependencies = [
  "bluepane-ops",
+ "regex",
+ "tempfile",
+]
+
+[[package]]
+name = "bluepane-search"
+version = "0.1.0"
+dependencies = [
+ "bluepane-archive",
+ "bluepane-ops",
+ "bluepane-vfs",
  "regex",
  "tempfile",
 ]

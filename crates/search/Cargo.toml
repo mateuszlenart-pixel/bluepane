@@ -1,0 +1,20 @@
+[package]
+name = "bluepane-search"
+description = "File search: names and masks, full text in files and archives, many folders and drives"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+bluepane-ops.workspace = true
+bluepane-vfs.workspace = true
+bluepane-archive.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
