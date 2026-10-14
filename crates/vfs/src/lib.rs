@@ -49,6 +49,40 @@ pub struct Volume {
     pub path: PathBuf,
 }
 
+/// Describes one existing path the way a listing does (a symlink to a directory counts as a
+/// directory). Fails when the path is gone.
+pub fn entry_of(path: &Path) -> io::Result<Entry> {
+    let meta = std::fs::symlink_metadata(path)?;
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let kind = if meta.is_symlink() {
+        match std::fs::metadata(path) {
+            Ok(target) if target.is_dir() => EntryKind::Dir,
+            _ => EntryKind::Symlink,
+        }
+    } else if meta.is_dir() {
+        EntryKind::Dir
+    } else if meta.is_file() {
+        EntryKind::File
+    } else {
+        EntryKind::Other
+    };
+    Ok(Entry {
+        hidden: platform::is_hidden(&name, &meta),
+        size: if kind == EntryKind::File {
+            meta.len()
+        } else {
+            0
+        },
+        modified: meta.modified().ok(),
+        name,
+        path: path.to_path_buf(),
+        kind,
+    })
+}
+
 /// Lists a directory: directories first, then files, both sorted case-insensitively.
 ///
 /// Entries that cannot be read (for example removed during listing) are skipped.
@@ -56,35 +90,9 @@ pub fn list_dir(path: &Path) -> io::Result<Vec<Entry>> {
     let mut entries = Vec::new();
     for item in std::fs::read_dir(path)? {
         let Ok(item) = item else { continue };
-        let entry_path = item.path();
-        let Ok(meta) = std::fs::symlink_metadata(&entry_path) else {
-            continue;
-        };
-        let name = item.file_name().to_string_lossy().into_owned();
-        let kind = if meta.is_symlink() {
-            match std::fs::metadata(&entry_path) {
-                Ok(target) if target.is_dir() => EntryKind::Dir,
-                _ => EntryKind::Symlink,
-            }
-        } else if meta.is_dir() {
-            EntryKind::Dir
-        } else if meta.is_file() {
-            EntryKind::File
-        } else {
-            EntryKind::Other
-        };
-        entries.push(Entry {
-            hidden: platform::is_hidden(&name, &meta),
-            size: if kind == EntryKind::File {
-                meta.len()
-            } else {
-                0
-            },
-            modified: meta.modified().ok(),
-            name,
-            path: entry_path,
-            kind,
-        });
+        if let Ok(entry) = entry_of(&item.path()) {
+            entries.push(entry);
+        }
     }
     // Cached keys: lower-casing once per entry instead of on every comparison matters
     // for directories with 100k files.

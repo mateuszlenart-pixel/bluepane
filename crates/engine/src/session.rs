@@ -362,6 +362,7 @@ impl Session {
             Command::FindGo(n) => self.find_go(n)?,
             Command::FindView(n) => self.find_view(n)?,
             Command::FindClose => self.find_close(),
+            Command::FindPanel => self.find_panel()?,
             Command::MultiRename => self.start_multirename()?,
             Command::MultiRenameSet(field, value) => self.multirename_set(&field, &value)?,
             Command::MultiRenameName(n, name) => self.multirename_name(n, name)?,
@@ -534,12 +535,17 @@ impl Session {
             return self.extract_selection();
         }
         let source = self.active_panel();
+        if self.panels[1 - self.active].virtual_list.is_some() {
+            return Err(EngineError(
+                "drugi panel pokazuje listę wyników: wybierz w nim zwykły katalog".into(),
+            ));
+        }
         let dest = self.panels[1 - self.active].cwd.clone();
         let targets = source.targets();
         if targets.is_empty() {
             return Err(EngineError("nic nie zaznaczono".into()));
         }
-        if dest == source.cwd {
+        if dest == source.cwd && source.virtual_list.is_none() {
             if remove_source {
                 return Err(EngineError("oba panele wskazują ten sam katalog".into()));
             }
@@ -914,6 +920,11 @@ impl Session {
 
     /// `sync`: compare the two panels' directories (nothing is written).
     fn start_sync(&mut self, args: SyncArgs) -> Result<(), EngineError> {
+        if self.panels.iter().any(|p| p.virtual_list.is_some()) {
+            return Err(EngineError(
+                "synchronizacja działa na katalogach, nie na liście wyników".into(),
+            ));
+        }
         if self.panels.iter().any(|p| p.archive.is_some()) {
             return Err(EngineError(
                 "synchronizacja działa na katalogach, nie wewnątrz archiwum".into(),
@@ -1574,6 +1585,11 @@ impl Session {
     /// The other panel's directory, as the place to extract or pack into.
     fn other_directory(&self) -> Result<PathBuf, EngineError> {
         let other = &self.panels[1 - self.active];
+        if other.virtual_list.is_some() {
+            return Err(EngineError(
+                "drugi panel pokazuje listę wyników: wybierz w nim zwykły katalog".into(),
+            ));
+        }
         if other.archive.is_some() {
             return Err(EngineError(
                 "drugi panel pokazuje wnętrze archiwum: wybierz w nim zwykły katalog".into(),
@@ -1785,6 +1801,11 @@ impl Session {
     fn make_dir(&mut self, name: &str) -> Result<(), EngineError> {
         if self.active_panel().archive.is_some() {
             return self.make_archive_dir(name);
+        }
+        if self.active_panel().virtual_list.is_some() {
+            return Err(EngineError(
+                "to lista wyników, nie katalog: najpierw wyjdź z niej (Backspace)".into(),
+            ));
         }
         let cwd = self.active_panel().cwd.clone();
         let created = ops::mkdir(&cwd, name).map_err(|e| EngineError(e.to_string()))?;

@@ -160,12 +160,16 @@ Szuka w tle (równolegle z kopiowaniem itp.), a wyniki pojawiają się na bież�
   Zaszyfrowane archiwa: podaj hasło; bez hasła wynik jest policzony i zgłoszony („zaszyfrowane”), a nazwy w ZIP nadal da się szukać.
   Archiwa w archiwach nie są otwierane.
 - **Filtry:** rozmiar od/do (`100k`, `5m`), data zmiany od/do (`RRRR-MM-DD`), pliki ukryte, limit wyników.
+- **Do panelu:** przycisk „Do panelu” (komenda `findpanel`) pokazuje wyniki jako wirtualny katalog w aktywnym panelu: pliki z różnych
+  katalogów w jednej liście, na której działają F3, F5, F6, F8, F2, zaznaczanie, sortowanie i zmiana nazw (Ctrl+F2). Pliki, które znikną
+  (np. po przeniesieniu), same znikają z listy. Backspace lub `..` wraca do katalogu sprzed listy. Do listy nie da się kopiować ani zakładać
+  w niej katalogów. Wyniki z archiwów nie trafiają na listę.
 - **Wyniki:** klik zaznacza, Enter lub dwuklik przechodzi do pliku w aktywnym panelu (w archiwum: do archiwum), F3 otwiera podgląd
   w miejscu trafienia. Esc zatrzymuje szukanie, drugi Esc zamyka okno; wyniki zostają, `Alt+F7` pokazuje je znowu.
 
 Komendy: `find`, `findset <pole> <wartość>` (pola: `roots` (`here`, `both`, `all` lub ścieżki), `name`, `namergx`, `namecase`, `exclude`,
 `text`, `regex`, `case`, `words`, `enc` (`auto|utf8|cp1250|utf16`), `binary`, `archives`, `password`, `hidden`, `min`, `max`, `after`,
-`before`, `limit`, `reset`), `findrun`, `findstop`, `findgo <n>`, `findview <n>`, `findclose`.
+`before`, `limit`, `reset`), `findrun`, `findstop`, `findgo <n>`, `findview <n>`, `findpanel`, `findclose`.
 
 ## Zmiana nazw wielu plików (Ctrl+F2)
 

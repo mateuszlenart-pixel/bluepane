@@ -43,7 +43,9 @@ pub use job::{
 pub use keymap::Keymap;
 pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};
-pub use panel::{is_parent_entry, ArchiveView, ClickMode, Panel, Sort, SortKey, PARENT_NAME};
+pub use panel::{
+    is_parent_entry, ArchiveView, ClickMode, Panel, Sort, SortKey, VirtualList, PARENT_NAME,
+};
 pub use session::{
     ConflictPrompt, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };

@@ -117,6 +117,13 @@ fn parent_inner(inner: &str) -> &str {
 
 /// One of the two file panels.
 ///
+/// A panel that shows a list of files from anywhere (search results) instead of a directory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VirtualList {
+    pub title: String,
+    pub paths: Vec<PathBuf>,
+}
+
 /// Which modifier keys were held during a mouse click on a row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ClickMode {
@@ -146,6 +153,9 @@ pub struct Panel {
     pub sort: Sort,
     /// Set while browsing the inside of an archive.
     pub archive: Option<ArchiveView>,
+    /// Set while the panel shows a list of files (search results); `cwd` stays where the
+    /// panel was, and leaving the list goes back there.
+    pub virtual_list: Option<VirtualList>,
     /// Set when the current directory could not be listed.
     pub error: Option<String>,
     /// The whole directory listing, before filtering and without the `..` row.
@@ -171,6 +181,7 @@ impl Panel {
                 descending: false,
             },
             archive: None,
+            virtual_list: None,
             error: None,
             listing: Vec::new(),
         };
@@ -192,6 +203,7 @@ impl Panel {
                 descending: false,
             },
             archive: None,
+            virtual_list: None,
             error: None,
             listing: Vec::new(),
             history: Vec::new(),
@@ -201,9 +213,15 @@ impl Panel {
 
     /// Re-reads the directory, keeping the cursor entry and the still-valid selection.
     pub fn reload(&mut self) {
-        let listed = match &self.archive {
-            Some(view) => Ok(archive_entries(view)),
-            None => bluepane_vfs::list_dir(&self.cwd),
+        let listed = match (&self.archive, &self.virtual_list) {
+            (Some(view), _) => Ok(archive_entries(view)),
+            // Entries that no longer exist (deleted, moved) drop out of the list.
+            (None, Some(list)) => Ok(list
+                .paths
+                .iter()
+                .filter_map(|p| bluepane_vfs::entry_of(p).ok())
+                .collect()),
+            (None, None) => bluepane_vfs::list_dir(&self.cwd),
         };
         match listed {
             Ok(entries) => {
@@ -330,6 +348,8 @@ impl Panel {
         let needle = self.filter.to_lowercase();
         self.entries.clear();
         let parent = match &self.archive {
+            // The `..` row of a list leaves it, back to the directory it was opened from.
+            None if self.virtual_list.is_some() => Some(self.cwd.clone()),
             // In an archive the `..` row always exists: it leads up a level or out of it.
             Some(view) if view.inner.is_empty() => Some(self.cwd.clone()),
             Some(view) => Some(view.archive.join(parent_inner(&view.inner))),
@@ -411,6 +431,7 @@ impl Panel {
     /// Switches the listing to `dir` without touching the history.
     fn show_dir(&mut self, dir: PathBuf) {
         self.archive = None;
+        self.virtual_list = None;
         self.cwd = dir;
         self.cursor = 0;
         self.selected.clear();
@@ -479,6 +500,14 @@ impl Panel {
     /// Goes to the parent directory and puts the cursor on the directory just left. Inside an
     /// archive this goes up one level, and from its top level leaves the archive.
     pub fn up(&mut self) {
+        if self.virtual_list.is_some() {
+            self.virtual_list = None;
+            self.selected.clear();
+            self.filter.clear();
+            self.cursor = 0;
+            self.reload();
+            return;
+        }
         if let Some(view) = &self.archive {
             let left = view.location();
             if view.inner.is_empty() {
@@ -501,6 +530,16 @@ impl Panel {
         if let Some(index) = self.entries.iter().position(|e| e.path == left) {
             self.cursor = index;
         }
+    }
+
+    /// Shows `paths` (from anywhere) as one list until the panel is sent somewhere else.
+    pub fn show_paths(&mut self, title: String, paths: Vec<PathBuf>) {
+        self.archive = None;
+        self.virtual_list = Some(VirtualList { title, paths });
+        self.selected.clear();
+        self.filter.clear();
+        self.cursor = 0;
+        self.reload();
     }
 
     /// Where the panel is: the directory, or `archive/inner` while browsing an archive.

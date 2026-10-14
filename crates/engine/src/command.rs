@@ -42,6 +42,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "findgo",
     "findview",
     "findclose",
+    "findpanel",
     "multirename",
     "mrset",
     "mrname",
@@ -227,6 +228,9 @@ pub enum Command {
     FindGo(usize),
     /// Open result n in the viewer.
     FindView(usize),
+    /// Show every result as a list in the active panel (the results of a search as a
+    /// virtual folder: copy, move, delete and view work on them).
+    FindPanel,
     /// Hide the search window (the results are kept until the next search).
     FindClose,
     /// Open the multi-rename window for the selection (Ctrl+F2).
@@ -299,6 +303,7 @@ impl Command {
             "findgo" => parse_row("findgo", rest).map(Command::FindGo),
             "findview" => parse_row("findview", rest).map(Command::FindView),
             "findclose" => Ok(Command::FindClose),
+            "findpanel" => Ok(Command::FindPanel),
             "multirename" | "mr" => Ok(Command::MultiRename),
             "mrset" => parse_mrset(rest),
             "mrname" => parse_mrname(rest),
