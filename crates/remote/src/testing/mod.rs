@@ -3,7 +3,9 @@
 //! Not for production use.
 
 mod ftp_server;
+mod memory;
 mod sftp_server;
 
 pub use ftp_server::{start_ftp, FtpServer, FtpSettings, Tls};
+pub use memory::{FakeBitwarden, MemoryKeys, MemoryServices};
 pub use sftp_server::{start, write_file, Settings, TestServer};

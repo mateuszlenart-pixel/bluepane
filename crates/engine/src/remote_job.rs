@@ -52,11 +52,12 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
         secret,
         trust,
         known,
+        services,
     } = &job.op
     {
         let secret = match secret {
             Some(secret) => Some(secret.clone()),
-            None => match site.stored_secret() {
+            None => match site.stored_secret(&**services) {
                 Ok(secret) => secret,
                 Err(error) => {
                     report.failed.push(error.to_string());
@@ -101,12 +102,25 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
         return report;
     }
 
+    if let RemoteOp::SaveSecret {
+        site,
+        password,
+        services,
+    } = &job.op
+    {
+        match site.store_secret(&**services, password) {
+            Ok(()) => report.done = 1,
+            Err(error) => report.failed.push(error.to_string()),
+        }
+        return report;
+    }
+
     let Some(conn) = job.conn.clone() else {
         report.failed.push("brak połączenia z serwerem".into());
         return report;
     };
     let result = match &job.op {
-        RemoteOp::Connect { .. } => unreachable!("handled above"),
+        RemoteOp::Connect { .. } | RemoteOp::SaveSecret { .. } => unreachable!("handled above"),
         RemoteOp::List { path } => conn
             .canonical(path)
             .and_then(|path| conn.list(&path).map(|list| (path, list)))

@@ -19,7 +19,7 @@ mod viewer;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
 pub use bluepane_ops::Resolution;
-pub use bluepane_remote::{bitwarden_available, Protocol, SecretStore, Site};
+pub use bluepane_remote::{bitwarden_available, Protocol, SecretServices, SecretStore, Site};
 pub use bluepane_rename::{
     CaseMode as RenameCase, Item as RenameItem, Plan as RenamePlan, Row as RenameRow,
     Settings as RenameSettings, Status as RenameStatus,

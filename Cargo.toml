@@ -45,6 +45,8 @@ suppaftp = { version = "12", default-features = false, features = ["rustls-ring"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 sha2 = "0.10"
 rcgen = "0.14"
+# System password store (Secret Service on Linux via pure-Rust zbus, Credential Manager on Windows).
+keyring = "4"
 # Local-time formatting of modification dates (no default features: no wasm/serde/etc.).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

@@ -14,19 +14,19 @@
 //! ```
 //!
 //! `secret` says where the password (or the key's passphrase) comes from: `ask` (typed at
-//! every connection, never stored), `local:<text>` (stored in this file, which is made
+//! every connection, never stored), `keyring` (the system password store), `local:<text>` (stored in this file, which is made
 //! readable for the owner only) or `bitwarden:<item>` (fetched from an unlocked Bitwarden
 //! CLI when connecting; nothing is stored here).
 
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::ftp::FtpConnection;
+use crate::secrets::{bitwarden_create, bitwarden_secret, SecretServices, KEYRING_SERVICE};
 use crate::{Auth, ConnectParams, KnownHosts, Protocol, RemoteError, RemoteFs, SftpConnection};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -36,6 +36,8 @@ pub enum SecretStore {
     Ask,
     /// Kept in the sites file in plain text (the file is owner-only on Unix).
     Local(String),
+    /// In the system password store (Secret Service, Credential Manager).
+    Keyring,
     /// A Bitwarden item (name or id) read with the `bw` command.
     Bitwarden(String),
 }
@@ -138,12 +140,57 @@ impl Site {
         }
     }
 
+    /// What identifies this site's entry in the system password store.
+    pub fn keyring_user(&self) -> String {
+        format!("{}@{}:{}", self.user, self.host, self.port)
+    }
+
     /// The stored secret, if it can be had without asking: `Ok(None)` means "ask".
-    pub fn stored_secret(&self) -> Result<Option<String>, RemoteError> {
+    pub fn stored_secret(
+        &self,
+        services: &dyn SecretServices,
+    ) -> Result<Option<String>, RemoteError> {
         match &self.secret {
             SecretStore::Ask => Ok(None),
             SecretStore::Local(secret) => Ok(Some(secret.clone())),
-            SecretStore::Bitwarden(item) => bitwarden_secret(item).map(Some),
+            SecretStore::Keyring => services
+                .keys()
+                .get(KEYRING_SERVICE, &self.keyring_user())
+                .map_err(|e| RemoteError::Auth(format!("magazyn haseł systemu: {e}")))?
+                .map(Some)
+                .ok_or_else(|| {
+                    RemoteError::Auth(
+                        "w magazynie haseł systemu nie ma hasła do tej witryny: wpisz je w oknie serwerów".into(),
+                    )
+                }),
+            SecretStore::Bitwarden(item) => {
+                bitwarden_secret(services.bitwarden(), item).map(Some)
+            }
+        }
+    }
+
+    /// Saves `password` where this site's secret lives. `Local` and `Ask` are not handled
+    /// here (the site itself holds or forgets the text).
+    pub fn store_secret(
+        &self,
+        services: &dyn SecretServices,
+        password: &str,
+    ) -> Result<(), RemoteError> {
+        match &self.secret {
+            SecretStore::Keyring => services
+                .keys()
+                .set(KEYRING_SERVICE, &self.keyring_user(), password)
+                .map_err(|e| RemoteError::Auth(format!("magazyn haseł systemu: {e}"))),
+            SecretStore::Bitwarden(item) => bitwarden_create(
+                services.bitwarden(),
+                item,
+                &self.user,
+                &format!("{}://{}:{}", self.protocol.word(), self.host, self.port),
+                password,
+            ),
+            SecretStore::Local(_) | SecretStore::Ask => Err(RemoteError::Auth(
+                "ten sposób przechowywania nie zapisuje hasła poza witryną".into(),
+            )),
         }
     }
 
@@ -218,6 +265,8 @@ impl Sites {
                 "secret" => {
                     site.secret = if let Some(secret) = value.strip_prefix("local:") {
                         SecretStore::Local(secret.to_string())
+                    } else if value == "keyring" {
+                        SecretStore::Keyring
                     } else if let Some(item) = value.strip_prefix("bitwarden:") {
                         SecretStore::Bitwarden(item.to_string())
                     } else {
@@ -285,6 +334,7 @@ impl Sites {
             let secret = match &site.secret {
                 SecretStore::Ask => "ask".to_string(),
                 SecretStore::Local(secret) => format!("local:{secret}"),
+                SecretStore::Keyring => "keyring".to_string(),
                 SecretStore::Bitwarden(item) => format!("bitwarden:{item}"),
             };
             text.push_str(&format!("secret = {}\n\n", escape(&secret)));
@@ -294,41 +344,6 @@ impl Sites {
         bluepane_vfs::set_mode(path, 0o600)?;
         file.write_all(text.as_bytes())
     }
-}
-
-/// The Bitwarden command line tool; `BLUEPANE_BW` overrides its name (tests, odd installs).
-fn bw_command() -> String {
-    std::env::var("BLUEPANE_BW").unwrap_or_else(|_| "bw".into())
-}
-
-/// Whether the Bitwarden CLI is installed and answers.
-pub fn bitwarden_available() -> bool {
-    Command::new(bw_command())
-        .arg("--version")
-        .output()
-        .is_ok_and(|out| out.status.success())
-}
-
-/// The password of a Bitwarden item. The vault has to be unlocked for the CLI
-/// (`bw unlock`, then `BW_SESSION` set in the environment bluepane runs in).
-pub fn bitwarden_secret(item: &str) -> Result<String, RemoteError> {
-    let out = Command::new(bw_command())
-        .args(["get", "password", item, "--raw", "--nointeraction"])
-        .output()
-        .map_err(|e| {
-            RemoteError::Auth(format!(
-                "nie da się uruchomić Bitwarden CLI ({e}); zainstaluj `bw` albo wybierz inny sposób zapisu hasła"
-            ))
-        })?;
-    if !out.status.success() {
-        let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        return Err(RemoteError::Auth(format!(
-            "Bitwarden: {}. Odblokuj sejf (`bw unlock`) i ustaw BW_SESSION przed uruchomieniem bluepane",
-            if why.is_empty() { "brak hasła dla elementu".to_string() } else { why }
-        )));
-    }
-    let secret = String::from_utf8_lossy(&out.stdout);
-    Ok(secret.trim_end_matches(['\r', '\n']).to_string())
 }
 
 #[cfg(test)]
@@ -413,17 +428,119 @@ mod tests {
                 passphrase: None
             }
         );
-        assert_eq!(site.stored_secret().unwrap(), None, "ask");
+        let services = crate::testing::MemoryServices::default();
+        assert_eq!(site.stored_secret(&services).unwrap(), None, "ask");
         site.secret = SecretStore::Local("x".into());
-        assert_eq!(site.stored_secret().unwrap(), Some("x".into()));
+        assert_eq!(site.stored_secret(&services).unwrap(), Some("x".into()));
     }
 
     #[test]
-    fn a_missing_bitwarden_cli_is_a_clear_error() {
-        std::env::set_var("BLUEPANE_BW", "definitely-not-an-installed-program");
-        assert!(!bitwarden_available());
-        let err = bitwarden_secret("item").unwrap_err();
-        assert!(err.to_string().contains("Bitwarden CLI"), "{err}");
-        std::env::remove_var("BLUEPANE_BW");
+    fn the_system_store_keeps_the_password_apart_from_the_file() {
+        let services = crate::testing::MemoryServices::default();
+        let mut site = Site::new("Proxmox", "10.0.0.2", "root");
+        site.secret = SecretStore::Keyring;
+        assert!(site.stored_secret(&services).is_err(), "nothing stored yet");
+        site.store_secret(&services, "s3cret").unwrap();
+        assert_eq!(
+            site.stored_secret(&services).unwrap(),
+            Some("s3cret".into())
+        );
+        // The entry is tied to who and where, so two servers never share a password.
+        let mut other = site.clone();
+        other.host = "10.0.0.3".into();
+        assert!(other.stored_secret(&services).is_err());
+        // A broken store is reported in words, not hidden.
+        *services.keys.broken.lock().unwrap() = Some("sejf zablokowany".into());
+        let err = site.stored_secret(&services).unwrap_err().to_string();
+        assert!(err.contains("sejf zablokowany"), "{err}");
+        // The sites file only says "keyring".
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("sites.conf");
+        let mut sites = Sites::load(&path).unwrap();
+        sites.upsert(site).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("secret = keyring") && !text.contains("s3cret"),
+            "{text}"
+        );
+        assert_eq!(
+            Sites::load(&path).unwrap().sites[0].secret,
+            SecretStore::Keyring
+        );
+    }
+
+    #[test]
+    fn bitwarden_items_are_read_and_created() {
+        let services = crate::testing::MemoryServices {
+            bitwarden: crate::testing::FakeBitwarden::default().with_item("old", "from vault"),
+            ..Default::default()
+        };
+        let mut site = Site::new("Files", "nas.local", "me");
+        site.protocol = Protocol::Ftp;
+        site.port = 21;
+        site.secret = SecretStore::Bitwarden("old".into());
+        assert_eq!(
+            site.stored_secret(&services).unwrap(),
+            Some("from vault".into())
+        );
+
+        // A new item is created with the login data and a quoted-name-safe JSON.
+        site.secret = SecretStore::Bitwarden("bluepane: \"Files\"".into());
+        site.store_secret(&services, "p\"w\\d").unwrap();
+        assert_eq!(
+            services
+                .bitwarden
+                .password_of("bluepane: \"Files\"")
+                .as_deref(),
+            Some("p\"w\\d")
+        );
+        let json = services.bitwarden.created.lock().unwrap()[0].clone();
+        assert!(json.contains("\"username\":\"me\""), "{json}");
+        assert!(json.contains("\"uri\":\"ftp://nas.local:21\""), "{json}");
+        assert_eq!(
+            site.stored_secret(&services).unwrap(),
+            Some("p\"w\\d".into())
+        );
+
+        // An existing item is never replaced.
+        site.secret = SecretStore::Bitwarden("old".into());
+        let err = site
+            .store_secret(&services, "other")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("już element"), "{err}");
+        assert_eq!(
+            services.bitwarden.password_of("old").as_deref(),
+            Some("from vault")
+        );
+    }
+
+    #[test]
+    fn bitwarden_problems_are_explained() {
+        let missing = crate::testing::MemoryServices {
+            bitwarden: crate::testing::FakeBitwarden {
+                installed: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut site = Site::new("S", "h", "u");
+        site.secret = SecretStore::Bitwarden("x".into());
+        let err = site.stored_secret(&missing).unwrap_err().to_string();
+        assert!(err.contains("Bitwarden CLI"), "{err}");
+        assert!(!crate::bitwarden_responds(&missing.bitwarden));
+
+        let locked = crate::testing::MemoryServices {
+            bitwarden: crate::testing::FakeBitwarden {
+                locked: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let err = site.store_secret(&locked, "pw").unwrap_err().to_string();
+        assert!(err.contains("bw unlock"), "{err}");
+        // The other stores do not save through this call.
+        site.secret = SecretStore::Ask;
+        assert!(site.store_secret(&locked, "pw").is_err());
     }
 }

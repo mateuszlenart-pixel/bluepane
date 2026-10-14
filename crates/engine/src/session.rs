@@ -236,6 +236,9 @@ pub struct Session {
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
+    /// Where passwords of saved sites are read from and saved to besides the sites file
+    /// (the system password store, Bitwarden). Tests put fakes here.
+    pub secrets: std::sync::Arc<dyn bluepane_remote::SecretServices>,
     /// The site manager window is open.
     pub sites_open: bool,
     pub(crate) config_loaded: bool,
@@ -312,6 +315,7 @@ impl Session {
             find: None,
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
+            secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
             sites_open: false,
             config_loaded: false,
             parked: [ParkedTabs::default(), ParkedTabs::default()],
@@ -387,6 +391,7 @@ impl Session {
             Command::Sites => self.open_sites(),
             Command::SiteSet(name, field, value) => self.site_set(&name, &field, &value)?,
             Command::SiteDelete(name) => self.site_delete(&name)?,
+            Command::SitePassword(name, password) => self.site_password(&name, password)?,
             Command::SiteClose => self.sites_open = false,
             Command::Connect(name, password) => self.connect_site(&name, password)?,
             Command::Disconnect => self.disconnect()?,
