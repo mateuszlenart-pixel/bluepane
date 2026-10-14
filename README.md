@@ -32,6 +32,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
+| Alt+F7 | wyszukiwanie plików (okno; wyniki zostają po zamknięciu) |
 | Ctrl+F2 | zmiana nazw wielu plików (okno z podglądem nowych nazw) |
 | Alt+S | synchronizacja katalogów obu paneli (okno) |
 | Alt+F5 / Alt+F9 | pakuj (okno) / rozpakuj archiwum pod kursorem lub otwarte |
@@ -61,7 +62,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`sync`, `syncrun`, `syncset`, `syncclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
+`sync`, `syncrun`, `syncset`, `syncclose`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -142,6 +143,29 @@ do katalogu z wersjami albo trwale (tylko na jawne życzenie). Pozycje niedostę
 są zgłaszane i nie są ruszane. Z wiersza poleceń:
 `sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
 `syncset <n> <kierunek>`, `syncrun`, `syncclose`.
+
+## Wyszukiwanie (Alt+F7)
+
+Szuka w tle (równolegle z kopiowaniem itp.), a wyniki pojawiają się na bieżąco. Nic nie jest zapisywane.
+
+- **Nazwa:** maski (`*.rs;*.md`, `?` = jeden znak) albo wyrażenie regularne; z rozróżnianiem wielkości liter lub bez.
+- **Szukaj w:** aktywny panel, oba panele, **wszystkie dyski** albo lista katalogów oddzielonych `;`.
+  Katalog zawarty w innym z listy nie jest przeszukiwany dwa razy; dowiązania do katalogów nie są śledzone (brak pętli).
+- **Pomiń katalogi:** maski, np. `target;node_modules;.git`.
+- **Zawiera tekst:** pełnotekstowo, bez wczytywania pliku w całości (dowolnie duże pliki), z numerem linii i podświetleniem
+  trafienia. Zwykły tekst albo wyrażenie regularne, wielkość liter, całe słowa. Kodowanie: automatyczne (UTF-8 / UTF-16 z BOM /
+  Windows-1250 dla linii, które nie są poprawnym UTF-8, więc polskie znaki działają też w starych plikach), UTF-8, CP1250 albo UTF-16.
+  Pliki binarne są pomijane (można to wyłączyć).
+- **Archiwa:** ZIP, TAR, TAR.GZ, 7z (także wieloczęściowe) przeszukiwane bez rozpakowywania na dysk; wynik pokazuje `archiwum.zip > katalog/plik.txt`.
+  Zaszyfrowane archiwa: podaj hasło; bez hasła wynik jest policzony i zgłoszony („zaszyfrowane”), a nazwy w ZIP nadal da się szukać.
+  Archiwa w archiwach nie są otwierane.
+- **Filtry:** rozmiar od/do (`100k`, `5m`), data zmiany od/do (`RRRR-MM-DD`), pliki ukryte, limit wyników.
+- **Wyniki:** klik zaznacza, Enter lub dwuklik przechodzi do pliku w aktywnym panelu (w archiwum: do archiwum), F3 otwiera podgląd
+  w miejscu trafienia. Esc zatrzymuje szukanie, drugi Esc zamyka okno; wyniki zostają, `Alt+F7` pokazuje je znowu.
+
+Komendy: `find`, `findset <pole> <wartość>` (pola: `roots` (`here`, `both`, `all` lub ścieżki), `name`, `namergx`, `namecase`, `exclude`,
+`text`, `regex`, `case`, `words`, `enc` (`auto|utf8|cp1250|utf16`), `binary`, `archives`, `password`, `hidden`, `min`, `max`, `after`,
+`before`, `limit`, `reset`), `findrun`, `findstop`, `findgo <n>`, `findview <n>`, `findclose`.
 
 ## Zmiana nazw wielu plików (Ctrl+F2)
 

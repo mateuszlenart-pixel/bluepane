@@ -14,7 +14,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 5 | Podgląd i edycja | ✅ | duży plik otwiera się bez wczytywania całości do pamięci |
 | 6 | Archiwa | ✅ | Enter wchodzi do archiwum, kopiowanie działa w obie strony |
 | 7 | Synchronizacja | ✅ | synchronizacja pokazuje zmiany przed wykonaniem |
-| 7b | Wyszukiwanie | ⬜ | szukanie po nazwie i treści w wielu katalogach, dyskach i archiwach |
+| 7b | Wyszukiwanie | ✅ | szukanie po nazwie i treści w wielu katalogach, dyskach i archiwach |
 | 7c | Grupowa zmiana nazw | ✅ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
 | 8 | Sieć i wtyczki | ⬜ | SFTP działa jak katalog lokalny |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
@@ -81,13 +81,13 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] Komendy `sync`, `syncrun`, `syncset`, `syncclose`; okno Alt+S
 - [ ] Do sprawdzenia ręcznie na Windows (okno i nazwy niedozwolone w Windows)
 
-### Etap 7b: wyszukiwanie (wymaganie właściciela)
-Rozbudowane wyszukiwanie plików, najpierw silnik (komenda + testy), potem okno wyników:
-- [ ] po nazwie i masce (wielkość liter, wyrażenia regularne)
-- [ ] pełnotekstowe: treść plików, kodowania (UTF-8, CP1250...), pliki duże bez wczytywania całości
-- [ ] wiele katalogów i wiele dysków/wolumenów naraz
-- [ ] wewnątrz archiwów (ZIP, TAR, TAR.GZ, 7z, także z hasłem)
-- [ ] wyniki w oknie: przejście do pliku, podgląd (F3), wysłanie wyników do panelu; anulowanie i postęp
+### Etap 7b: wyszukiwanie
+- [x] Crate `bluepane-search`: nazwy i maski (lub regex), pełny tekst w plikach (strumieniowo; UTF-8, UTF-16, CP1250; numer linii i podświetlenie), filtry rozmiaru i daty, wykluczanie katalogów, limit wyników
+- [x] Wiele katalogów i dysków naraz (`all` = wszystkie wolumeny), bez podwójnego przeszukiwania zagnieżdżonych katalogów i bez śledzenia dowiązań
+- [x] Archiwa ZIP/TAR/TAR.GZ/7z bez rozpakowywania na dysk (`archive::visit`), hasła, zgłaszanie zaszyfrowanej zawartości
+- [x] Komendy `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`; osobny wątek (nie blokuje kolejki zadań); okno Alt+F7 z wynikami na żywo
+- [ ] Nie ma: wyników jako wirtualnego katalogu w panelu (kopiuj/usuń z wyników), zapisu zestawów kryteriów, wyszukiwania w archiwach zagnieżdżonych, podglądu pliku z archiwum prosto z wyniku (jest przejście do archiwum), kodowań innych niż UTF-8/16 i CP1250, indeksu (każde szukanie czyta dysk od nowa)
+- [ ] Do sprawdzenia ręcznie na Windows i Linuksie: wygląd okna, szukanie na „wszystkich dyskach”, duże drzewa (czas, pamięć)
 
 ### Etap 7c: grupowa zmiana nazw
 - [x] Crate `bluepane-rename`: maski `[N]` `[E]` `[C]` `[Y][M][D][h][m][s]` `[P]` z zakresami, szukaj/zamień (tekst, regex, 1x, z rozszerzeniem), wielkość liter, plan z konfliktami
