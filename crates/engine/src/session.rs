@@ -4286,7 +4286,7 @@ mod clipboard_tests {
         );
         s.run_line("copynames path").unwrap();
         let paths = s.take_clipboard().unwrap();
-        let first = tmp.path().join("left/folder.v2");
+        let first = tmp.path().join("left").join("folder.v2");
         assert_eq!(paths.lines().next().unwrap(), first.to_string_lossy());
         assert_eq!(paths.lines().count(), 4);
         assert!(s.status.contains("pełnych ścieżek"), "{}", s.status);
