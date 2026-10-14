@@ -12,6 +12,8 @@ mod keymap;
 mod mask;
 mod multirename;
 mod panel;
+mod remote;
+mod remote_job;
 mod session;
 mod viewer;
 
@@ -37,14 +39,15 @@ pub use command::{
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};
 pub use job::{
-    Answer, ArchiveJob, Event, JobKind, JobSpec, PackOptions, PasswordProblem, Report, RunningJob,
-    SyncJob,
+    Answer, ArchiveJob, Event, HostPrompt, JobKind, JobSpec, PackOptions, PasswordProblem,
+    RemoteJob, RemoteOp, Report, RunningJob, SyncJob,
 };
 pub use keymap::Keymap;
 pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};
 pub use panel::{
-    is_parent_entry, ArchiveView, ClickMode, Panel, Sort, SortKey, VirtualList, PARENT_NAME,
+    is_parent_entry, ArchiveView, ClickMode, Panel, RemoteView, Sort, SortKey, VirtualList,
+    PARENT_NAME,
 };
 pub use session::{
     ConflictPrompt, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,

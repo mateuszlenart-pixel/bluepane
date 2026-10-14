@@ -635,6 +635,7 @@ dependencies = [
  "bluepane-ops",
  "bluepane-rename",
  "bluepane-search",
+ "bluepane-sftp",
  "bluepane-sync",
  "bluepane-vfs",
  "chrono",

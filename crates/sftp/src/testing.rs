@@ -1,7 +1,6 @@
-//! A small in-process SSH server with an SFTP subsystem over a local directory, so the
-//! tests need no real server and no `sshd`.
-
-#![allow(dead_code)]
+//! A small in-process SSH server with an SFTP subsystem over a local directory, so tests
+//! (here and in the engine) need no real server and no `sshd`. Not for production use:
+//! it accepts whatever the [`Settings`] say and has no access control beyond that.
 
 use std::collections::HashMap;
 use std::fs;

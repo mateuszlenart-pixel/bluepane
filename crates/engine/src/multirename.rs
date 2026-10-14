@@ -93,6 +93,7 @@ fn parse_number<T: std::str::FromStr>(field: &str, value: &str) -> Result<T, Eng
 impl Session {
     /// `multirename`: open the window for the selection (or the entry under the cursor).
     pub(crate) fn start_multirename(&mut self) -> Result<(), EngineError> {
+        self.deny_remote("zmiana nazw wielu plików")?;
         if self.active_panel().archive.is_some() {
             return Err(EngineError(
                 "zmiana nazw działa na katalogach, nie wewnątrz archiwum (użyj F2)".into(),

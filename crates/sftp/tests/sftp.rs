@@ -1,14 +1,12 @@
 //! The SFTP client against an in-process server (see `support`).
 
-mod support;
-
 use std::fs;
 
 use bluepane_ops::Progress;
+use bluepane_sftp::testing::{start, write_file, Settings, TestServer};
 use bluepane_sftp::{
     Auth, ConnectParams, Connection, HostKeyStatus, KnownHosts, SftpError, TransferOptions,
 };
-use support::{start, write_file, Settings, TestServer};
 
 struct Fixture {
     _tmp: tempfile::TempDir,

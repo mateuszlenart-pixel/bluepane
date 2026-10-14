@@ -16,6 +16,9 @@ mod known_hosts;
 mod sites;
 mod transfer;
 
+#[doc(hidden)]
+pub mod testing;
+
 pub use connection::{Auth, ConnectParams, Connection, RemoteEntry};
 pub use error::SftpError;
 pub use known_hosts::{HostKeyStatus, KnownHosts};
