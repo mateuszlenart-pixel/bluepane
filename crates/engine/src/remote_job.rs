@@ -152,15 +152,21 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
             sources,
             dest,
             remove_source,
-        } => upload_all(
-            &*conn,
-            sources,
-            dest,
-            *remove_source,
-            progress,
-            &mut host,
-            &mut report,
-        ),
+            replace,
+        } => {
+            if *replace {
+                host.sticky = Some(Resolution::Overwrite);
+            }
+            upload_all(
+                &*conn,
+                sources,
+                dest,
+                *remove_source,
+                progress,
+                &mut host,
+                &mut report,
+            )
+        }
         RemoteOp::Relay {
             target,
             sources,

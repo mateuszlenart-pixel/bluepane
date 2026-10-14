@@ -111,8 +111,10 @@ Do zrobienia (8b i dalej):
 - [x] FTP i FTPS (jawny i niejawny; certyfikat przypinany odciskiem SHA-256) przez wspólny interfejs `RemoteFs` (crate `bluepane-remote`, dawniej `bluepane-sftp`); serwery FTP/FTPS w testach
 - [ ] FTP: tryb aktywny, ustawianie daty pliku na serwerze, serwery bez SIZE/MDTM (część rzadkich serwerów); sprawdzić ręcznie z prawdziwym serwerem FTP/FTPS
 - [x] F6 (przenoszenie w każdą stronę, także w obrębie serwera), podgląd F3 pliku z serwera (plik tymczasowy), kopiowanie serwer -> serwer (przez katalog tymczasowy)
-- [ ] F4 pliku z serwera, zakładki i historia na serwerze, uprawnienia/chmod
-- [ ] Osobna kolejka transferów w oknie (jak w FileZilli) z listą oczekujących, pauzą i ponawianiem
+- [x] F4 pliku z serwera (kopia w edytorze, odesłanie `editsend`), zakładki i historia (Alt+Lewo/Prawo) na serwerze
+- [ ] Uprawnienia/chmod na serwerze
+- [x] Okno kolejki zadań (Ctrl+J): bieżące z postępem, oczekujące (usuwanie), zakończone (ponawianie), pauza kolejki; testy w silniku
+- [ ] Kolejka: zmiana kolejności zadań, równoległe transfery, ograniczenie prędkości
 - [ ] ~~Wtyczki~~ pominięte (decyzja właściciela); w zamian ewentualnie osobny etap: skaner sieci IP
 - [x] Hasła w systemowym magazynie (Secret Service / Menedżer poświadczeń) i zapis nowego hasła do Bitwarden (`bw create item`); `sitepassword`; testy na atrapach (bez prawdziwego keyringu i Bitwarden)
 - [ ] Do sprawdzenia ręcznie: prawdziwy keyring (Linux Mint: Gnome Keyring), Windows Credential Manager, `bw` z odblokowanym sejfem

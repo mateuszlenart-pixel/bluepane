@@ -32,6 +32,8 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
+| Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |
+| Ctrl+Shift+F4 | wyślij na serwer plik edytowany przez F4 |
 | Ctrl+S | serwery SFTP / FTP / FTPS (zapisane połączenia) |
 | Ctrl+F, Alt+F7 | wyszukiwanie plików (okno; wyniki zostają po zamknięciu) |
 | Ctrl+F2 | zmiana nazw wielu plików (okno z podglądem nowych nazw) |
@@ -63,7 +65,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`sync`, `syncrun`, `syncset`, `syncclose`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
+`sync`, `syncrun`, `syncset`, `syncclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -145,6 +147,13 @@ są zgłaszane i nie są ruszane. Z wiersza poleceń:
 `sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
 `syncset <n> <kierunek>`, `syncrun`, `syncclose`.
 
+## Kolejka zadań (Ctrl+J)
+
+Kopiowanie, przenoszenie, pakowanie, transfery z serwerów i inne długie zadania idą jedno po drugim. Okno kolejki pokazuje bieżące zadanie z postępem,
+oczekujące (każde można **usunąć z kolejki**, zanim ruszy) i ostatnie zakończone (każde można **ponowić**, np. po błędzie). **Wstrzymaj kolejkę** pozwala
+bieżącemu zadaniu się dokończyć, a następne czekają, dopóki ich nie wznowisz; odświeżanie list serwerów i logowanie nie czekają. `stop` przerywa bieżące
+i czyści oczekujące.
+
 ## Serwery: SFTP, FTP, FTPS (Ctrl+S)
 
 Panel może pokazywać katalog na serwerze jak zwykły katalog. Obsługiwane: **SFTP** (SSH), **FTP** i **FTPS** (jawny, `AUTH TLS`, oraz niejawny, zwykle port 990). Implementacja w Rust (russh, suppaftp, rustls z ring), bez zewnętrznych programów ani bibliotek do doinstalowania.
@@ -165,9 +174,11 @@ Panel może pokazywać katalog na serwerze jak zwykły katalog. Obsługiwane: **
   Pobieranie i wysyłanie idzie przez plik `.bpart` i jest wznawiane po przerwaniu (tylko gdy plik częściowy jest nowszy niż źródło). Postęp i Anuluj jak przy zwykłym kopiowaniu.
 - **F6 (przenoszenie):** z serwera na dysk (oryginał na serwerze znika dopiero po pobraniu całości; pominięty konflikt zostawia go), z dysku na serwer
   (oryginał trafia do kosza po wysłaniu całości), między dwoma serwerami (przez katalog tymczasowy) i w obrębie jednego serwera (to zmiana nazwy, bez kopiowania, nigdy nie zastępuje).
+- **F4:** plik z serwera jest pobierany do katalogu tymczasowego i otwierany w edytorze (`BLUEPANE_EDITOR` albo domyślny program); po zapisaniu wyślij go z powrotem **Ctrl+Shift+F4** (`editsend`): zastępuje oryginał na serwerze, ale tylko gdy kopia się zmieniła.
+- **Historia i zakładki na serwerze:** Alt+Lewo / Alt+Prawo cofa i przywraca odwiedzone katalogi serwera; nowa zakładka (Ctrl+T, Ctrl+Strzałka w górę) wspólnie z panelem używa tego samego połączenia.
 - **F3:** plik z serwera jest pobierany do katalogu tymczasowego (limit 256 MB) i pokazany w podglądzie; kopia znika po zamknięciu.
 - **F5 między dwoma serwerami** kopiuje przez katalog tymczasowy (każdy bajt idzie dwa razy; potrzebne miejsce na dysku na największy element).
-- **Nie ma jeszcze:** F4 pliku z serwera (pobierz F5), zakładek i historii na serwerze, uprawnień (chmod), trybu aktywnego FTP.
+- **Nie ma jeszcze:** uprawnień (chmod), trybu aktywnego FTP.
 
 Komendy: `sites`, `siteset <nazwa> <protocol|host|port|user|key|start|secret> <wartość>` (`secret`: `ask`, `local:<hasło>`, `keyring`, `bitwarden:<element>`; `protocol`: `sftp`, `ftp`, `ftps`, `ftps-implicit`) (nazwa ze spacjami w cudzysłowie; `secret`: `ask`, `local:<hasło>`, `bitwarden:<element>`),
 `sitepassword <nazwa> <hasło>` (zapis hasła tam, gdzie witryna je trzyma), `sitedel <nazwa>`, `connect <nazwa> [hasło]`, `disconnect`, `siteclose`.

@@ -127,6 +127,10 @@ pub struct RemoteView {
     /// The server folder being shown (`/` separated).
     pub path: String,
     pub conn: std::sync::Arc<dyn bluepane_remote::RemoteFs>,
+    /// Folders visited on this server, oldest first, and where in them the panel is
+    /// (Alt+Left / Alt+Right).
+    pub history: Vec<String>,
+    pub history_index: usize,
 }
 
 impl RemoteView {

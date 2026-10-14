@@ -12,6 +12,7 @@ mod keymap;
 mod mask;
 mod multirename;
 mod panel;
+mod queue;
 mod remote;
 mod remote_job;
 mod session;
@@ -50,8 +51,9 @@ pub use panel::{
     is_parent_entry, ArchiveView, ClickMode, Panel, RemoteView, Sort, SortKey, VirtualList,
     PARENT_NAME,
 };
+pub use queue::{FinishedJob, QueueLine};
 pub use session::{
-    ConflictPrompt, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
+    ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };
 pub use viewer::{Row, ViewMode, Viewer};
 
