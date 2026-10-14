@@ -5,6 +5,9 @@
 //! or `#[cfg(unix)]`.
 
 mod platform;
+mod smb;
+
+pub use smb::{list_shares, open_remote_desktop, Share, ShareKind};
 
 use std::io;
 use std::path::{Path, PathBuf};

@@ -236,6 +236,10 @@ pub struct Session {
     pub find: Option<crate::FindView>,
     /// The network scanner window (Ctrl+N).
     pub scan: Option<crate::ScanView>,
+    /// How the scanner starts programs and asks for shares (tests replace it).
+    pub scan_services: crate::ScanServices,
+    /// Where the settings files live (set when they are loaded).
+    pub(crate) config_dir: Option<PathBuf>,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
@@ -381,6 +385,8 @@ impl Session {
             rename: None,
             find: None,
             scan: None,
+            scan_services: crate::ScanServices::default(),
+            config_dir: None,
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
@@ -416,6 +422,14 @@ impl Session {
 
     /// The text a `copynames` command asked to put on the clipboard, once. The window copies it
     /// to the system clipboard (the engine knows nothing about the toolkit).
+    pub(crate) fn put_on_clipboard(&mut self, text: String) {
+        self.clipboard = Some(text);
+    }
+
+    pub(crate) fn config_dir(&self) -> Option<PathBuf> {
+        self.config_dir.clone()
+    }
+
     pub fn take_clipboard(&mut self) -> Option<String> {
         self.clipboard.take()
     }
@@ -503,6 +517,18 @@ impl Session {
             Command::ScanRun => self.scan_run()?,
             Command::ScanStop => self.scan_stop(),
             Command::ScanClose => self.scan_close(),
+            Command::ScanSelect(ip) => self.scan_select(ip)?,
+            Command::ScanFavorite(ip) => self.scan_favorite(ip)?,
+            Command::ScanFavorites(show) => {
+                if let Some(view) = self.scan.as_mut() {
+                    view.show_favorites = show;
+                }
+            }
+            Command::ScanCopy(ip) => self.scan_copy(ip),
+            Command::ScanShares(ip) => self.scan_shares(ip)?,
+            Command::ScanShare(ip, name) => self.scan_share(ip, &name)?,
+            Command::ScanOpen(ip, port) => self.scan_open(ip, port)?,
+            Command::ScanSite(ip, protocol) => self.scan_site(ip, protocol)?,
             Command::Queue => self.queue_open = true,
             Command::QueueClose => self.queue_open = false,
             Command::QueuePause => self.pause_queue(true),

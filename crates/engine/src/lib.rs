@@ -37,6 +37,7 @@ pub use bluepane_sync::{
     Node as SyncNode, Op as SyncOp, Preview as SyncPreview, Settings as SyncSettings,
     Variant as SyncVariant,
 };
+pub use bluepane_vfs::{Share, ShareKind};
 pub use command::{
     parse_size, Command, NameFormat, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction,
     COMMAND_NAMES,
@@ -55,7 +56,7 @@ pub use panel::{
     PARENT_NAME,
 };
 pub use queue::{FinishedJob, QueueLine};
-pub use scan::{ScanData, ScanForm, ScanView};
+pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, ShareList};
 pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };

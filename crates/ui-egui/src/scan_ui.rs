@@ -3,7 +3,9 @@
 //! It edits the engine's form with `scanset`, starts with `scanrun` and shows the hosts the
 //! scanning thread has found so far (it redraws while the scan runs).
 
-use bluepane_engine::{Command, ScanHost};
+use std::net::Ipv4Addr;
+
+use bluepane_engine::{Command, ScanHost, ShareKind, ShareList};
 use egui::{Align2, Color32, FontId, RichText};
 
 use crate::BluepaneUi;
@@ -28,6 +30,9 @@ impl BluepaneUi {
         let running = view.is_running();
         let progress = view.progress();
         let hosts = view.visible_hosts();
+        let selected = view.selected;
+        let show_favorites = view.show_favorites;
+        let favorites = view.favorites.clone();
         let (total, summary, error) = {
             let data = view.data();
             (data.hosts.len(), data.summary.clone(), data.error.clone())
@@ -156,8 +161,27 @@ impl BluepaneUi {
             }
             ui.label(RichText::new(text).strong());
         }
+        ui.horizontal(|ui| {
+            if ui.selectable_label(!show_favorites, "Wyniki").clicked() {
+                commands.push(Command::ScanFavorites(false));
+            }
+            if ui
+                .selectable_label(show_favorites, format!("Ulubione ({})", favorites.len()))
+                .clicked()
+            {
+                commands.push(Command::ScanFavorites(true));
+            }
+        });
         ui.separator();
-        self.scan_rows(ui, &hosts);
+        if let Some(ip) = selected {
+            self.scan_details(ui, ip, &mut commands);
+            ui.separator();
+        }
+        if show_favorites {
+            self.scan_favorites(ui, &favorites, selected, &mut commands);
+        } else {
+            self.scan_rows(ui, &hosts, selected, &mut commands);
+        }
 
         if run && !running {
             commands.push(Command::ScanRun);
@@ -167,7 +191,13 @@ impl BluepaneUi {
         }
     }
 
-    fn scan_rows(&self, ui: &mut egui::Ui, hosts: &[ScanHost]) {
+    fn scan_rows(
+        &self,
+        ui: &mut egui::Ui,
+        hosts: &[ScanHost],
+        selected: Option<Ipv4Addr>,
+        commands: &mut Vec<Command>,
+    ) {
         let font = FontId::monospace(13.0);
         // Header.
         let (header, _) = ui.allocate_exact_size(
@@ -199,9 +229,15 @@ impl BluepaneUi {
                 for host in &hosts[range] {
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), ROW_HEIGHT),
-                        egui::Sense::hover(),
+                        egui::Sense::click(),
                     );
-                    if response.hovered() {
+                    if response.clicked() {
+                        commands.push(Command::ScanSelect(host.ip));
+                    }
+                    if selected == Some(host.ip) {
+                        ui.painter()
+                            .rect_filled(rect, 2.0, ui.visuals().selection.bg_fill);
+                    } else if response.hovered() {
                         ui.painter().rect_filled(
                             rect,
                             2.0,
@@ -255,5 +291,139 @@ impl BluepaneUi {
                 }
             },
         );
+    }
+
+    /// What can be done with the selected host: its services, shares, address, favorite.
+    fn scan_details(&mut self, ui: &mut egui::Ui, ip: Ipv4Addr, commands: &mut Vec<Command>) {
+        let Some(view) = self.session.scan.as_ref() else {
+            return;
+        };
+        let host = view.host(ip);
+        let is_favorite = view.is_favorite(ip);
+        let shares = view.shares_of(ip);
+        ui.horizontal_wrapped(|ui| {
+            let title = match host.as_ref().and_then(|h| h.name.clone()) {
+                Some(name) => format!("{ip}  {name}"),
+                None => ip.to_string(),
+            };
+            ui.label(RichText::new(title).strong());
+            if let Some(vendor) = host.as_ref().and_then(|h| h.vendor.clone()) {
+                ui.label(RichText::new(vendor).weak());
+            }
+            if ui.button("Kopiuj adres").clicked() {
+                commands.push(Command::ScanCopy(ip));
+            }
+            if ui
+                .button(if is_favorite {
+                    "★ Usuń z ulubionych"
+                } else {
+                    "☆ Dodaj do ulubionych"
+                })
+                .clicked()
+            {
+                commands.push(Command::ScanFavorite(ip));
+            }
+        });
+        if let Some(host) = &host {
+            ui.horizontal_wrapped(|ui| {
+                if host.services.is_empty() {
+                    ui.label(RichText::new("Brak otwartych portów z listy.").weak());
+                }
+                for service in &host.services {
+                    let hint = match service.port {
+                        80 | 3000 | 5000 | 8000 | 8080 | 8123 | 8888 | 9000 => {
+                            "otwórz w przeglądarce"
+                        }
+                        443 | 5001 | 8006 | 8443 => "otwórz w przeglądarce (HTTPS)",
+                        3389 => "uruchom pulpit zdalny",
+                        22 => "zapisz jako serwer SFTP (potem podasz użytkownika i hasło)",
+                        21 => "zapisz jako serwer FTP (potem podasz użytkownika i hasło)",
+                        139 | 445 => "pokaż udziały sieciowe",
+                        _ => "brak domyślnej akcji (skopiuj adres)",
+                    };
+                    if ui
+                        .button(format!("{} :{}", service.name, service.port))
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        commands.push(Command::ScanOpen(ip, service.port));
+                    }
+                }
+            });
+        }
+        match shares {
+            None => {}
+            Some(ShareList::Loading) => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label("Szukanie udziałów…");
+                });
+            }
+            Some(ShareList::Failed(why)) => {
+                ui.colored_label(Color32::LIGHT_RED, why);
+            }
+            Some(ShareList::Ready(list)) => {
+                let visible: Vec<_> = list.iter().filter(|s| !s.is_hidden()).collect();
+                ui.label(RichText::new(format!("Udziały: {}", visible.len())).strong());
+                for share in visible {
+                    ui.horizontal(|ui| {
+                        let icon = if share.kind == ShareKind::Printer {
+                            "🖨"
+                        } else {
+                            "📁"
+                        };
+                        ui.label(format!("{icon} {}", share.name));
+                        if !share.comment.is_empty() {
+                            ui.label(RichText::new(&share.comment).weak());
+                        }
+                        if share.kind != ShareKind::Printer && ui.small_button("Otwórz").clicked()
+                        {
+                            commands.push(Command::ScanShare(ip, share.name.clone()));
+                        }
+                    });
+                }
+            }
+        }
+    }
+
+    fn scan_favorites(
+        &self,
+        ui: &mut egui::Ui,
+        favorites: &[bluepane_engine::Favorite],
+        selected: Option<Ipv4Addr>,
+        commands: &mut Vec<Command>,
+    ) {
+        if favorites.is_empty() {
+            ui.label(
+                RichText::new(
+                    "Brak ulubionych: zaznacz urządzenie w wynikach i dodaj je gwiazdką.",
+                )
+                .weak(),
+            );
+        }
+        let view = self.session.scan.as_ref();
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .show(ui, |ui| {
+                for favorite in favorites {
+                    let seen = view.is_some_and(|v| v.host(favorite.ip).is_some());
+                    let label = format!(
+                        "★ {}  {}   {}",
+                        favorite.ip,
+                        favorite.name,
+                        if seen {
+                            "(w ostatnim skanie)"
+                        } else {
+                            "(nie widać w skanie)"
+                        }
+                    );
+                    if ui
+                        .selectable_label(selected == Some(favorite.ip), label)
+                        .clicked()
+                    {
+                        commands.push(Command::ScanSelect(favorite.ip));
+                    }
+                }
+            });
     }
 }

@@ -17,7 +17,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 7b | Wyszukiwanie | ✅ | szukanie po nazwie i treści w wielu katalogach, dyskach i archiwach |
 | 7c | Grupowa zmiana nazw | ✅ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
 | 8 | Sieć | 🟡 | SFTP i FTP działają jak katalog lokalny |
-| 8f | Skaner sieci | 🟡 | lista urządzeń z usługami, udziałami i akcjami (jak Advanced IP Scanner) |
+| 8f | Skaner sieci | ✅ | lista urządzeń z usługami, udziałami i akcjami (jak Advanced IP Scanner) |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
 
 ## Stan szkieletu (etap 1) i co dalej
@@ -102,8 +102,8 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 Wymaganie właściciela (zamiast wtyczek): funkcje jak Advanced IP Scanner. Zakres: 1) urządzenia w zakresie IP, 2) porty i usługi, 3) udziały (SMB) i akcje na wyniku.
 - [x] Crate `bluepane-netscan`: zakresy adresów, wykrywanie hostów (TCP + tablica ARP, `vfs::neighbours`), porty i nazwy usług, odwrotny DNS, producent z MAC (rejestr IEEE), anulowanie, postęp
 - [x] Silnik i okno (Ctrl+N): zakres, porty, filtr, tabela na żywo; komendy `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`
-- [ ] 3) Udziały SMB (lista udziałów urządzenia), akcje na wyniku (otwórz w przeglądarce, SFTP/FTP z menedżera serwerów, RDP, kopiuj adres), ulubione (zakładka „Ulubione”)
-- [ ] Do sprawdzenia ręcznie: skan prawdziwej sieci na Linuksie i Windows (tablica ARP, nazwy, producenci)
+- [x] 3) Udziały SMB (`smbclient` / `net view`), akcje na wyniku (przeglądarka, RDP, zapis jako serwer SFTP/FTP, kopiuj adres), ulubione (zakładka „Ulubione”, plik w konfiguracji); testy na atrapach programów
+- [ ] Do sprawdzenia ręcznie: skan prawdziwej sieci na Linuksie i Windows (tablica ARP, nazwy, producenci, udziały, pulpit zdalny, otwieranie udziału); nie ma: logowania do udziałów z hasłem (tylko anonimowo lub konto Windows), banerów usług, wykrywania systemu operacyjnego, skanowania IPv6
 
 ### Etap 8: FTP/SFTP
 Wymaganie od właściciela projektu (potwierdzone): funkcjonalność na wzór **FileZilli**: menedżer witryn, kolejka transferów z postępem, wznawianie, dialog konfliktów. Kolejność: najpierw SFTP (SSH).
