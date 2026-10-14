@@ -35,6 +35,13 @@ pub const COMMAND_NAMES: &[&str] = &[
     "invert",
     "sort",
     "sync",
+    "find",
+    "findset",
+    "findrun",
+    "findstop",
+    "findgo",
+    "findview",
+    "findclose",
     "multirename",
     "mrset",
     "mrname",
@@ -208,6 +215,20 @@ pub enum Command {
     SyncSet(usize, Direction),
     /// Close the synchronization view.
     SyncClose,
+    /// Open the search window (Alt+F7), or show the last one again.
+    Find,
+    /// Change one setting of the search window: `findset text needle`.
+    FindSet(String, String),
+    /// Start searching with the settings of the window.
+    FindRun,
+    /// Stop a running search (the results found so far stay).
+    FindStop,
+    /// Go to result n (1-based) in the active panel and close the window.
+    FindGo(usize),
+    /// Open result n in the viewer.
+    FindView(usize),
+    /// Hide the search window (the results are kept until the next search).
+    FindClose,
     /// Open the multi-rename window for the selection (Ctrl+F2).
     MultiRename,
     /// Change one setting of the multi-rename window: `mrset name [N]_[C]`.
@@ -271,6 +292,13 @@ impl Command {
             "syncrun" => Ok(Command::SyncRun),
             "syncset" => parse_syncset(rest),
             "syncclose" => Ok(Command::SyncClose),
+            "find" => Ok(Command::Find),
+            "findset" => parse_findset(rest),
+            "findrun" => Ok(Command::FindRun),
+            "findstop" => Ok(Command::FindStop),
+            "findgo" => parse_row("findgo", rest).map(Command::FindGo),
+            "findview" => parse_row("findview", rest).map(Command::FindView),
+            "findclose" => Ok(Command::FindClose),
             "multirename" | "mr" => Ok(Command::MultiRename),
             "mrset" => parse_mrset(rest),
             "mrname" => parse_mrname(rest),
@@ -518,6 +546,28 @@ fn parse_sync(args: &str) -> Result<SyncArgs, EngineError> {
         }
     }
     Ok(sync)
+}
+
+/// `findset <field> <value>`; quotes around the value are removed like for `mrset`.
+fn parse_findset(args: &str) -> Result<Command, EngineError> {
+    let usage = || {
+        EngineError(
+            "findset: użycie: findset <roots|name|namergx|namecase|exclude|text|regex|case|words|enc|binary|archives|password|hidden|min|max|after|before|limit|reset> <wartość>"
+                .into(),
+        )
+    };
+    match parse_mrset(args) {
+        Ok(Command::MultiRenameSet(field, value)) => Ok(Command::FindSet(field, value)),
+        _ => Err(usage()),
+    }
+}
+
+fn parse_row(name: &str, args: &str) -> Result<usize, EngineError> {
+    args.trim()
+        .parse()
+        .ok()
+        .filter(|n| *n >= 1)
+        .ok_or_else(|| EngineError(format!("{name}: użycie: {name} <numer wyniku>")))
 }
 
 /// `mrset <field> <value>`; a value in double quotes keeps its spaces (`mrset replace " "`).

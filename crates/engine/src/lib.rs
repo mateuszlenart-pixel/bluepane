@@ -5,6 +5,7 @@
 //! without a window.
 
 mod command;
+mod find;
 mod format;
 mod job;
 mod keymap;
@@ -20,6 +21,10 @@ pub use bluepane_rename::{
     CaseMode as RenameCase, Item as RenameItem, Plan as RenamePlan, Row as RenameRow,
     Settings as RenameSettings, Status as RenameStatus,
 };
+pub use bluepane_search::{
+    Encoding as FindEncoding, Hit as FindHit, LineHit as FindLine, Location as FindLocation,
+    Summary as FindSummary,
+};
 pub use bluepane_sync::{
     Action as SyncAction, Category as SyncCategory, CompareBy, Deletion as SyncDeletion,
     Direction as SyncDirection, ExecReport as SyncReport, Filter as SyncFilter, Kind as SyncKind,
@@ -29,6 +34,7 @@ pub use bluepane_sync::{
 pub use command::{
     parse_size, Command, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
+pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};
 pub use job::{
     Answer, ArchiveJob, Event, JobKind, JobSpec, PackOptions, PasswordProblem, Report, RunningJob,

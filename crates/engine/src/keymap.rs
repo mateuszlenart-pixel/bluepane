@@ -34,6 +34,7 @@ impl Default for Keymap {
             ("Alt+F9", "unpack"),
             ("Alt+S", "sync"),
             ("Ctrl+F2", "multirename"),
+            ("Alt+F7", "find"),
             ("F7", "mkdir"),
             ("F8", "delete"),
             ("F9", "refresh"),
