@@ -5,7 +5,7 @@ klawiaturą, działa na **Windows i Linuksie**. Projekt we wczesnej fazie (szkie
 
 ## Uruchomienie
 
-Wymagany Rust 1.85 lub nowszy (`rustup`).
+Wymagany Rust 1.88 lub nowszy (`rustup`).
 
 ```
 cargo run --release -p bluepane              # oba panele w bieżącym katalogu
@@ -32,7 +32,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F3 w archiwum | podgląd pliku z archiwum (rozpakowuje go do katalogu tymczasowego, który znika po zamknięciu podglądu; limit 256 MB, większe rozpakuj F5) |
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
-| Ctrl+S | witryny SFTP (zapisane połączenia) |
+| Ctrl+S | serwery SFTP / FTP / FTPS (zapisane połączenia) |
 | Ctrl+F, Alt+F7 | wyszukiwanie plików (okno; wyniki zostają po zamknięciu) |
 | Ctrl+F2 | zmiana nazw wielu plików (okno z podglądem nowych nazw) |
 | Alt+S | synchronizacja katalogów obu paneli (okno) |
@@ -145,14 +145,16 @@ są zgłaszane i nie są ruszane. Z wiersza poleceń:
 `sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]`,
 `syncset <n> <kierunek>`, `syncrun`, `syncclose`.
 
-## SFTP (Ctrl+S)
+## Serwery: SFTP, FTP, FTPS (Ctrl+S)
 
-Panel może pokazywać katalog na serwerze SSH/SFTP jak zwykły katalog. Implementacja w czystym Rust (russh), bez zewnętrznych programów.
+Panel może pokazywać katalog na serwerze jak zwykły katalog. Obsługiwane: **SFTP** (SSH), **FTP** i **FTPS** (jawny, `AUTH TLS`, oraz niejawny, zwykle port 990). Implementacja w Rust (russh, suppaftp, rustls z ring), bez zewnętrznych programów ani bibliotek do doinstalowania.
 
 - **Witryny (Ctrl+S):** zapisane połączenia: serwer, port, użytkownik, plik klucza (albo hasło), katalog startowy. Plik `sites.conf` w katalogu konfiguracji.
 - **Hasło:** „pytaj przy łączeniu” (nigdzie nie zapisywane), „zapisz lokalnie” (jawnym tekstem w `sites.conf`, plik tylko dla Ciebie na Linuksie) albo
   **Bitwarden** (jeśli zainstalowany jest `bw`: hasło jest pobierane przy łączeniu, nic nie jest zapisywane w bluepane; sejf musi być odblokowany, `bw unlock`, a `BW_SESSION` ustawione).
 - **Klucz serwera:** pierwsze połączenie pokazuje odcisk klucza i pyta (Enter = zaufaj i zapamiętaj). Zmieniony klucz znanego serwera jest zawsze odrzucany z ostrzeżeniem.
+  W FTPS to samo dotyczy certyfikatu serwera: nie sprawdzamy urzędów certyfikacji (serwery domowe mają własne certyfikaty), tylko przypinamy odcisk SHA-256 certyfikatu.
+- **FTP bez szyfrowania:** hasło i pliki idą otwartym tekstem (okno witryny ostrzega); używaj w zaufanej sieci albo wybierz FTPS. Klucze SSH działają tylko z SFTP.
 - **Praca w panelu:** Enter / Backspace / `cd` / F9 przeglądają serwer; F5 pobiera (z drugiego panelu) lub wysyła (do panelu serwera), także całe katalogi;
   konflikty pytają jak przy kopiowaniu (nadpisz / starsze / pomiń / zachowaj oba); F7 nowy katalog, F2 zmiana nazwy, F8 usuwa **trwale** (serwer nie ma kosza, pytanie to mówi wprost).
   Pobieranie i wysyłanie idzie przez plik `.bpart` i jest wznawiane po przerwaniu (tylko gdy plik częściowy jest nowszy niż źródło). Postęp i Anuluj jak przy zwykłym kopiowaniu.
@@ -160,9 +162,9 @@ Panel może pokazywać katalog na serwerze SSH/SFTP jak zwykły katalog. Impleme
   (oryginał trafia do kosza po wysłaniu całości), między dwoma serwerami (przez katalog tymczasowy) i w obrębie jednego serwera (to zmiana nazwy, bez kopiowania, nigdy nie zastępuje).
 - **F3:** plik z serwera jest pobierany do katalogu tymczasowego (limit 256 MB) i pokazany w podglądzie; kopia znika po zamknięciu.
 - **F5 między dwoma serwerami** kopiuje przez katalog tymczasowy (każdy bajt idzie dwa razy; potrzebne miejsce na dysku na największy element).
-- **Nie ma jeszcze:** F4 pliku z serwera (pobierz F5), FTP/FTPS, zakładek i historii na serwerze.
+- **Nie ma jeszcze:** F4 pliku z serwera (pobierz F5), zakładek i historii na serwerze, uprawnień (chmod), trybu aktywnego FTP.
 
-Komendy: `sites`, `siteset <nazwa> <host|port|user|key|start|secret> <wartość>` (nazwa ze spacjami w cudzysłowie; `secret`: `ask`, `local:<hasło>`, `bitwarden:<element>`),
+Komendy: `sites`, `siteset <nazwa> <protocol|host|port|user|key|start|secret> <wartość>` (`protocol`: `sftp`, `ftp`, `ftps`, `ftps-implicit`) (nazwa ze spacjami w cudzysłowie; `secret`: `ask`, `local:<hasło>`, `bitwarden:<element>`),
 `sitedel <nazwa>`, `connect <nazwa> [hasło]`, `disconnect`, `siteclose`.
 
 ## Wyszukiwanie (Ctrl+F lub Alt+F7)

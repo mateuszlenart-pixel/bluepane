@@ -234,8 +234,8 @@ pub struct Session {
     /// queue, so copying and the like keep working meanwhile.
     pub find: Option<crate::FindView>,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
-    pub sites: bluepane_sftp::Sites,
-    pub known_hosts: bluepane_sftp::KnownHosts,
+    pub sites: bluepane_remote::Sites,
+    pub known_hosts: bluepane_remote::KnownHosts,
     /// The site manager window is open.
     pub sites_open: bool,
     pub(crate) config_loaded: bool,
@@ -310,8 +310,8 @@ impl Session {
             sync: None,
             rename: None,
             find: None,
-            sites: bluepane_sftp::Sites::in_memory(),
-            known_hosts: bluepane_sftp::KnownHosts::in_memory(),
+            sites: bluepane_remote::Sites::in_memory(),
+            known_hosts: bluepane_remote::KnownHosts::in_memory(),
             sites_open: false,
             config_loaded: false,
             parked: [ParkedTabs::default(), ParkedTabs::default()],

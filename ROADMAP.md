@@ -16,7 +16,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 7 | Synchronizacja | ✅ | synchronizacja pokazuje zmiany przed wykonaniem |
 | 7b | Wyszukiwanie | ✅ | szukanie po nazwie i treści w wielu katalogach, dyskach i archiwach |
 | 7c | Grupowa zmiana nazw | ✅ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
-| 8 | Sieć i wtyczki | 🟡 | SFTP działa jak katalog lokalny |
+| 8 | Sieć | 🟡 | SFTP i FTP działają jak katalog lokalny |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
 
 ## Stan szkieletu (etap 1) i co dalej
@@ -108,11 +108,12 @@ Zrobione (etap 8a, SFTP):
 - [ ] Do sprawdzenia ręcznie: połączenie z prawdziwym serwerem (OpenSSH, Proxmox, Home Assistant), Windows (klucze, ścieżki), Bitwarden (`bw`)
 
 Do zrobienia (8b i dalej):
-- [ ] FTP i FTPS (osobny crate, ten sam interfejs panelu)
+- [x] FTP i FTPS (jawny i niejawny; certyfikat przypinany odciskiem SHA-256) przez wspólny interfejs `RemoteFs` (crate `bluepane-remote`, dawniej `bluepane-sftp`); serwery FTP/FTPS w testach
+- [ ] FTP: tryb aktywny, ustawianie daty pliku na serwerze, serwery bez SIZE/MDTM (część rzadkich serwerów); sprawdzić ręcznie z prawdziwym serwerem FTP/FTPS
 - [x] F6 (przenoszenie w każdą stronę, także w obrębie serwera), podgląd F3 pliku z serwera (plik tymczasowy), kopiowanie serwer -> serwer (przez katalog tymczasowy)
 - [ ] F4 pliku z serwera, zakładki i historia na serwerze, uprawnienia/chmod
 - [ ] Osobna kolejka transferów w oknie (jak w FileZilli) z listą oczekujących, pauzą i ponawianiem
-- [ ] Wtyczki (druga połowa etapu 8 z tabeli)
+- [ ] ~~Wtyczki~~ pominięte (decyzja właściciela); w zamian ewentualnie osobny etap: skaner sieci IP
 - [ ] Hasła w systemowym magazynie (Gnome Keyring / Windows Credential Manager) zamiast jawnego tekstu
 
 ## Znane uproszczenia szkieletu

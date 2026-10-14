@@ -3,9 +3,9 @@
 use std::fs;
 
 use bluepane_ops::Progress;
-use bluepane_sftp::testing::{start, write_file, Settings, TestServer};
-use bluepane_sftp::{
-    Auth, ConnectParams, Connection, HostKeyStatus, KnownHosts, SftpError, TransferOptions,
+use bluepane_remote::testing::{start, write_file, Settings, TestServer};
+use bluepane_remote::{
+    Auth, ConnectParams, HostKeyStatus, KnownHosts, RemoteError, SftpConnection, TransferOptions,
 };
 
 struct Fixture {
@@ -36,8 +36,8 @@ fn params(fx: &Fixture, password: &str) -> ConnectParams {
     }
 }
 
-fn connect(fx: &Fixture) -> Connection {
-    Connection::connect(
+fn connect(fx: &Fixture) -> SftpConnection {
+    SftpConnection::connect(
         &params(fx, "secret"),
         &KnownHosts::in_memory(),
         Some(&fx.server.fingerprint),
@@ -48,10 +48,10 @@ fn connect(fx: &Fixture) -> Connection {
 #[test]
 fn an_unknown_host_is_not_trusted_silently() {
     let fx = fixture();
-    let err =
-        Connection::connect(&params(&fx, "secret"), &KnownHosts::in_memory(), None).unwrap_err();
+    let err = SftpConnection::connect(&params(&fx, "secret"), &KnownHosts::in_memory(), None)
+        .unwrap_err();
     match err {
-        SftpError::UnknownHost {
+        RemoteError::UnknownHost {
             fingerprint,
             algorithm,
             port,
@@ -69,7 +69,7 @@ fn an_unknown_host_is_not_trusted_silently() {
 fn a_confirmed_key_is_remembered_and_a_changed_one_refused() {
     let fx = fixture();
     let mut known = KnownHosts::in_memory();
-    assert!(Connection::connect(&params(&fx, "secret"), &known, Some("SHA256:wrong")).is_err());
+    assert!(SftpConnection::connect(&params(&fx, "secret"), &known, Some("SHA256:wrong")).is_err());
     known
         .add(
             "127.0.0.1",
@@ -88,7 +88,7 @@ fn a_confirmed_key_is_remembered_and_a_changed_one_refused() {
         HostKeyStatus::Known
     );
     // Remembered: no confirmation needed any more.
-    Connection::connect(&params(&fx, "secret"), &known, None)
+    SftpConnection::connect(&params(&fx, "secret"), &known, None)
         .unwrap()
         .close();
 
@@ -102,22 +102,22 @@ fn a_confirmed_key_is_remembered_and_a_changed_one_refused() {
             "SHA256:somethingelse",
         )
         .unwrap();
-    let err = Connection::connect(&params(&fx, "secret"), &other, Some(&fx.server.fingerprint))
+    let err = SftpConnection::connect(&params(&fx, "secret"), &other, Some(&fx.server.fingerprint))
         .unwrap_err();
-    assert!(matches!(err, SftpError::HostKeyChanged { .. }), "{err}");
+    assert!(matches!(err, RemoteError::HostKeyChanged { .. }), "{err}");
     assert!(err.to_string().contains("się zmienił"));
 }
 
 #[test]
 fn a_wrong_password_is_a_clear_error() {
     let fx = fixture();
-    let err = Connection::connect(
+    let err = SftpConnection::connect(
         &params(&fx, "nope"),
         &KnownHosts::in_memory(),
         Some(&fx.server.fingerprint),
     )
     .unwrap_err();
-    assert!(matches!(err, SftpError::Auth(_)), "{err}");
+    assert!(matches!(err, RemoteError::Auth(_)), "{err}");
 }
 
 #[test]
@@ -131,13 +131,13 @@ fn an_unreachable_server_is_a_clear_error() {
         port,
         ..ConnectParams::new("127.0.0.1", "u", Auth::Password("p".into()))
     };
-    let err = Connection::connect(
+    let err = SftpConnection::connect(
         &params,
         &KnownHosts::load(&tmp.path().join("k")).unwrap(),
         None,
     )
     .unwrap_err();
-    assert!(matches!(err, SftpError::Connect(_)), "{err}");
+    assert!(matches!(err, RemoteError::Connect(_)), "{err}");
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn makes_renames_and_removes() {
     write_file(fx.server.root.join("x.txt"), "x");
     assert!(matches!(
         conn.rename("/x.txt", "/new/moved.txt"),
-        Err(SftpError::Exists(_))
+        Err(RemoteError::Exists(_))
     ));
     conn.remove_file("/new/moved.txt").unwrap();
     conn.remove_dir("/new").unwrap();
@@ -210,7 +210,7 @@ fn downloads_keep_the_modification_time_and_never_overwrite() {
         &Progress::new(),
         TransferOptions::default(),
     );
-    assert!(matches!(again, Err(SftpError::Exists(_))));
+    assert!(matches!(again, Err(RemoteError::Exists(_))));
     fs::write(&target, "old").unwrap();
     conn.download(
         "/hello.txt",
@@ -251,7 +251,7 @@ fn uploads_never_overwrite_unless_told() {
             &Progress::new(),
             TransferOptions::default()
         ),
-        Err(SftpError::Exists(_))
+        Err(RemoteError::Exists(_))
     ));
     fs::write(&source, "second").unwrap();
     conn.upload(
@@ -283,7 +283,7 @@ fn a_cancelled_download_resumes_where_it_stopped() {
     let progress = Progress::new();
     progress.cancel();
     let result = conn.download("/big.bin", &target, &progress, TransferOptions::default());
-    assert!(matches!(result, Err(SftpError::Cancelled)));
+    assert!(matches!(result, Err(RemoteError::Cancelled)));
     assert!(!target.exists());
 
     // A partial file from an earlier attempt: resume continues after its last byte.
@@ -320,7 +320,7 @@ fn a_cancelled_upload_resumes_where_it_stopped() {
     progress.cancel();
     assert!(matches!(
         conn.upload(&source, "/big.bin", &progress, TransferOptions::default()),
-        Err(SftpError::Cancelled)
+        Err(RemoteError::Cancelled)
     ));
     assert!(!fx.server.root.join("big.bin").exists());
 
@@ -372,7 +372,8 @@ fn key_login_works() {
         )
     };
     let conn =
-        Connection::connect(&params, &KnownHosts::in_memory(), Some(&server.fingerprint)).unwrap();
+        SftpConnection::connect(&params, &KnownHosts::in_memory(), Some(&server.fingerprint))
+            .unwrap();
     assert_eq!(conn.home().unwrap(), "/");
 
     let bad = ConnectParams {
@@ -382,9 +383,9 @@ fn key_login_works() {
         },
         ..params
     };
-    let err =
-        Connection::connect(&bad, &KnownHosts::in_memory(), Some(&server.fingerprint)).unwrap_err();
-    assert!(matches!(err, SftpError::Key(_)), "{err}");
+    let err = SftpConnection::connect(&bad, &KnownHosts::in_memory(), Some(&server.fingerprint))
+        .unwrap_err();
+    assert!(matches!(err, RemoteError::Key(_)), "{err}");
 }
 
 #[test]

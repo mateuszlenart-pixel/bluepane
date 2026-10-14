@@ -126,7 +126,7 @@ pub struct RemoteView {
     pub label: String,
     /// The server folder being shown (`/` separated).
     pub path: String,
-    pub conn: std::sync::Arc<bluepane_sftp::Connection>,
+    pub conn: std::sync::Arc<dyn bluepane_remote::RemoteFs>,
 }
 
 impl RemoteView {

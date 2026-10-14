@@ -3,7 +3,7 @@ use std::io;
 
 /// Everything that can go wrong; the `Display` text is ready to show (Polish).
 #[derive(Debug)]
-pub enum SftpError {
+pub enum RemoteError {
     /// The server could not be reached or the SSH handshake failed.
     Connect(String),
     /// The server refused the login.
@@ -33,13 +33,13 @@ pub enum SftpError {
     Cancelled,
 }
 
-impl fmt::Display for SftpError {
+impl fmt::Display for RemoteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SftpError::Connect(what) => write!(f, "nie udało się połączyć: {what}"),
-            SftpError::Auth(what) => write!(f, "logowanie odrzucone: {what}"),
-            SftpError::Key(what) => write!(f, "klucz SSH: {what}"),
-            SftpError::UnknownHost {
+            RemoteError::Connect(what) => write!(f, "nie udało się połączyć: {what}"),
+            RemoteError::Auth(what) => write!(f, "logowanie odrzucone: {what}"),
+            RemoteError::Key(what) => write!(f, "klucz SSH: {what}"),
+            RemoteError::UnknownHost {
                 host,
                 port,
                 algorithm,
@@ -48,7 +48,7 @@ impl fmt::Display for SftpError {
                 f,
                 "nieznany serwer {host}:{port} ({algorithm}), odcisk klucza {fingerprint}"
             ),
-            SftpError::HostKeyChanged {
+            RemoteError::HostKeyChanged {
                 host,
                 port,
                 expected,
@@ -58,24 +58,24 @@ impl fmt::Display for SftpError {
                 "UWAGA: klucz serwera {host}:{port} się zmienił (był {expected}, jest {got}); \
                  ktoś może podszywać się pod serwer, połączenie odrzucone"
             ),
-            SftpError::Remote(what) => write!(f, "serwer: {what}"),
-            SftpError::Io(e) => write!(f, "{e}"),
-            SftpError::Exists(path) => write!(f, "{path} już istnieje"),
-            SftpError::Cancelled => write!(f, "anulowano"),
+            RemoteError::Remote(what) => write!(f, "serwer: {what}"),
+            RemoteError::Io(e) => write!(f, "{e}"),
+            RemoteError::Exists(path) => write!(f, "{path} już istnieje"),
+            RemoteError::Cancelled => write!(f, "anulowano"),
         }
     }
 }
 
-impl std::error::Error for SftpError {}
+impl std::error::Error for RemoteError {}
 
-impl From<io::Error> for SftpError {
+impl From<io::Error> for RemoteError {
     fn from(e: io::Error) -> Self {
-        SftpError::Io(e)
+        RemoteError::Io(e)
     }
 }
 
-impl From<russh_sftp::client::error::Error> for SftpError {
+impl From<russh_sftp::client::error::Error> for RemoteError {
     fn from(e: russh_sftp::client::error::Error) -> Self {
-        SftpError::Remote(e.to_string())
+        RemoteError::Remote(e.to_string())
     }
 }

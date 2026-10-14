@@ -14,7 +14,7 @@ bluepane-archive.workspace = true
 bluepane-sync.workspace = true
 bluepane-rename.workspace = true
 bluepane-search.workspace = true
-bluepane-sftp.workspace = true
+bluepane-remote.workspace = true
 chrono.workspace = true
 tempfile.workspace = true
 

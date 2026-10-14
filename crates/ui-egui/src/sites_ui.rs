@@ -1,7 +1,7 @@
 //! The site manager (Ctrl+S): saved SFTP sites on the left, the selected one's settings on
 //! the right. It only sends `siteset`, `sitedel` and `connect` commands.
 
-use bluepane_engine::Command;
+use bluepane_engine::{Command, Protocol};
 use egui::{Color32, RichText};
 
 use crate::BluepaneUi;
@@ -11,6 +11,7 @@ use crate::BluepaneUi;
 pub(crate) struct SiteForm {
     /// The saved name this form started from (empty for a new site).
     original: String,
+    protocol: Protocol,
     name: String,
     host: String,
     port: String,
@@ -39,6 +40,7 @@ impl SiteForm {
         };
         SiteForm {
             original: site.name.clone(),
+            protocol: site.protocol,
             name: site.name.clone(),
             host: site.host.clone(),
             port: site.port.to_string(),
@@ -68,10 +70,19 @@ impl SiteForm {
             _ => "ask".to_string(),
         };
         vec![
+            // The protocol first: changing it moves a default port, which is set again below.
+            set("protocol", self.protocol.word()),
             set("host", &self.host),
             set("port", self.port.trim()),
             set("user", &self.user),
-            set("key", &self.key),
+            set(
+                "key",
+                if self.protocol == Protocol::Sftp {
+                    &self.key
+                } else {
+                    ""
+                },
+            ),
             set("start", &self.start),
             set("secret", &secret),
         ]
@@ -100,7 +111,7 @@ impl BluepaneUi {
         let mut load: Option<SiteForm> = None;
         let mut error: Option<String> = None;
 
-        ui.label(RichText::new("Witryny SFTP").strong());
+        ui.label(RichText::new("Serwery: SFTP, FTP, FTPS").strong());
         ui.add_space(4.0);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
@@ -135,14 +146,46 @@ impl BluepaneUi {
                         ui.end_row();
                     };
                     field(ui, "Nazwa:", &mut form.name, "np. Proxmox");
+                    ui.label("Protokół:");
+                    let previous = form.protocol;
+                    egui::ComboBox::from_id_salt("site_protocol")
+                        .selected_text(form.protocol.label())
+                        .show_ui(ui, |ui| {
+                            for protocol in [
+                                Protocol::Sftp,
+                                Protocol::FtpsExplicit,
+                                Protocol::FtpsImplicit,
+                                Protocol::Ftp,
+                            ] {
+                                ui.selectable_value(&mut form.protocol, protocol, protocol.label());
+                            }
+                        });
+                    if form.protocol != previous && form.port.trim() == previous.default_port().to_string() {
+                        form.port = form.protocol.default_port().to_string();
+                    }
+                    ui.end_row();
                     field(ui, "Serwer:", &mut form.host, "adres lub nazwa, np. 192.168.1.10");
                     field(ui, "Port:", &mut form.port, "22");
                     field(ui, "Użytkownik:", &mut form.user, "np. root");
-                    field(ui, "Plik klucza:", &mut form.key, "puste = logowanie hasłem");
+                    if form.protocol == Protocol::Sftp {
+                        field(ui, "Plik klucza:", &mut form.key, "puste = logowanie hasłem");
+                    }
                     field(ui, "Katalog startowy:", &mut form.start, "puste = katalog domowy");
                 });
                 ui.add_space(6.0);
-                ui.label(if form.key.trim().is_empty() {
+                if form.protocol == Protocol::Ftp {
+                    ui.colored_label(
+                        Color32::YELLOW,
+                        "FTP bez szyfrowania: hasło i pliki idą otwartym tekstem. Używaj tylko w zaufanej sieci albo wybierz FTPS.",
+                    );
+                }
+                if matches!(form.protocol, Protocol::FtpsExplicit | Protocol::FtpsImplicit) {
+                    ui.label(
+                        RichText::new("FTPS: certyfikat serwera jest przypinany (odcisk SHA-256 pokaże się przy pierwszym połączeniu).")
+                            .weak(),
+                    );
+                }
+                ui.label(if form.protocol != Protocol::Sftp || form.key.trim().is_empty() {
                     "Hasło:"
                 } else {
                     "Hasło klucza (frazy):"

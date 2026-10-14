@@ -9,20 +9,13 @@ use bluepane_ops::Progress;
 use russh_sftp::protocol::OpenFlags;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
-use crate::connection::Connection;
-use crate::SftpError;
+use crate::fs::TransferOptions;
+use crate::sftp::SftpConnection;
+use crate::RemoteError;
 
 /// Suffix of a file that is still being transferred; it is renamed when complete.
 const PART: &str = ".bpart";
 const CHUNK: usize = 256 * 1024;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct TransferOptions {
-    /// Continue an interrupted transfer from the `.bpart` file instead of starting over.
-    pub resume: bool,
-    /// Replace an existing target. Without it an existing target is an error.
-    pub overwrite: bool,
-}
 
 /// Whole seconds since the epoch (SFTP times have no finer resolution).
 fn secs(time: SystemTime) -> u64 {
@@ -35,7 +28,7 @@ fn part_of_local(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
-impl Connection {
+impl SftpConnection {
     /// Downloads `remote` to `local`. The data goes to `local.bpart` first, so a cancelled
     /// or broken transfer never leaves a half file under the real name and can be resumed.
     pub fn download(
@@ -44,9 +37,9 @@ impl Connection {
         local: &Path,
         progress: &Progress,
         options: TransferOptions,
-    ) -> Result<(), SftpError> {
+    ) -> Result<(), RemoteError> {
         if !options.overwrite && fs::symlink_metadata(local).is_ok() {
-            return Err(SftpError::Exists(local.display().to_string()));
+            return Err(RemoteError::Exists(local.display().to_string()));
         }
         let part = part_of_local(local);
         self.run(async {
@@ -77,7 +70,7 @@ impl Connection {
             let mut buffer = vec![0u8; CHUNK];
             loop {
                 if progress.is_cancelled() {
-                    return Err(SftpError::Cancelled);
+                    return Err(RemoteError::Cancelled);
                 }
                 let n = source.read(&mut buffer).await?;
                 if n == 0 {
@@ -89,7 +82,7 @@ impl Connection {
             drop(target);
             let written = fs::metadata(&part)?.len();
             if written != size {
-                return Err(SftpError::Remote(format!(
+                return Err(RemoteError::Remote(format!(
                     "pobrano {written} z {size} bajtów (połączenie przerwane?)"
                 )));
             }
@@ -106,18 +99,18 @@ impl Connection {
         })
     }
 
-    /// Uploads `local` to `remote`, through `remote.bpart` (see [`Connection::download`]).
+    /// Uploads `local` to `remote`, through `remote.bpart` (see [`SftpConnection::download`]).
     pub fn upload(
         &self,
         local: &Path,
         remote: &str,
         progress: &Progress,
         options: TransferOptions,
-    ) -> Result<(), SftpError> {
+    ) -> Result<(), RemoteError> {
         let meta = fs::metadata(local)?;
         let size = meta.len();
         if !options.overwrite && self.stat(remote)?.is_some() {
-            return Err(SftpError::Exists(remote.to_string()));
+            return Err(RemoteError::Exists(remote.to_string()));
         }
         let part = format!("{remote}{PART}");
         self.run(async {
@@ -155,7 +148,7 @@ impl Connection {
             loop {
                 if progress.is_cancelled() {
                     let _ = target.shutdown().await;
-                    return Err(SftpError::Cancelled);
+                    return Err(RemoteError::Cancelled);
                 }
                 let n = std::io::Read::read(&mut source, &mut buffer)?;
                 if n == 0 {
@@ -168,7 +161,7 @@ impl Connection {
             target.shutdown().await?;
             let written = self.stat_async(&part).await?.map_or(0, |e| e.size);
             if written != size {
-                return Err(SftpError::Remote(format!(
+                return Err(RemoteError::Remote(format!(
                     "wysłano {written} z {size} bajtów"
                 )));
             }

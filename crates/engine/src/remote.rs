@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use bluepane_sftp::{KnownHosts, RemoteEntry, SecretStore, Site, Sites};
+use bluepane_remote::{KnownHosts, RemoteEntry, SecretStore, Site, Sites};
 use bluepane_vfs::{Entry, EntryKind};
 
 use crate::job::{ArchiveJob, JobKind, JobSpec, RemoteJob, RemoteOp, Report};
@@ -85,7 +85,23 @@ impl Session {
             .get(name)
             .cloned()
             .unwrap_or_else(|| Site::new(name, "", ""));
+        if field == "key" && site.protocol != bluepane_remote::Protocol::Sftp {
+            return Err(EngineError(
+                "klucz SSH działa tylko z SFTP (FTP loguje się hasłem)".into(),
+            ));
+        }
         match field {
+            "protocol" => {
+                let protocol =
+                    bluepane_remote::Protocol::from_word(value.trim()).ok_or_else(|| {
+                        EngineError("siteset protocol: sftp, ftp, ftps albo ftps-implicit".into())
+                    })?;
+                // A port that was the old protocol's default follows the change.
+                if site.port == site.protocol.default_port() {
+                    site.port = protocol.default_port();
+                }
+                site.protocol = protocol;
+            }
             "host" => site.host = value.trim().to_string(),
             "port" => {
                 site.port = value
@@ -114,7 +130,7 @@ impl Session {
             _ => return Err(EngineError(format!("siteset: nieznane pole {field}"))),
         }
         if let SecretStore::Bitwarden(_) = site.secret {
-            if !bluepane_sftp::bitwarden_available() {
+            if !bluepane_remote::bitwarden_available() {
                 self.status = "Uwaga: nie znaleziono Bitwarden CLI (`bw`); połączenie się nie uda, dopóki go nie zainstalujesz".into();
             }
         }
@@ -213,7 +229,7 @@ impl Session {
 
     fn remote_spec(
         side: usize,
-        conn: Option<Arc<bluepane_sftp::Connection>>,
+        conn: Option<Arc<dyn bluepane_remote::RemoteFs>>,
         op: RemoteOp,
     ) -> JobSpec {
         JobSpec {
@@ -648,7 +664,7 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bluepane_sftp::testing::{start, write_file, Settings, TestServer};
+    use bluepane_remote::testing::{start, write_file, Settings, TestServer};
     use std::fs;
     use std::time::Duration;
 
@@ -1123,6 +1139,150 @@ mod tests {
         r.session.view_from_archive_limit = 3;
         r.session.run_line("select hello.txt").unwrap();
         assert!(r.session.run_line("view").is_err());
+    }
+
+    /// An FTP (or FTPS) server in place of the SFTP one; panel 0 is local, panel 1 too.
+    fn rig_ftp(
+        tls: bluepane_remote::testing::Tls,
+    ) -> (
+        tempfile::TempDir,
+        bluepane_remote::testing::FtpServer,
+        Session,
+    ) {
+        use bluepane_remote::testing::{start_ftp, FtpSettings};
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("ftp");
+        write_file(root.join("hello.txt"), "hello world");
+        write_file(root.join("docs/a.txt"), "alpha");
+        let server = start_ftp(FtpSettings {
+            root,
+            user: "alice".into(),
+            password: "secret".into(),
+            tls,
+            no_mlsd: false,
+        });
+        let (left, right) = (tmp.path().join("left"), tmp.path().join("right"));
+        fs::create_dir_all(&left).unwrap();
+        fs::create_dir_all(&right).unwrap();
+        write_file(left.join("up.txt"), "uploaded");
+        let mut session = Session::new(&left, &right);
+        session.use_config_dir(&tmp.path().join("config"));
+        let protocol = match tls {
+            bluepane_remote::testing::Tls::None => "ftp",
+            bluepane_remote::testing::Tls::Explicit => "ftps",
+            bluepane_remote::testing::Tls::Implicit => "ftps-implicit",
+        };
+        for (field, value) in [
+            ("protocol", protocol.to_string()),
+            ("host", "127.0.0.1".to_string()),
+            ("port", server.port.to_string()),
+            ("user", "alice".to_string()),
+            ("secret", "local:secret".to_string()),
+        ] {
+            session
+                .run_line(&format!("siteset Files {field} {value}"))
+                .unwrap();
+        }
+        (tmp, server, session)
+    }
+
+    #[test]
+    fn plain_ftp_works_like_the_other_servers() {
+        let (tmp, server, mut s) = rig_ftp(bluepane_remote::testing::Tls::None);
+        s.run_line("connect Files").unwrap();
+        settle(&mut s);
+        assert!(s.pending.is_none(), "plain FTP has no key to confirm");
+        assert_eq!(names(&s, 0), ["docs", "hello.txt"]);
+        assert!(s.panels[0]
+            .location()
+            .to_string_lossy()
+            .starts_with("sftp://"));
+        s.run_line("select hello.txt").unwrap();
+        s.run_line("copy").unwrap();
+        settle(&mut s);
+        assert_eq!(
+            fs::read_to_string(tmp.path().join("right/hello.txt")).unwrap(),
+            "hello world"
+        );
+        // Upload from a local panel, with a conflict question on the second go.
+        s.run_line("disconnect").unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line("connect Files").unwrap();
+        settle(&mut s);
+        s.run_line("switch").unwrap();
+        s.run_line("select up.txt").unwrap();
+        s.run_line("copy").unwrap();
+        settle(&mut s);
+        assert_eq!(
+            fs::read_to_string(server.root.join("up.txt")).unwrap(),
+            "uploaded"
+        );
+        s.run_line("select up.txt").unwrap();
+        s.run_line("copy").unwrap();
+        settle(&mut s);
+        assert!(matches!(s.pending, Some(Pending::Conflict(_))));
+        s.run_line("skip").unwrap();
+        settle(&mut s);
+        s.run_line("switch").unwrap();
+        s.run_line("mkdir fresh").unwrap();
+        settle(&mut s);
+        assert!(server.root.join("fresh").is_dir());
+        s.run_line("select hello.txt").unwrap();
+        s.run_line("delete").unwrap();
+        s.run_line("confirm").unwrap();
+        settle(&mut s);
+        assert!(!server.root.join("hello.txt").exists());
+    }
+
+    #[test]
+    fn ftps_asks_to_trust_the_certificate_in_both_modes() {
+        use bluepane_remote::testing::Tls;
+        for tls in [Tls::Explicit, Tls::Implicit] {
+            let (tmp, server, mut s) = rig_ftp(tls);
+            s.run_line("connect Files").unwrap();
+            settle(&mut s);
+            assert!(
+                matches!(s.pending, Some(Pending::TrustHost(_))),
+                "{}",
+                s.status
+            );
+            assert!(s.status.contains(server.fingerprint.as_ref().unwrap()));
+            s.run_line("confirm").unwrap();
+            settle(&mut s);
+            assert!(s.panels[0].remote.is_some(), "{}", s.status);
+            assert_eq!(names(&s, 0), ["docs", "hello.txt"]);
+            s.run_line("select hello.txt").unwrap();
+            s.run_line("copy").unwrap();
+            settle(&mut s);
+            assert_eq!(
+                fs::read_to_string(tmp.path().join("right/hello.txt")).unwrap(),
+                "hello world"
+            );
+            // Remembered: the second connection asks nothing.
+            s.run_line("disconnect").unwrap();
+            s.run_line("connect Files").unwrap();
+            settle(&mut s);
+            assert!(s.pending.is_none());
+            assert!(s.panels[0].remote.is_some());
+        }
+    }
+
+    #[test]
+    fn the_protocol_of_a_site_can_be_changed_and_moves_the_default_port() {
+        let mut s = Session::new("/tmp", "/tmp");
+        s.use_config_dir(&tempfile::tempdir().unwrap().path().join("c"));
+        s.run_line("siteset A host h").unwrap();
+        assert_eq!(s.sites.get("A").unwrap().port, 22);
+        s.run_line("siteset A protocol ftp").unwrap();
+        assert_eq!(s.sites.get("A").unwrap().port, 21);
+        s.run_line("siteset A protocol ftps-implicit").unwrap();
+        assert_eq!(s.sites.get("A").unwrap().port, 990);
+        s.run_line("siteset A port 2121").unwrap();
+        s.run_line("siteset A protocol sftp").unwrap();
+        assert_eq!(s.sites.get("A").unwrap().port, 2121, "a chosen port stays");
+        assert!(s.run_line("siteset A protocol gopher").is_err());
+        s.run_line("siteset A protocol ftp").unwrap();
+        assert!(s.run_line("siteset A key /k").is_err(), "keys are SSH only");
     }
 
     #[test]

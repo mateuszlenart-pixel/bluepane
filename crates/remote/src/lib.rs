@@ -1,3 +1,6 @@
+//! Remote file systems behind one blocking interface ([`RemoteFs`]): SFTP over SSH and
+//! FTP / FTPS. Saved sites ([`Sites`]) say which one and how to log in.
+//!
 //! SFTP over SSH with a blocking API.
 //!
 //! The client is async inside (russh and russh-sftp on a tokio runtime that a
@@ -6,21 +9,24 @@
 //! `bluepane_ops::Progress` for progress and cancellation.
 //!
 //! Host keys are checked against a [`KnownHosts`] list. An unknown host is *not* trusted
-//! silently: [`Connection::connect`] fails with [`SftpError::UnknownHost`] carrying the
+//! silently: [`Connection::connect`] fails with [`RemoteError::UnknownHost`] carrying the
 //! fingerprint, the caller shows it to the user and connects again with that fingerprint
 //! as `trust`. A changed key is always refused.
 
-mod connection;
 mod error;
+mod fs;
+mod ftp;
 mod known_hosts;
+mod sftp;
+mod sftp_transfer;
 mod sites;
-mod transfer;
+mod tls;
 
 #[doc(hidden)]
 pub mod testing;
 
-pub use connection::{Auth, ConnectParams, Connection, RemoteEntry};
-pub use error::SftpError;
+pub use error::RemoteError;
+pub use fs::{Protocol, RemoteEntry, RemoteFs, TransferOptions};
 pub use known_hosts::{HostKeyStatus, KnownHosts};
+pub use sftp::{Auth, ConnectParams, SftpConnection};
 pub use sites::{bitwarden_available, bitwarden_secret, SecretStore, Site, Sites};
-pub use transfer::TransferOptions;

@@ -1,6 +1,6 @@
 [package]
-name = "bluepane-sftp"
-description = "SFTP client over SSH with a blocking API: connect, list, transfer with resume"
+name = "bluepane-remote"
+description = "Remote file systems behind one blocking interface: SFTP over SSH and FTP/FTPS, with saved sites"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,6 +13,10 @@ bluepane-vfs.workspace = true
 russh.workspace = true
 russh-sftp.workspace = true
 rand.workspace = true
+suppaftp.workspace = true
+rustls.workspace = true
+sha2.workspace = true
+rcgen.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
