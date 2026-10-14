@@ -247,7 +247,7 @@ pub struct Session {
     /// Largest archive entry that F3 extracts for a preview.
     pub view_from_archive_limit: u64,
     /// Temporary directory holding the file being previewed from an archive.
-    preview_dir: Option<PathBuf>,
+    pub(crate) preview_dir: Option<PathBuf>,
 }
 
 /// A file inside an archive larger than this is not previewed (it would have to be extracted
@@ -271,6 +271,19 @@ pub struct SyncView {
 
 /// Counter that keeps the temporary preview directories of one process apart.
 static PREVIEW_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A re-read of a server folder: it says nothing on the status line.
+fn is_quiet_listing(spec: &JobSpec) -> bool {
+    spec.archive
+        .as_ref()
+        .and_then(|a| a.remote.as_ref())
+        .is_some_and(|r| matches!(r.op, crate::job::RemoteOp::List { .. }))
+}
+
+/// A number that keeps the temporary preview folders of one process apart.
+pub(crate) fn next_preview_number() -> u64 {
+    PREVIEW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
 
 /// Index of the volume that contains `cwd` (the one with the longest matching path).
 fn volume_index(volumes: &[Volume], cwd: &Path) -> Option<usize> {
@@ -800,8 +813,12 @@ impl Session {
     }
 
     fn start(&mut self, spec: JobSpec) {
-        self.status = format!("{}…", spec.kind.label());
-        self.status_is_error = false;
+        // A refresh of a server listing runs quietly: it must not wipe the result of the
+        // transfer that caused it from the status line.
+        if !is_quiet_listing(&spec) {
+            self.status = format!("{}…", spec.kind.label());
+            self.status_is_error = false;
+        }
         self.current = Some(RunningJob::start(spec));
     }
 
@@ -904,6 +921,10 @@ impl Session {
         self.status_is_error = is_error;
 
         if let Some(next) = self.queue.pop_front() {
+            if is_quiet_listing(&next) {
+                self.start(next);
+                return;
+            }
             let message = std::mem::take(&mut self.status);
             self.start(next);
             // Keep an error of the finished job visible until the next one says something.
@@ -1425,7 +1446,9 @@ impl Session {
 
     /// F3: opens the built-in viewer on the file under the cursor.
     fn open_viewer(&mut self) -> Result<(), EngineError> {
-        self.deny_remote("podgląd (F3)")?;
+        if self.active_panel().remote.is_some() {
+            return self.remote_view();
+        }
         if self.active_panel().archive.is_some() {
             return self.preview_from_archive();
         }
@@ -1572,7 +1595,7 @@ impl Session {
     }
 
     /// Deletes the temporary directory of the archive preview, if any.
-    fn remove_preview_dir(&mut self) {
+    pub(crate) fn remove_preview_dir(&mut self) {
         if let Some(dir) = self.preview_dir.take() {
             let _ = std::fs::remove_dir_all(dir);
         }

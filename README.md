@@ -156,7 +156,11 @@ Panel może pokazywać katalog na serwerze SSH/SFTP jak zwykły katalog. Impleme
 - **Praca w panelu:** Enter / Backspace / `cd` / F9 przeglądają serwer; F5 pobiera (z drugiego panelu) lub wysyła (do panelu serwera), także całe katalogi;
   konflikty pytają jak przy kopiowaniu (nadpisz / starsze / pomiń / zachowaj oba); F7 nowy katalog, F2 zmiana nazwy, F8 usuwa **trwale** (serwer nie ma kosza, pytanie to mówi wprost).
   Pobieranie i wysyłanie idzie przez plik `.bpart` i jest wznawiane po przerwaniu (tylko gdy plik częściowy jest nowszy niż źródło). Postęp i Anuluj jak przy zwykłym kopiowaniu.
-- **Nie ma jeszcze:** F6 (przenoszenie), F3/F4 pliku z serwera (pobierz F5), kopiowania między dwoma serwerami, FTP/FTPS, zakładek i historii na serwerze.
+- **F6 (przenoszenie):** z serwera na dysk (oryginał na serwerze znika dopiero po pobraniu całości; pominięty konflikt zostawia go), z dysku na serwer
+  (oryginał trafia do kosza po wysłaniu całości), między dwoma serwerami (przez katalog tymczasowy) i w obrębie jednego serwera (to zmiana nazwy, bez kopiowania, nigdy nie zastępuje).
+- **F3:** plik z serwera jest pobierany do katalogu tymczasowego (limit 256 MB) i pokazany w podglądzie; kopia znika po zamknięciu.
+- **F5 między dwoma serwerami** kopiuje przez katalog tymczasowy (każdy bajt idzie dwa razy; potrzebne miejsce na dysku na największy element).
+- **Nie ma jeszcze:** F4 pliku z serwera (pobierz F5), FTP/FTPS, zakładek i historii na serwerze.
 
 Komendy: `sites`, `siteset <nazwa> <host|port|user|key|start|secret> <wartość>` (nazwa ze spacjami w cudzysłowie; `secret`: `ask`, `local:<hasło>`, `bitwarden:<element>`),
 `sitedel <nazwa>`, `connect <nazwa> [hasło]`, `disconnect`, `siteclose`.

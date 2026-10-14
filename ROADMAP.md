@@ -109,7 +109,8 @@ Zrobione (etap 8a, SFTP):
 
 Do zrobienia (8b i dalej):
 - [ ] FTP i FTPS (osobny crate, ten sam interfejs panelu)
-- [ ] F6 (przenoszenie), podgląd F3 pliku z serwera (przez plik tymczasowy), kopiowanie serwer -> serwer, zakładki i historia na serwerze, uprawnienia/chmod
+- [x] F6 (przenoszenie w każdą stronę, także w obrębie serwera), podgląd F3 pliku z serwera (plik tymczasowy), kopiowanie serwer -> serwer (przez katalog tymczasowy)
+- [ ] F4 pliku z serwera, zakładki i historia na serwerze, uprawnienia/chmod
 - [ ] Osobna kolejka transferów w oknie (jak w FileZilli) z listą oczekujących, pauzą i ponawianiem
 - [ ] Wtyczki (druga połowa etapu 8 z tabeli)
 - [ ] Hasła w systemowym magazynie (Gnome Keyring / Windows Credential Manager) zamiast jawnego tekstu

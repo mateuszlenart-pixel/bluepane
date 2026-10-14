@@ -333,20 +333,6 @@ impl Session {
     /// F5 / F6 when a panel shows a server.
     pub(crate) fn remote_transfer(&mut self, remove_source: bool) -> Result<(), EngineError> {
         let (src, dst) = (self.active, 1 - self.active);
-        let (src_remote, dst_remote) = (
-            self.panels[src].remote.is_some(),
-            self.panels[dst].remote.is_some(),
-        );
-        if src_remote && dst_remote {
-            return Err(EngineError(
-                "kopiowanie między dwoma serwerami nie jest dostępne: pobierz pliki na dysk, potem wyślij".into(),
-            ));
-        }
-        if remove_source {
-            return Err(EngineError(
-                "przenoszenie przez SFTP nie jest dostępne: skopiuj (F5), sprawdź, a potem usuń (F8)".into(),
-            ));
-        }
         let targets: Vec<PathBuf> = self.panels[src]
             .target_entries()
             .into_iter()
@@ -356,37 +342,105 @@ impl Session {
         if targets.is_empty() {
             return Err(EngineError("nic nie zaznaczono".into()));
         }
-        if src_remote {
-            let dest = self.other_directory()?;
-            self.status = "Pobieranie…".into();
-            self.remote_op(
-                src,
-                RemoteOp::Download {
-                    sources: targets.iter().map(|p| path_text(p)).collect(),
-                    dest,
-                },
-            )
+        // Like every other transfer, this one uses up the selection.
+        self.panels[src].selected.clear();
+        let verb = if remove_source {
+            "Przenoszenie"
         } else {
-            let (dest, conn) = {
-                let remote = self.remote_of(dst).expect("checked");
-                (remote.path.clone(), remote.conn.clone())
-            };
-            if self.panels[src].archive.is_some() {
-                return Err(EngineError(
-                    "z archiwum nie wyślesz plików na serwer: najpierw rozpakuj".into(),
-                ));
+            "Kopiowanie"
+        };
+        let src_conn = self.remote_of(src).map(|r| r.conn.clone());
+        let dst_conn = self.remote_of(dst).map(|r| r.conn.clone());
+        match (src_conn, dst_conn) {
+            (Some(from), Some(to)) => {
+                let dest = self.remote_of(dst).expect("checked").path.clone();
+                let sources: Vec<String> = targets.iter().map(|p| path_text(p)).collect();
+                // The same saved site on both sides is one server: moving is a rename there.
+                let same_server =
+                    self.remote_of(src).map(|r| &r.site) == self.remote_of(dst).map(|r| &r.site);
+                let op = if same_server && remove_source {
+                    RemoteOp::MoveWithin { sources, dest }
+                } else {
+                    RemoteOp::Relay {
+                        target: to,
+                        sources,
+                        dest,
+                        remove_source,
+                    }
+                };
+                self.status = format!("{verb} na serwerze…");
+                self.enqueue_quiet(Self::remote_spec(src, Some(from), op));
+                Ok(())
             }
-            self.status = "Wysyłanie…".into();
-            self.enqueue_quiet(Self::remote_spec(
-                dst,
-                Some(conn),
-                RemoteOp::Upload {
-                    sources: targets,
-                    dest,
-                },
-            ));
-            Ok(())
+            (Some(_), None) => {
+                let dest = self.other_directory()?;
+                self.status = format!("{verb}: pobieranie…");
+                self.remote_op(
+                    src,
+                    RemoteOp::Download {
+                        sources: targets.iter().map(|p| path_text(p)).collect(),
+                        dest,
+                        remove_source,
+                        view: false,
+                    },
+                )
+            }
+            (None, Some(conn)) => {
+                if self.panels[src].archive.is_some() {
+                    return Err(EngineError(
+                        "z archiwum nie wyślesz plików na serwer: najpierw rozpakuj".into(),
+                    ));
+                }
+                let dest = self.remote_of(dst).expect("checked").path.clone();
+                self.status = format!("{verb}: wysyłanie…");
+                self.enqueue_quiet(Self::remote_spec(
+                    dst,
+                    Some(conn),
+                    RemoteOp::Upload {
+                        sources: targets,
+                        dest,
+                        remove_source,
+                    },
+                ));
+                Ok(())
+            }
+            (None, None) => unreachable!("one panel shows a server"),
         }
+    }
+
+    /// F3 on a server: the file is fetched into a temporary folder and shown in the viewer.
+    pub(crate) fn remote_view(&mut self) -> Result<(), EngineError> {
+        let side = self.active;
+        let entry = self.panels[side]
+            .current()
+            .filter(|e| !is_parent_entry(e))
+            .cloned()
+            .ok_or_else(|| EngineError("nic nie wskazano".into()))?;
+        if entry.is_dir() {
+            return Err(EngineError(format!("to katalog, nie plik: {}", entry.name)));
+        }
+        if entry.size > self.view_from_archive_limit {
+            return Err(EngineError(format!(
+                "plik na serwerze ma {}: za duży na podgląd (limit {}), pobierz go (F5)",
+                crate::human_size(entry.size),
+                crate::human_size(self.view_from_archive_limit)
+            )));
+        }
+        let dir = std::env::temp_dir().join(format!(
+            "bluepane-view-{}-{}",
+            std::process::id(),
+            crate::session::next_preview_number()
+        ));
+        self.status = format!("Pobieranie do podglądu: {}…", entry.name);
+        self.remote_op(
+            side,
+            RemoteOp::Download {
+                sources: vec![path_text(&entry.path)],
+                dest: dir,
+                remove_source: false,
+                view: true,
+            },
+        )
     }
 
     pub(crate) fn remote_mkdir(&mut self, name: &str) -> Result<(), EngineError> {
@@ -442,6 +496,7 @@ impl Session {
         side: usize,
         paths: Vec<String>,
     ) -> Result<(), EngineError> {
+        self.panels[side].selected.clear();
         self.remote_op(side, RemoteOp::Delete { paths })
     }
 
@@ -516,8 +571,55 @@ impl Session {
                     true,
                 ),
             },
+            RemoteOp::Download {
+                view: true,
+                dest,
+                sources,
+                ..
+            } => {
+                let file = dest.join(sources.first().map_or("", |s| remote_name(s)));
+                if report.done == 1 && report.failed.is_empty() {
+                    match crate::Viewer::open(&file) {
+                        Ok(viewer) => {
+                            self.remove_preview_dir();
+                            self.preview_dir = Some(dest.clone());
+                            self.viewer = Some(viewer);
+                            return (
+                                format!("Podgląd z serwera: {}", remote_name(&sources[0])),
+                                false,
+                            );
+                        }
+                        Err(error) => {
+                            let _ = std::fs::remove_dir_all(dest);
+                            return (error.to_string(), true);
+                        }
+                    }
+                }
+                let _ = std::fs::remove_dir_all(dest);
+                (
+                    format!(
+                        "Nie udało się pobrać do podglądu: {}",
+                        failure(report).unwrap_or_else(|| "przerwano".into())
+                    ),
+                    true,
+                )
+            }
             op => {
                 let verb = match op {
+                    RemoteOp::Download {
+                        remove_source: true,
+                        ..
+                    }
+                    | RemoteOp::Upload {
+                        remove_source: true,
+                        ..
+                    }
+                    | RemoteOp::Relay {
+                        remove_source: true,
+                        ..
+                    }
+                    | RemoteOp::MoveWithin { .. } => "Przeniesiono",
+                    RemoteOp::Relay { .. } => "Skopiowano między serwerami",
                     RemoteOp::Mkdir { .. } => "Utworzono katalog",
                     RemoteOp::Rename { .. } => "Zmieniono nazwę",
                     RemoteOp::Delete { .. } => "Usunięto z serwera",
@@ -876,24 +978,151 @@ mod tests {
         let mut r = rig("local:secret");
         connect(&mut r);
         r.session.run_line("select hello.txt").unwrap();
-        for line in [
-            "move",
-            "view",
-            "edit",
-            "pack",
-            "multirename",
-            "sync",
-            "unpack",
-        ] {
+        for line in ["edit", "pack", "multirename", "sync", "unpack"] {
             assert!(r.session.run_line(line).is_err(), "{line}");
         }
-        // Two servers at once cannot copy between each other.
+        assert!(r.session.run_line("connect Missing").is_err());
+    }
+
+    #[test]
+    fn moving_from_the_server_deletes_only_what_arrived() {
+        let mut r = rig("local:secret");
+        connect(&mut r);
+        let right = r.tmp.path().join("right");
+        fs::write(right.join("hello.txt"), "already here").unwrap();
+        r.session.run_line("select hello.txt").unwrap();
+        r.session.run_line("select docs").unwrap();
+        r.session.run_line("move").unwrap();
+        settle(&mut r.session);
+        // hello.txt conflicts: skipped, so it stays on the server; docs arrived in full.
+        r.session.run_line("skip").unwrap();
+        settle(&mut r.session);
+        assert_eq!(
+            fs::read_to_string(right.join("hello.txt")).unwrap(),
+            "already here"
+        );
+        assert!(
+            r.server.root.join("hello.txt").exists(),
+            "a skipped file is not deleted"
+        );
+        assert_eq!(
+            fs::read_to_string(right.join("docs/sub/b.txt")).unwrap(),
+            "bravo"
+        );
+        assert!(
+            !r.server.root.join("docs").exists(),
+            "what arrived in full is gone"
+        );
+        assert!(
+            r.session.status.contains("Przeniesiono"),
+            "{}",
+            r.session.status
+        );
+    }
+
+    #[test]
+    fn moving_to_the_server_keeps_the_local_file_when_skipped() {
+        let mut r = rig("local:secret");
+        r.session.run_line("switch").unwrap();
+        connect(&mut r);
+        r.session.run_line("switch").unwrap();
+        write_file(r.server.root.join("up.txt"), "on the server");
+        r.session.run_line("refresh").unwrap();
+        settle(&mut r.session);
+        r.session.run_line("select up.txt").unwrap();
+        r.session.run_line("move").unwrap();
+        settle(&mut r.session);
+        r.session.run_line("skip").unwrap();
+        settle(&mut r.session);
+        assert_eq!(
+            fs::read_to_string(r.tmp.path().join("left/up.txt")).unwrap(),
+            "uploaded"
+        );
+        assert_eq!(
+            fs::read_to_string(r.server.root.join("up.txt")).unwrap(),
+            "on the server"
+        );
+    }
+
+    #[test]
+    fn copying_and_moving_between_two_connections() {
+        let mut r = rig("local:secret");
+        connect(&mut r);
         r.session.run_line("switch").unwrap();
         r.session.run_line("connect Test").unwrap();
         settle(&mut r.session);
+        r.session.run_line("mkdir target").unwrap();
+        settle(&mut r.session);
+        r.session.run_line("select target").unwrap();
+        r.session.run_line("enter").unwrap();
+        settle(&mut r.session);
+        assert_eq!(r.session.panels[1].remote.as_ref().unwrap().path, "/target");
+
+        r.session.run_line("switch").unwrap();
         r.session.run_line("select docs").unwrap();
-        assert!(r.session.run_line("copy").is_err());
-        assert!(r.session.run_line("connect Missing").is_err());
+        r.session.run_line("copy").unwrap();
+        settle(&mut r.session);
+        assert_eq!(
+            fs::read_to_string(r.server.root.join("target/docs/sub/b.txt")).unwrap(),
+            "bravo"
+        );
+        assert!(
+            r.server.root.join("docs/a.txt").exists(),
+            "a copy leaves the source"
+        );
+        assert!(
+            r.session.status.contains("między serwerami"),
+            "{}",
+            r.session.status
+        );
+
+        // Moving inside one server (the same saved site) is a rename.
+        r.session.run_line("select hello.txt").unwrap();
+        r.session.run_line("move").unwrap();
+        settle(&mut r.session);
+        assert!(
+            r.server.root.join("target/hello.txt").exists(),
+            "{}",
+            r.session.status
+        );
+        assert!(!r.server.root.join("hello.txt").exists());
+        // A move never replaces: the same name again is reported.
+        write_file(r.server.root.join("hello.txt"), "second");
+        r.session.run_line("refresh").unwrap();
+        settle(&mut r.session);
+        r.session.run_line("select hello.txt").unwrap();
+        r.session.run_line("move").unwrap();
+        settle(&mut r.session);
+        assert!(r.session.status_is_error, "{}", r.session.status);
+        assert_eq!(
+            fs::read_to_string(r.server.root.join("hello.txt")).unwrap(),
+            "second"
+        );
+        assert_eq!(
+            fs::read_to_string(r.server.root.join("target/hello.txt")).unwrap(),
+            "hello world"
+        );
+    }
+
+    #[test]
+    fn a_file_on_the_server_opens_in_the_viewer() {
+        let mut r = rig("local:secret");
+        connect(&mut r);
+        r.session.run_line("select hello.txt").unwrap();
+        r.session.run_line("view").unwrap();
+        settle(&mut r.session);
+        assert!(r.session.viewer.is_some(), "{}", r.session.status);
+        assert!(r.session.preview_dir.is_some());
+        let dir = r.session.preview_dir.clone().unwrap();
+        r.session.remove_preview_dir();
+        assert!(!dir.exists(), "the temporary copy is removed");
+        // A folder, and a file too big for a preview, are refused.
+        r.session.viewer = None;
+        r.session.run_line("select docs").unwrap();
+        assert!(r.session.run_line("view").is_err());
+        r.session.view_from_archive_limit = 3;
+        r.session.run_line("select hello.txt").unwrap();
+        assert!(r.session.run_line("view").is_err());
     }
 
     #[test]
