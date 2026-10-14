@@ -68,3 +68,10 @@ pub fn file_mode(path: &Path) -> Option<u32> {
 pub fn set_mode(path: &Path, mode: u32) -> io::Result<()> {
     fs::set_permissions(path, fs::Permissions::from_mode(mode & 0o777))
 }
+
+/// The neighbours (IP address, MAC address) the kernel has resolved lately.
+pub fn neighbours() -> Vec<(std::net::Ipv4Addr, String)> {
+    fs::read_to_string("/proc/net/arp")
+        .map(|text| super::arp::parse_proc_net_arp(&text))
+        .unwrap_or_default()
+}
