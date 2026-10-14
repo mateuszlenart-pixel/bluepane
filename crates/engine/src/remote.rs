@@ -10,7 +10,7 @@ use bluepane_vfs::{Entry, EntryKind};
 use crate::job::{ArchiveJob, JobKind, JobSpec, RemoteJob, RemoteOp, Report};
 use crate::panel::{is_parent_entry, RemoteView};
 use crate::remote_job::{remote_join, remote_name, remote_parent};
-use crate::session::{InputKind, Pending, Session};
+use crate::session::{InputKind, Pending, RemoteEdit, Session};
 use crate::EngineError;
 
 /// Rows of a server listing as panel entries.
@@ -341,6 +341,29 @@ impl Session {
         }
     }
 
+    /// Alt+Left / Alt+Right on a server: one step back or forward through visited folders.
+    pub(crate) fn remote_history(&mut self, step: isize) -> Result<(), EngineError> {
+        let side = self.active;
+        let remote = self.panels[side]
+            .remote
+            .as_mut()
+            .ok_or_else(|| EngineError("panel nie jest połączony z serwerem".into()))?;
+        let target = remote
+            .history_index
+            .checked_add_signed(step)
+            .filter(|i| *i < remote.history.len())
+            .ok_or_else(|| {
+                EngineError(if step < 0 {
+                    "to początek historii katalogów serwera".into()
+                } else {
+                    "to koniec historii katalogów serwera".into()
+                })
+            })?;
+        remote.history_index = target;
+        let path = remote.history[target].clone();
+        self.remote_goto(side, path)
+    }
+
     pub(crate) fn remote_up(&mut self) {
         let side = self.active;
         let Some(path) = self.remote_of(side).map(|r| r.path.clone()) else {
@@ -443,6 +466,7 @@ impl Session {
                         dest,
                         remove_source,
                         view: false,
+                        edit: false,
                     },
                 )
             }
@@ -461,6 +485,7 @@ impl Session {
                         sources: targets,
                         dest,
                         remove_source,
+                        replace: false,
                     },
                 ));
                 Ok(())
@@ -500,8 +525,89 @@ impl Session {
                 dest: dir,
                 remove_source: false,
                 view: true,
+                edit: false,
             },
         )
+    }
+
+    /// F4 on a server: fetch the file into a temporary folder and open it in the editor.
+    pub(crate) fn remote_edit_start(&mut self) -> Result<(), EngineError> {
+        let side = self.active;
+        let entry = self.panels[side]
+            .current()
+            .filter(|e| !is_parent_entry(e))
+            .cloned()
+            .ok_or_else(|| EngineError("nic nie wskazano".into()))?;
+        if entry.is_dir() {
+            return Err(EngineError(format!("to katalog, nie plik: {}", entry.name)));
+        }
+        if entry.size > self.view_from_archive_limit {
+            return Err(EngineError(format!(
+                "plik na serwerze ma {}: za duży do edycji (limit {}), pobierz go (F5)",
+                crate::human_size(entry.size),
+                crate::human_size(self.view_from_archive_limit)
+            )));
+        }
+        let dir = std::env::temp_dir().join(format!(
+            "bluepane-edit-{}-{}",
+            std::process::id(),
+            crate::session::next_preview_number()
+        ));
+        self.status = format!("Pobieranie do edycji: {}…", entry.name);
+        self.remote_op(
+            side,
+            RemoteOp::Download {
+                sources: vec![path_text(&entry.path)],
+                dest: dir,
+                remove_source: false,
+                view: false,
+                edit: true,
+            },
+        )
+    }
+
+    /// `editsend`: send the edited copy back to the server (replacing the original).
+    pub(crate) fn remote_edit_send(&mut self) -> Result<(), EngineError> {
+        let Some(edit) = self.remote_edit.clone() else {
+            return Err(EngineError(
+                "nic nie jest w edycji: F4 na pliku z serwera pobiera go do edytora".into(),
+            ));
+        };
+        let meta = std::fs::metadata(&edit.local)
+            .map_err(|e| EngineError(format!("nie ma edytowanej kopii: {e}")))?;
+        if meta.len() == edit.size && meta.modified().ok() == edit.modified {
+            return Err(EngineError(
+                "kopia się nie zmieniła: zapisz plik w edytorze".into(),
+            ));
+        }
+        let side = (0..2)
+            .find(|s| {
+                self.panels[*s]
+                    .remote
+                    .as_ref()
+                    .is_some_and(|r| Arc::ptr_eq(&r.conn, &edit.conn))
+            })
+            .ok_or_else(|| {
+                EngineError("połączenie z serwerem zostało zamknięte: połącz się ponownie".into())
+            })?;
+        self.status = "Wysyłanie zmian na serwer…".into();
+        self.enqueue_quiet(Self::remote_spec(
+            side,
+            Some(edit.conn.clone()),
+            RemoteOp::Upload {
+                sources: vec![edit.local.clone()],
+                dest: remote_parent(&edit.remote_path),
+                remove_source: false,
+                replace: true,
+            },
+        ));
+        Ok(())
+    }
+
+    pub(crate) fn remove_edit_dir(&mut self) {
+        if let Some(edit) = self.remote_edit.take() {
+            let _ = std::fs::remove_dir_all(&edit.dir);
+        }
     }
 
     pub(crate) fn remote_mkdir(&mut self, name: &str) -> Result<(), EngineError> {
@@ -589,6 +695,8 @@ impl Session {
                             label: format!("{}@{}:{}", site.user, site.host, site.port),
                             path: path.clone(),
                             conn: conn.clone(),
+                            history: vec![path.clone()],
+                            history_index: 0,
                         });
                         panel.show_remote(path.clone(), remote_entries(path, list));
                         (format!("Połączono z {}", site.label()), false)
@@ -624,6 +732,15 @@ impl Session {
                     if same {
                         let panel = &mut self.panels[side];
                         let keep = panel.current().map(|e| e.path.clone());
+                        if let Some(remote) = &mut panel.remote {
+                            // Going to a folder the history is not already pointing at forgets
+                            // what lay ahead (like a browser).
+                            if remote.history.get(remote.history_index) != Some(path) {
+                                remote.history.truncate(remote.history_index + 1);
+                                remote.history.push(path.clone());
+                                remote.history_index = remote.history.len() - 1;
+                            }
+                        }
                         panel.show_remote(path.clone(), remote_entries(path, list));
                         if let Some(keep) = keep {
                             panel.put_cursor_on(&keep);
@@ -644,6 +761,44 @@ impl Session {
                     true,
                 ),
             },
+            RemoteOp::Download {
+                edit: true,
+                dest,
+                sources,
+                ..
+            } => {
+                let name = remote_name(&sources[0]).to_string();
+                let local = dest.join(&name);
+                let conn = job.conn.clone();
+                let meta = std::fs::metadata(&local);
+                let (Some(conn), Ok(meta), true) = (conn, meta, report.failed.is_empty()) else {
+                    let _ = std::fs::remove_dir_all(dest);
+                    return (
+                        format!(
+                            "Nie udało się pobrać do edycji: {}",
+                            failure(report).unwrap_or_else(|| "przerwano".into())
+                        ),
+                        true,
+                    );
+                };
+                self.remove_edit_dir();
+                // The state to compare with, taken before the editor can touch the file.
+                self.remote_edit = Some(RemoteEdit {
+                    conn,
+                    remote_path: sources[0].clone(),
+                    local: local.clone(),
+                    dir: dest.clone(),
+                    size: meta.len(),
+                    modified: meta.modified().ok(),
+                });
+                match (self.editor.0)(&local) {
+                    Ok(()) => (
+                        format!("Edytujesz kopię {name}: po zapisaniu w edytorze wyślij ją na serwer (Ctrl+Shift+F4, komenda editsend)"),
+                        false,
+                    ),
+                    Err(error) => (format!("Nie udało się otworzyć edytora: {error}"), true),
+                }
+            }
             RemoteOp::Download {
                 view: true,
                 dest,
@@ -697,6 +852,7 @@ impl Session {
                     RemoteOp::Rename { .. } => "Zmieniono nazwę",
                     RemoteOp::Delete { .. } => "Usunięto z serwera",
                     RemoteOp::Download { .. } => "Pobrano",
+                    RemoteOp::Upload { replace: true, .. } => "Wysłano zmiany",
                     RemoteOp::Upload { .. } => "Wysłano",
                     _ => "Wykonano",
                 };
@@ -903,7 +1059,6 @@ mod tests {
         assert_eq!(r.session.panels[0].remote.as_ref().unwrap().path, "/");
         r.session.run_line("up").unwrap();
         assert!(r.session.status.contains("korzeń"));
-        assert!(r.session.run_line("back").is_err());
         // A folder that does not exist leaves the panel where it was.
         r.session.run_line("cd /nothing").unwrap();
         settle(&mut r.session);
@@ -1051,7 +1206,7 @@ mod tests {
         let mut r = rig("local:secret");
         connect(&mut r);
         r.session.run_line("select hello.txt").unwrap();
-        for line in ["edit", "pack", "multirename", "sync", "unpack"] {
+        for line in ["pack", "multirename", "sync", "unpack"] {
             assert!(r.session.run_line(line).is_err(), "{line}");
         }
         assert!(r.session.run_line("connect Missing").is_err());
@@ -1461,6 +1616,163 @@ mod tests {
         assert_eq!(
             r.session.sites.get("Test").unwrap().secret,
             SecretStore::Local("new password".into())
+        );
+    }
+
+    fn path_of(s: &Session, side: usize) -> String {
+        s.panels[side].remote.as_ref().unwrap().path.clone()
+    }
+
+    #[test]
+    fn the_server_has_a_history_like_a_browser() {
+        let mut r = rig("local:secret");
+        connect(&mut r);
+        r.session.run_line("cd docs").unwrap();
+        settle(&mut r.session);
+        r.session.run_line("cd sub").unwrap();
+        settle(&mut r.session);
+        assert_eq!(path_of(&r.session, 0), "/docs/sub");
+        r.session.run_line("back").unwrap();
+        settle(&mut r.session);
+        assert_eq!(path_of(&r.session, 0), "/docs");
+        r.session.run_line("back").unwrap();
+        settle(&mut r.session);
+        assert_eq!(path_of(&r.session, 0), "/");
+        assert!(r.session.run_line("back").is_err(), "start of the history");
+        r.session.run_line("forward").unwrap();
+        settle(&mut r.session);
+        assert_eq!(path_of(&r.session, 0), "/docs");
+        // A new folder after going back forgets what lay ahead.
+        r.session.run_line("back").unwrap();
+        settle(&mut r.session);
+        r.session.run_line("cd /docs/sub").unwrap();
+        settle(&mut r.session);
+        assert!(
+            r.session.run_line("forward").is_err(),
+            "nothing ahead any more"
+        );
+        r.session.run_line("back").unwrap();
+        settle(&mut r.session);
+        assert_eq!(path_of(&r.session, 0), "/");
+        // A refresh is not a step in the history.
+        r.session.run_line("refresh").unwrap();
+        settle(&mut r.session);
+        assert_eq!(
+            r.session.panels[0].remote.as_ref().unwrap().history.len(),
+            2
+        );
+    }
+
+    #[test]
+    fn tabs_on_a_server_share_the_connection() {
+        let mut r = rig("local:secret");
+        connect(&mut r);
+        r.session.run_line("tab new").unwrap();
+        assert_eq!(r.session.tab_strip(0).titles.len(), 2);
+        assert_eq!(
+            path_of(&r.session, 0),
+            "/",
+            "the new tab shows the same folder"
+        );
+        r.session.run_line("select docs").unwrap();
+        r.session.run_line("enter").unwrap();
+        settle(&mut r.session);
+        assert_eq!(path_of(&r.session, 0), "/docs");
+        r.session.run_line("tab 1").unwrap();
+        settle(&mut r.session);
+        assert_eq!(
+            path_of(&r.session, 0),
+            "/",
+            "the first tab stayed where it was"
+        );
+        assert_eq!(names(&r.session, 0), ["docs", "hello.txt"]);
+        // The folder under the cursor in a tab of its own.
+        r.session.run_line("select docs").unwrap();
+        r.session.run_line("tab open").unwrap();
+        settle(&mut r.session);
+        assert_eq!(r.session.tab_strip(0).titles.len(), 3);
+        assert_eq!(path_of(&r.session, 0), "/docs");
+        r.session.run_line("tab close").unwrap();
+        r.session.run_line("tab close").unwrap();
+        assert_eq!(r.session.tab_strip(0).titles.len(), 1);
+        assert!(r.session.panels[0].remote.is_some());
+    }
+
+    #[test]
+    fn a_file_on_the_server_can_be_edited_and_sent_back() {
+        let mut r = rig("local:secret");
+        // The "editor" appends a line to the local copy, like a save would.
+        r.session.editor = crate::Editor(Arc::new(|path: &std::path::Path| {
+            let mut text = fs::read_to_string(path).map_err(|e| e.to_string())?;
+            text.push_str("\nedited");
+            fs::write(path, text).map_err(|e| e.to_string())
+        }));
+        connect(&mut r);
+        assert!(
+            r.session.run_line("editsend").is_err(),
+            "nothing is being edited"
+        );
+        r.session.run_line("select hello.txt").unwrap();
+        r.session.run_line("edit").unwrap();
+        settle(&mut r.session);
+        assert!(
+            r.session.status.contains("editsend"),
+            "{}",
+            r.session.status
+        );
+        let local = r.session.remote_edit.as_ref().unwrap().local.clone();
+        assert_eq!(fs::read_to_string(&local).unwrap(), "hello world\nedited");
+        // The server still has the original until the copy is sent back.
+        assert_eq!(
+            fs::read_to_string(r.server.root.join("hello.txt")).unwrap(),
+            "hello world"
+        );
+
+        r.session.run_line("editsend").unwrap();
+        settle(&mut r.session);
+        assert!(
+            r.session.pending.is_none(),
+            "sending back an edit asks no question"
+        );
+        assert_eq!(
+            fs::read_to_string(r.server.root.join("hello.txt")).unwrap(),
+            "hello world\nedited"
+        );
+        assert!(
+            r.session.status.contains("Wysłano zmiany"),
+            "{}",
+            r.session.status
+        );
+        assert!(!r.server.root.join("hello.txt.bpart").exists());
+
+        // Only the original file was replaced.
+        assert_eq!(names(&r.session, 0), ["docs", "hello.txt"]);
+        // The temporary copy goes away with the next edit and with the session.
+        let dir = r.session.remote_edit.as_ref().unwrap().dir.clone();
+        r.session.remove_edit_dir();
+        assert!(!dir.exists());
+        assert!(r.session.run_line("editsend").is_err());
+    }
+
+    #[test]
+    fn a_failing_editor_and_big_or_missing_files_are_reported() {
+        let mut r = rig("local:secret");
+        r.session.editor =
+            crate::Editor(Arc::new(|_: &std::path::Path| Err("brak edytora".into())));
+        connect(&mut r);
+        r.session.run_line("select docs").unwrap();
+        assert!(r.session.run_line("edit").is_err(), "a folder");
+        r.session.run_line("select hello.txt").unwrap();
+        r.session.view_from_archive_limit = 3;
+        assert!(r.session.run_line("edit").is_err(), "too big");
+        r.session.view_from_archive_limit = 1000;
+        r.session.run_line("edit").unwrap();
+        settle(&mut r.session);
+        assert!(r.session.status_is_error);
+        assert!(
+            r.session.status.contains("brak edytora"),
+            "{}",
+            r.session.status
         );
     }
 

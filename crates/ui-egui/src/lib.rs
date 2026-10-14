@@ -4,6 +4,7 @@
 //! It contains no file system logic.
 
 mod find_ui;
+mod queue_ui;
 mod rename_ui;
 mod sites_ui;
 mod sync_ui;
@@ -33,6 +34,7 @@ const FKEYS: &[(&str, &str, &str)] = &[
     ("Ctrl+F2", "Zmień nazwy", "multirename"),
     ("Ctrl+F", "Szukaj", "find"),
     ("Ctrl+S", "Serwery", "sites"),
+    ("Ctrl+J", "Kolejka", "queue"),
     ("F9", "Odśwież", "refresh"),
 ];
 
@@ -99,6 +101,8 @@ impl BluepaneUi {
                 self.viewer_ui(ui);
             } else if self.session.sync.is_some() {
                 self.sync_ui(ui);
+            } else if self.session.queue_open {
+                self.queue_ui(ui);
             } else if self.session.sites_open {
                 self.sites_ui(ui);
             } else if self.session.rename.is_some() {
@@ -576,6 +580,10 @@ impl BluepaneUi {
                     self.dispatch(&line);
                 }
             }
+            return;
+        }
+        if self.session.queue_open {
+            self.queue_keys(&pressed);
             return;
         }
         if self.session.sites_open {

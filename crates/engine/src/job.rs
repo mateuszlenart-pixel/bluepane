@@ -144,6 +144,8 @@ pub enum RemoteOp {
         dest: PathBuf,
         remove_source: bool,
         view: bool,
+        /// A download for the editor (F4): like `view`, into a temporary folder.
+        edit: bool,
     },
     /// Copies these local paths into the server directory `dest`. With `remove_source` each
     /// item goes to the local trash once it has been sent in full.
@@ -151,6 +153,8 @@ pub enum RemoteOp {
         sources: Vec<PathBuf>,
         dest: String,
         remove_source: bool,
+        /// Replace what is on the server without asking (sending back an edited file).
+        replace: bool,
     },
     /// Copies server paths to another server (the job's own connection is the source),
     /// through a temporary folder. With `remove_source` the source is deleted afterwards.
@@ -220,7 +224,104 @@ pub struct JobSpec {
     pub archive: Option<ArchiveJob>,
 }
 
+/// `first.txt (+2)` for a list of names.
+fn names_summary<'a>(names: impl Iterator<Item = &'a str>) -> String {
+    let names: Vec<&str> = names.collect();
+    match names.split_first() {
+        None => String::new(),
+        Some((first, [])) => (*first).to_string(),
+        Some((first, rest)) => format!("{first} (+{})", rest.len()),
+    }
+}
+
+fn last_name(path: &str) -> &str {
+    path.trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or(path)
+}
+
 impl JobSpec {
+    /// A line for the queue window: what the job does, with what.
+    pub fn describe(&self) -> String {
+        let local = |paths: &[PathBuf]| {
+            names_summary(
+                paths
+                    .iter()
+                    .filter_map(|p| p.file_name())
+                    .filter_map(|n| n.to_str()),
+            )
+        };
+        let Some(remote) = self.archive.as_ref().and_then(|a| a.remote.as_ref()) else {
+            let names = local(&self.sources);
+            return if names.is_empty() {
+                self.kind.label().to_string()
+            } else {
+                format!("{}: {names}", self.kind.label())
+            };
+        };
+        match &remote.op {
+            RemoteOp::Connect { site, .. } => format!("Łączenie z {}", site.label()),
+            RemoteOp::SaveSecret { site, .. } => format!("Zapis hasła: {}", site.name),
+            RemoteOp::List { path } => format!("Odczyt katalogu {path}"),
+            RemoteOp::Mkdir { path } => format!("Nowy katalog na serwerze: {}", last_name(path)),
+            RemoteOp::Rename { from, to } => {
+                format!(
+                    "Zmiana nazwy na serwerze: {} na {}",
+                    last_name(from),
+                    last_name(to)
+                )
+            }
+            RemoteOp::Delete { paths } => format!(
+                "Usuwanie z serwera: {}",
+                names_summary(paths.iter().map(|p| last_name(p)))
+            ),
+            RemoteOp::Download {
+                sources,
+                remove_source,
+                ..
+            } => format!(
+                "{} z serwera: {}",
+                if *remove_source {
+                    "Przenoszenie"
+                } else {
+                    "Pobieranie"
+                },
+                names_summary(sources.iter().map(|p| last_name(p)))
+            ),
+            RemoteOp::Upload {
+                sources,
+                remove_source,
+                ..
+            } => format!(
+                "{} na serwer: {}",
+                if *remove_source {
+                    "Przenoszenie"
+                } else {
+                    "Wysyłanie"
+                },
+                local(sources)
+            ),
+            RemoteOp::Relay {
+                sources,
+                remove_source,
+                ..
+            } => format!(
+                "{} między serwerami: {}",
+                if *remove_source {
+                    "Przenoszenie"
+                } else {
+                    "Kopiowanie"
+                },
+                names_summary(sources.iter().map(|p| last_name(p)))
+            ),
+            RemoteOp::MoveWithin { sources, .. } => format!(
+                "Przenoszenie na serwerze: {}",
+                names_summary(sources.iter().map(|p| last_name(p)))
+            ),
+        }
+    }
+
     pub fn new(kind: JobKind, sources: Vec<PathBuf>, dest: Option<PathBuf>) -> JobSpec {
         JobSpec {
             kind,

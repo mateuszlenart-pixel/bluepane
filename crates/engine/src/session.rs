@@ -239,6 +239,15 @@ pub struct Session {
     /// Where passwords of saved sites are read from and saved to besides the sites file
     /// (the system password store, Bitwarden). Tests put fakes here.
     pub secrets: std::sync::Arc<dyn bluepane_remote::SecretServices>,
+    /// How a file is opened for editing (tests replace it).
+    pub editor: Editor,
+    pub(crate) remote_edit: Option<RemoteEdit>,
+    /// The queue is paused: the running job finishes, the next ones wait.
+    pub paused: bool,
+    /// The queue window is open (Ctrl+J).
+    pub queue_open: bool,
+    /// The last finished jobs, newest first (for "retry" in the queue window).
+    pub finished: VecDeque<crate::FinishedJob>,
     /// The site manager window is open.
     pub sites_open: bool,
     pub(crate) config_loaded: bool,
@@ -274,6 +283,59 @@ pub struct SyncView {
 
 /// Counter that keeps the temporary preview directories of one process apart.
 static PREVIEW_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A file of a server that is being edited as a local copy.
+#[derive(Clone)]
+pub(crate) struct RemoteEdit {
+    pub(crate) conn: std::sync::Arc<dyn bluepane_remote::RemoteFs>,
+    pub(crate) remote_path: String,
+    pub(crate) local: PathBuf,
+    pub(crate) dir: PathBuf,
+    /// Size and time of the copy as downloaded, to tell whether it was changed.
+    pub(crate) size: u64,
+    pub(crate) modified: Option<std::time::SystemTime>,
+}
+
+impl std::fmt::Debug for RemoteEdit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RemoteEdit({})", self.remote_path)
+    }
+}
+
+/// How a file is opened for editing.
+#[derive(Clone)]
+pub struct Editor(pub std::sync::Arc<EditorFn>);
+
+/// What opens a file in an editor: gets the path, says why not on failure.
+pub type EditorFn = dyn Fn(&Path) -> Result<(), String> + Send + Sync;
+
+impl std::fmt::Debug for Editor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Editor")
+    }
+}
+
+/// Opens a file in the user's editor: `BLUEPANE_EDITOR`, else the system's default program.
+fn open_in_editor(path: &Path) -> Result<(), String> {
+    let editor = std::env::var("BLUEPANE_EDITOR").ok();
+    bluepane_vfs::open_external(path, editor.as_deref()).map_err(|e| e.to_string())
+}
+
+/// Work that must not wait behind a paused queue: it only serves the interface (a listing, a
+/// login, saving a password).
+fn is_urgent(spec: &JobSpec) -> bool {
+    spec.archive
+        .as_ref()
+        .and_then(|a| a.remote.as_ref())
+        .is_some_and(|r| {
+            matches!(
+                r.op,
+                crate::job::RemoteOp::List { .. }
+                    | crate::job::RemoteOp::Connect { .. }
+                    | crate::job::RemoteOp::SaveSecret { .. }
+            )
+        })
+}
 
 /// A re-read of a server folder: it says nothing on the status line.
 fn is_quiet_listing(spec: &JobSpec) -> bool {
@@ -316,6 +378,11 @@ impl Session {
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
+            editor: Editor(std::sync::Arc::new(open_in_editor)),
+            remote_edit: None,
+            paused: false,
+            queue_open: false,
+            finished: VecDeque::new(),
             sites_open: false,
             config_loaded: false,
             parked: [ParkedTabs::default(), ParkedTabs::default()],
@@ -391,6 +458,14 @@ impl Session {
             Command::Sites => self.open_sites(),
             Command::SiteSet(name, field, value) => self.site_set(&name, &field, &value)?,
             Command::SiteDelete(name) => self.site_delete(&name)?,
+            Command::EditSend => self.remote_edit_send()?,
+            Command::Queue => self.queue_open = true,
+            Command::QueueClose => self.queue_open = false,
+            Command::QueuePause => self.pause_queue(true),
+            Command::QueueResume => self.pause_queue(false),
+            Command::QueueDelete(n) => self.queue_delete(n)?,
+            Command::QueueRetry(n) => self.queue_retry(n)?,
+            Command::QueueClear => self.finished.clear(),
             Command::SitePassword(name, password) => self.site_password(&name, password)?,
             Command::SiteClose => self.sites_open = false,
             Command::Connect(name, password) => self.connect_site(&name, password)?,
@@ -441,11 +516,8 @@ impl Session {
                 self.panels.iter_mut().for_each(Panel::reload);
                 self.remote_refresh_all();
             }
-            Command::Back | Command::Forward if self.active_panel().remote.is_some() => {
-                return Err(EngineError(
-                    "historia katalogów nie działa na serwerze (Backspace idzie wyżej)".into(),
-                ));
-            }
+            Command::Back if self.active_panel().remote.is_some() => self.remote_history(-1)?,
+            Command::Forward if self.active_panel().remote.is_some() => self.remote_history(1)?,
             Command::Back => self.active_panel_mut().back()?,
             Command::Forward => self.active_panel_mut().forward()?,
             Command::SelectMask(text) => self.select_by_mask(&text, true)?,
@@ -809,12 +881,48 @@ impl Session {
 
     /// Queues a job without touching the selection (listings and connects).
     pub(crate) fn enqueue_quiet(&mut self, spec: JobSpec) {
-        if self.current.is_none() {
+        if self.current.is_none() && (!self.paused || is_urgent(&spec)) {
             self.start(spec);
         } else {
             self.queue.push_back(spec);
-            self.status = format!("W kolejce: {}", self.queue.len());
+            self.status = if self.paused {
+                format!("W kolejce (wstrzymana): {}", self.queue.len())
+            } else {
+                format!("W kolejce: {}", self.queue.len())
+            };
         }
+    }
+
+    pub(crate) fn current_spec(&self) -> Option<&JobSpec> {
+        self.current.as_ref().map(|job| &job.spec)
+    }
+
+    pub(crate) fn queue_specs(&self) -> impl Iterator<Item = &JobSpec> {
+        self.queue.iter()
+    }
+
+    pub(crate) fn remove_queued(&mut self, index: usize) -> JobSpec {
+        self.queue
+            .remove(index)
+            .expect("index checked by the caller")
+    }
+
+    /// Starts the next queued job that may run (after the queue was resumed).
+    pub(crate) fn start_waiting(&mut self) {
+        if let Some(next) = self.next_startable() {
+            self.start(next);
+        }
+    }
+
+    /// The next queued job that may start now: the first one, or while the queue is paused
+    /// only work for the interface.
+    fn next_startable(&mut self) -> Option<JobSpec> {
+        let index = if self.paused {
+            self.queue.iter().position(is_urgent)?
+        } else {
+            0
+        };
+        self.queue.remove(index)
     }
 
     fn start(&mut self, spec: JobSpec) {
@@ -922,10 +1030,11 @@ impl Session {
             }
             (text, !report.failed.is_empty())
         };
+        self.record_finished(&spec, &text, is_error, report.cancelled);
         self.status = text;
         self.status_is_error = is_error;
 
-        if let Some(next) = self.queue.pop_front() {
+        if let Some(next) = self.next_startable() {
             if is_quiet_listing(&next) {
                 self.start(next);
                 return;
@@ -1353,8 +1462,14 @@ impl Session {
         let position = self.parked[side].position;
         match action {
             TabAction::New => {
-                let cwd = self.panels[side].cwd.clone();
-                self.open_tab(side, cwd);
+                if self.panels[side].remote.is_some() {
+                    // The same server and folder in a second tab (no new connection).
+                    let copy = self.panels[side].clone();
+                    self.open_panel_tab(side, copy);
+                } else {
+                    let cwd = self.panels[side].cwd.clone();
+                    self.open_tab(side, cwd);
+                }
             }
             TabAction::Open => {
                 let entry = self
@@ -1363,7 +1478,13 @@ impl Session {
                     .filter(|e| !is_parent_entry(e) && e.is_dir())
                     .ok_or_else(|| EngineError("kursor nie wskazuje katalogu".into()))?;
                 let path = entry.path.clone();
-                self.open_tab(side, path);
+                if self.panels[side].remote.is_some() {
+                    let copy = self.panels[side].clone();
+                    self.open_panel_tab(side, copy);
+                    self.remote_goto(side, path.to_string_lossy().into_owned())?;
+                } else {
+                    self.open_tab(side, path);
+                }
             }
             TabAction::Close(which) => {
                 let index = which.map_or(position, |n| n - 1);
@@ -1395,12 +1516,19 @@ impl Session {
         parked.position = index;
         // The directory may have changed while the tab was in the background.
         self.panels[side].reload();
+        if let Some(path) = self.panels[side].remote.as_ref().map(|r| r.path.clone()) {
+            let _ = self.remote_goto(side, path);
+        }
     }
 
     /// Opens a new tab for `cwd` right after the active one and makes it active.
     fn open_tab(&mut self, side: usize, cwd: PathBuf) {
+        self.open_panel_tab(side, Panel::new(cwd));
+    }
+
+    fn open_panel_tab(&mut self, side: usize, panel: Panel) {
         let parked = &mut self.parked[side];
-        let current = std::mem::replace(&mut self.panels[side], Panel::new(cwd));
+        let current = std::mem::replace(&mut self.panels[side], panel);
         parked.others.insert(parked.position, current);
         parked.position += 1;
     }
@@ -1471,6 +1599,9 @@ impl Session {
 
     /// F4: opens the file in `BLUEPANE_EDITOR`, or the system's default application.
     fn edit_file(&mut self) -> Result<(), EngineError> {
+        if self.active_panel().remote.is_some() {
+            return self.remote_edit_start();
+        }
         self.deny_remote("edycja (F4)")?;
         self.deny_in_archive("edycja")?;
         let path = self.entry_to_open()?;
@@ -2056,6 +2187,7 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         self.remove_preview_dir();
+        self.remove_edit_dir();
     }
 }
 

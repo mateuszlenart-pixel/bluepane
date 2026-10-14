@@ -38,6 +38,14 @@ pub const COMMAND_NAMES: &[&str] = &[
     "sites",
     "siteset",
     "sitedel",
+    "editsend",
+    "queue",
+    "queueclose",
+    "queuepause",
+    "queueresume",
+    "queuedel",
+    "queueretry",
+    "queueclear",
     "sitepassword",
     "siteclose",
     "connect",
@@ -228,6 +236,20 @@ pub enum Command {
     /// Create a saved site or change one field of it: `siteset Proxmox host 10.0.0.2`.
     SiteSet(String, String, String),
     SiteDelete(String),
+    /// Open the queue window (Ctrl+J): what runs, what waits, what finished.
+    Queue,
+    QueueClose,
+    /// Let the running job finish but start no further queued ones.
+    QueuePause,
+    QueueResume,
+    /// Drop queued job n (1-based, in the order shown) before it starts.
+    QueueDelete(usize),
+    /// Queue a finished job (n = 1 is the newest) once more.
+    QueueRetry(usize),
+    /// Forget the list of finished jobs.
+    QueueClear,
+    /// Send the file edited with F4 on a server back to it (Ctrl+Shift+F4).
+    EditSend,
     /// Save the password of a site where its secret is kept (system store, Bitwarden, or
     /// the sites file): `sitepassword Proxmox <password>`.
     SitePassword(String, String),
@@ -320,6 +342,14 @@ impl Command {
             "syncclose" => Ok(Command::SyncClose),
             "sites" => Ok(Command::Sites),
             "siteclose" => Ok(Command::SiteClose),
+            "editsend" => Ok(Command::EditSend),
+            "queue" => Ok(Command::Queue),
+            "queueclose" => Ok(Command::QueueClose),
+            "queuepause" => Ok(Command::QueuePause),
+            "queueresume" => Ok(Command::QueueResume),
+            "queuedel" => parse_row("queuedel", rest).map(Command::QueueDelete),
+            "queueretry" => parse_row("queueretry", rest).map(Command::QueueRetry),
+            "queueclear" => Ok(Command::QueueClear),
             "siteset" => parse_siteset(rest),
             "sitedel" => take_name("sitedel", rest).map(|(name, _)| Command::SiteDelete(name)),
             "sitepassword" => take_name("sitepassword", rest).and_then(|(name, password)| {
