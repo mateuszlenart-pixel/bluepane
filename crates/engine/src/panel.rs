@@ -117,6 +117,20 @@ fn parent_inner(inner: &str) -> &str {
 
 /// One of the two file panels.
 ///
+/// Which modifier keys were held during a mouse click on a row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ClickMode {
+    /// Only moves the cursor (the selection is kept) and sets the range start.
+    #[default]
+    Plain,
+    /// Ctrl+click: toggles the row, like in a Windows file list.
+    Ctrl,
+    /// Shift+click: selects the range from the last clicked row to this one.
+    Shift,
+    /// Ctrl+Shift+click: adds that range to the selection.
+    CtrlShift,
+}
+
 /// `entries` is what the user sees: the `..` row (when there is a parent directory)
 /// followed by the directory contents that match `filter`.
 #[derive(Debug, Clone)]
@@ -125,6 +139,8 @@ pub struct Panel {
     pub entries: Vec<Entry>,
     pub cursor: usize,
     pub selected: BTreeSet<PathBuf>,
+    /// The row a Shift+click range starts from (the last plain or Ctrl+click).
+    anchor: Option<PathBuf>,
     /// Quick filter: only entries whose name contains this text (case-insensitive) are shown.
     pub filter: String,
     pub sort: Sort,
@@ -148,6 +164,7 @@ impl Panel {
             entries: Vec::new(),
             cursor: 0,
             selected: BTreeSet::new(),
+            anchor: None,
             filter: String::new(),
             sort: Sort {
                 key: SortKey::Name,
@@ -168,6 +185,7 @@ impl Panel {
             entries: Vec::new(),
             cursor: 0,
             selected: BTreeSet::new(),
+            anchor: None,
             filter: String::new(),
             sort: Sort {
                 key: SortKey::Name,
@@ -551,6 +569,46 @@ impl Panel {
             }
         }
         self.move_cursor(1);
+    }
+
+    /// A mouse click on `row`. Unlike Space, clicking never moves the cursor on.
+    /// The `..` row is never selected.
+    pub fn click(&mut self, row: usize, mode: ClickMode) {
+        let Some(entry) = self.entries.get(row) else {
+            return;
+        };
+        let path = entry.path.clone();
+        let selectable = !is_parent_entry(entry);
+        let anchor_row = self
+            .anchor
+            .as_ref()
+            .and_then(|a| self.entries.iter().position(|e| &e.path == a))
+            .unwrap_or(self.cursor);
+        self.cursor = row;
+        match mode {
+            ClickMode::Plain => self.anchor = Some(path),
+            ClickMode::Ctrl => {
+                if selectable && !self.selected.remove(&path) {
+                    self.selected.insert(path.clone());
+                }
+                self.anchor = Some(path);
+            }
+            ClickMode::Shift | ClickMode::CtrlShift => {
+                if mode == ClickMode::Shift {
+                    self.selected.clear();
+                }
+                let (from, to) = (anchor_row.min(row), anchor_row.max(row));
+                let range: Vec<PathBuf> = self.entries[from..=to]
+                    .iter()
+                    .filter(|e| !is_parent_entry(e))
+                    .map(|e| e.path.clone())
+                    .collect();
+                self.selected.extend(range);
+                if self.anchor.is_none() {
+                    self.anchor = self.entries.get(anchor_row).map(|e| e.path.clone());
+                }
+            }
+        }
     }
 
     /// Sets the quick filter (empty text clears it). With a non-empty filter the cursor
@@ -1108,6 +1166,53 @@ mod tests {
         let view = panel.archive.clone().unwrap();
         let a = panel.entries.iter().find(|e| e.name == "a.txt").unwrap();
         assert_eq!(view.inner_path_of(a).as_deref(), Some("docs/a.txt"));
+    }
+
+    #[test]
+    fn mouse_clicks_select_like_a_windows_list() {
+        let mut p = mixed();
+        let names = |p: &Panel| -> Vec<String> {
+            p.entries
+                .iter()
+                .filter(|e| p.selected.contains(&e.path))
+                .map(|e| e.name.clone())
+                .collect()
+        };
+        // Rows: .., adir, zdir, A.md, b.txt, c.txt, noext
+        p.click(3, ClickMode::Plain);
+        assert_eq!(p.cursor, 3);
+        assert!(p.selected.is_empty(), "a plain click only moves the cursor");
+
+        p.click(5, ClickMode::Ctrl);
+        assert_eq!(names(&p), ["c.txt"]);
+        assert_eq!(p.cursor, 5, "Ctrl+click does not move on");
+        p.click(5, ClickMode::Ctrl);
+        assert!(p.selected.is_empty(), "Ctrl+click again unselects");
+
+        p.click(3, ClickMode::Plain);
+        p.click(5, ClickMode::Shift);
+        assert_eq!(names(&p), ["A.md", "b.txt", "c.txt"]);
+        p.click(4, ClickMode::Shift);
+        assert_eq!(names(&p), ["A.md", "b.txt"], "Shift replaces the range");
+
+        p.click(6, ClickMode::CtrlShift);
+        assert_eq!(
+            names(&p),
+            ["A.md", "b.txt", "c.txt", "noext"],
+            "the range from the anchor is added"
+        );
+    }
+
+    #[test]
+    fn the_parent_row_is_never_selected_by_clicks() {
+        let mut p = mixed();
+        p.click(0, ClickMode::Ctrl);
+        assert!(p.selected.is_empty());
+        p.click(3, ClickMode::Plain);
+        p.click(0, ClickMode::Shift);
+        assert_eq!(p.selected.len(), 3, "adir, zdir, A.md");
+        p.click(99, ClickMode::Plain);
+        assert_eq!(p.cursor, 0, "a row that is not there is ignored");
     }
 
     impl Panel {

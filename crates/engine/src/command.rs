@@ -5,7 +5,7 @@ use bluepane_ops::Resolution;
 use bluepane_sync::{CompareBy, Deletion, Direction, Variant};
 use std::time::Duration;
 
-use crate::{EngineError, SortKey};
+use crate::{ClickMode, EngineError, SortKey};
 
 /// Names accepted at the command line (aliases excluded).
 pub const COMMAND_NAMES: &[&str] = &[
@@ -14,6 +14,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "enter",
     "cursor",
     "toggle",
+    "click",
     "select",
     "cd",
     "back",
@@ -137,6 +138,8 @@ pub enum Command {
     Cursor(i32),
     /// Toggle selection of the entry under the cursor and move down (Space, Insert).
     ToggleSelect,
+    /// A mouse click on a row of the active panel (1-based), with the keys held down.
+    Click(usize, ClickMode),
     /// Put the cursor on the entry with this name and select it.
     Select(String),
     /// Change directory in the active panel.
@@ -240,6 +243,7 @@ impl Command {
             "up" => Ok(Command::Up),
             "enter" => Ok(Command::Enter),
             "toggle" => Ok(Command::ToggleSelect),
+            "click" => parse_click(rest),
             "selmask" => need_arg("maska, np. *.txt").map(Command::SelectMask),
             "unselmask" => need_arg("maska, np. *.txt").map(Command::UnselectMask),
             "selectall" => Ok(Command::SelectAll),
@@ -539,6 +543,28 @@ fn parse_mrset(args: &str) -> Result<Command, EngineError> {
         field.to_ascii_lowercase(),
         value.to_string(),
     ))
+}
+
+/// `click <row> [ctrl|shift|ctrlshift]`
+fn parse_click(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("click: użycie: click <wiersz> [ctrl|shift|ctrlshift]".into());
+    let mut words = args.split_whitespace();
+    let row: usize = words
+        .next()
+        .and_then(|n| n.parse().ok())
+        .filter(|n| *n >= 1)
+        .ok_or_else(usage)?;
+    let mode = match words.next().map(str::to_ascii_lowercase).as_deref() {
+        None => ClickMode::Plain,
+        Some("ctrl") => ClickMode::Ctrl,
+        Some("shift") => ClickMode::Shift,
+        Some("ctrlshift") => ClickMode::CtrlShift,
+        Some(_) => return Err(usage()),
+    };
+    if words.next().is_some() {
+        return Err(usage());
+    }
+    Ok(Command::Click(row, mode))
 }
 
 fn parse_mrname(args: &str) -> Result<Command, EngineError> {
@@ -930,6 +956,35 @@ mod tests {
         assert_eq!(Command::parse("mrrun"), Ok(Command::MultiRenameRun));
         assert_eq!(Command::parse("mrundo"), Ok(Command::MultiRenameUndo));
         assert_eq!(Command::parse("mrclose"), Ok(Command::MultiRenameClose));
+    }
+
+    #[test]
+    fn click_parses_row_and_modifier() {
+        assert_eq!(
+            Command::parse("click 3"),
+            Ok(Command::Click(3, ClickMode::Plain))
+        );
+        assert_eq!(
+            Command::parse("click 3 ctrl"),
+            Ok(Command::Click(3, ClickMode::Ctrl))
+        );
+        assert_eq!(
+            Command::parse("click 2 shift"),
+            Ok(Command::Click(2, ClickMode::Shift))
+        );
+        assert_eq!(
+            Command::parse("click 2 ctrlshift"),
+            Ok(Command::Click(2, ClickMode::CtrlShift))
+        );
+        for bad in [
+            "click",
+            "click 0",
+            "click x",
+            "click 1 alt",
+            "click 1 ctrl x",
+        ] {
+            assert!(Command::parse(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

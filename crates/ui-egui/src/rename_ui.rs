@@ -85,129 +85,138 @@ impl BluepaneUi {
         ui.horizontal_top(|ui| {
             ui.group(|ui| {
                 ui.set_width(300.0);
-                ui.label("Maska nazwy pliku:");
-                let mut text = s.name_mask.clone();
-                if ui
-                    .add(egui::TextEdit::singleline(&mut text).desired_width(280.0))
-                    .changed()
-                {
-                    commands.push(set("name", text.clone()));
-                }
-                token_buttons(ui, NAME_TOKENS, &s.name_mask, "name", &mut commands);
+                ui.vertical(|ui| {
+                    ui.label("Maska nazwy pliku:");
+                    let mut text = s.name_mask.clone();
+                    if ui
+                        .add(egui::TextEdit::singleline(&mut text).desired_width(280.0))
+                        .changed()
+                    {
+                        commands.push(set("name", text.clone()));
+                    }
+                    token_buttons(ui, NAME_TOKENS, &s.name_mask, "name", &mut commands);
+                });
             });
             ui.group(|ui| {
                 ui.set_width(170.0);
-                ui.label("Rozszerzenie:");
-                let mut text = s.ext_mask.clone();
-                if ui
-                    .add(egui::TextEdit::singleline(&mut text).desired_width(150.0))
-                    .changed()
-                {
-                    commands.push(set("ext", text.clone()));
-                }
-                token_buttons(ui, EXT_TOKENS, &s.ext_mask, "ext", &mut commands);
+                ui.vertical(|ui| {
+                    ui.label("Rozszerzenie:");
+                    let mut text = s.ext_mask.clone();
+                    if ui
+                        .add(egui::TextEdit::singleline(&mut text).desired_width(150.0))
+                        .changed()
+                    {
+                        commands.push(set("ext", text.clone()));
+                    }
+                    token_buttons(ui, EXT_TOKENS, &s.ext_mask, "ext", &mut commands);
+                });
             });
             ui.group(|ui| {
                 ui.set_width(330.0);
-                ui.label("Szukaj i zamień:");
-                egui::Grid::new("rename_find")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("Szukaj:");
-                        let mut find = s.find.clone();
-                        if ui
-                            .add(egui::TextEdit::singleline(&mut find).desired_width(240.0))
-                            .changed()
-                        {
-                            commands.push(set("find", find));
-                        }
-                        ui.end_row();
-                        ui.label("Zamień na:");
-                        let mut replace = s.replace.clone();
-                        if ui
-                            .add(egui::TextEdit::singleline(&mut replace).desired_width(240.0))
-                            .changed()
-                        {
-                            commands.push(set("replace", replace));
-                        }
-                        ui.end_row();
-                    });
-                ui.horizontal_wrapped(|ui| {
-                    let mut flag =
-                        |ui: &mut egui::Ui, label: &str, on: bool, field: &str, help: &str| {
-                            let mut value = on;
-                            if ui.checkbox(&mut value, label).on_hover_text(help).changed() {
-                                commands.push(set(field, if value { "on" } else { "off" }.into()));
+                ui.vertical(|ui| {
+                    ui.label("Szukaj i zamień:");
+                    egui::Grid::new("rename_find")
+                        .num_columns(2)
+                        .show(ui, |ui| {
+                            ui.label("Szukaj:");
+                            let mut find = s.find.clone();
+                            if ui
+                                .add(egui::TextEdit::singleline(&mut find).desired_width(240.0))
+                                .changed()
+                            {
+                                commands.push(set("find", find));
                             }
-                        };
-                    flag(ui, "1x", s.once, "once", "tylko pierwsze trafienie");
-                    flag(
-                        ui,
-                        "[E]",
-                        s.include_ext,
-                        "inclext",
-                        "szukaj też w rozszerzeniu",
-                    );
-                    flag(
-                        ui,
-                        "RegWy",
-                        s.regex,
-                        "regex",
-                        "wyrażenie regularne ($1 = grupa)",
-                    );
-                    flag(
-                        ui,
-                        "bez wielkości liter",
-                        s.ignore_case,
-                        "ignorecase",
-                        "ignoruj wielkość liter przy szukaniu",
-                    );
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Duża/mała:");
-                    let current = CASES
-                        .iter()
-                        .find(|(c, _)| *c == s.case)
-                        .map_or("", |(_, label)| *label);
-                    egui::ComboBox::from_id_salt("rename_case")
-                        .selected_text(current)
-                        .show_ui(ui, |ui| {
-                            for (case, label) in CASES {
-                                if ui.selectable_label(s.case == *case, *label).clicked() {
-                                    commands.push(set("case", case_word(*case).into()));
-                                }
+                            ui.end_row();
+                            ui.label("Zamień na:");
+                            let mut replace = s.replace.clone();
+                            if ui
+                                .add(egui::TextEdit::singleline(&mut replace).desired_width(240.0))
+                                .changed()
+                            {
+                                commands.push(set("replace", replace));
                             }
+                            ui.end_row();
                         });
+                    ui.horizontal_wrapped(|ui| {
+                        let mut flag =
+                            |ui: &mut egui::Ui, label: &str, on: bool, field: &str, help: &str| {
+                                let mut value = on;
+                                if ui.checkbox(&mut value, label).on_hover_text(help).changed() {
+                                    commands
+                                        .push(set(field, if value { "on" } else { "off" }.into()));
+                                }
+                            };
+                        flag(ui, "1x", s.once, "once", "tylko pierwsze trafienie");
+                        flag(
+                            ui,
+                            "[E]",
+                            s.include_ext,
+                            "inclext",
+                            "szukaj też w rozszerzeniu",
+                        );
+                        flag(
+                            ui,
+                            "RegWy",
+                            s.regex,
+                            "regex",
+                            "wyrażenie regularne ($1 = grupa)",
+                        );
+                        flag(
+                            ui,
+                            "bez wielkości liter",
+                            s.ignore_case,
+                            "ignorecase",
+                            "ignoruj wielkość liter przy szukaniu",
+                        );
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Duża/mała:");
+                        let current = CASES
+                            .iter()
+                            .find(|(c, _)| *c == s.case)
+                            .map_or("", |(_, label)| *label);
+                        egui::ComboBox::from_id_salt("rename_case")
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                for (case, label) in CASES {
+                                    if ui.selectable_label(s.case == *case, *label).clicked() {
+                                        commands.push(set("case", case_word(*case).into()));
+                                    }
+                                }
+                            });
+                    });
                 });
             });
             ui.group(|ui| {
                 ui.set_width(150.0);
-                ui.label("Licznik [C]:");
-                egui::Grid::new("rename_counter")
-                    .num_columns(2)
-                    .show(ui, |ui| {
-                        ui.label("Start od:");
-                        let mut start = s.counter_start;
-                        if ui.add(egui::DragValue::new(&mut start)).changed() {
-                            commands.push(set("start", start.to_string()));
-                        }
-                        ui.end_row();
-                        ui.label("Krok co:");
-                        let mut step = s.counter_step;
-                        if ui.add(egui::DragValue::new(&mut step)).changed() {
-                            commands.push(set("step", step.to_string()));
-                        }
-                        ui.end_row();
-                        ui.label("Cyfr:");
-                        let mut digits = s.counter_digits;
-                        if ui
-                            .add(egui::DragValue::new(&mut digits).range(1..=12))
-                            .changed()
-                        {
-                            commands.push(set("digits", digits.to_string()));
-                        }
-                        ui.end_row();
-                    });
+                ui.vertical(|ui| {
+                    ui.label("Licznik [C]:");
+                    egui::Grid::new("rename_counter")
+                        .num_columns(2)
+                        .show(ui, |ui| {
+                            ui.label("Start od:");
+                            let mut start = s.counter_start;
+                            if ui.add(egui::DragValue::new(&mut start)).changed() {
+                                commands.push(set("start", start.to_string()));
+                            }
+                            ui.end_row();
+                            ui.label("Krok co:");
+                            let mut step = s.counter_step;
+                            if ui.add(egui::DragValue::new(&mut step)).changed() {
+                                commands.push(set("step", step.to_string()));
+                            }
+                            ui.end_row();
+                            ui.label("Cyfr:");
+                            let mut digits = s.counter_digits;
+                            if ui
+                                .add(egui::DragValue::new(&mut digits).range(1..=12))
+                                .changed()
+                            {
+                                commands.push(set("digits", digits.to_string()));
+                            }
+                            ui.end_row();
+                        });
+                });
             });
         });
 

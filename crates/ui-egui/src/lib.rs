@@ -9,8 +9,8 @@ mod sync_ui;
 use std::time::Duration;
 
 use bluepane_engine::{
-    format_modified, human_size, name_parts, ArchiveFormat, Command, CompressionLevel, InputKind,
-    Panel, Pending, Session, SortKey, TabAction, ViewMode,
+    format_modified, human_size, name_parts, ArchiveFormat, ClickMode, Command, CompressionLevel,
+    InputKind, Panel, Pending, Session, SortKey, TabAction, ViewMode,
 };
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
@@ -915,7 +915,8 @@ impl BluepaneUi {
                         format_modified(entry.modified),
                     );
                     if response.clicked() {
-                        clicked = Some(row);
+                        let m = ui.input(|i| i.modifiers);
+                        clicked = Some((row, (m.command, m.shift)));
                     }
                     if response.double_clicked() {
                         entered = Some(row);
@@ -923,9 +924,20 @@ impl BluepaneUi {
                 }
             });
 
-        if let Some(row) = clicked.or(entered) {
+        if let Some(row) = entered {
             self.session.active = index;
             self.session.panels[index].cursor = row;
+        }
+        if let Some((row, (ctrl, shift))) = clicked {
+            // Selecting with the mouse is a command like every other action.
+            self.session.active = index;
+            let mode = match (ctrl, shift) {
+                (false, false) => ClickMode::Plain,
+                (true, false) => ClickMode::Ctrl,
+                (false, true) => ClickMode::Shift,
+                (true, true) => ClickMode::CtrlShift,
+            };
+            let _ = self.session.execute(Command::Click(row + 1, mode));
         }
         if entered.is_some() {
             // Through the engine: Enter on an archive file opens it instead of doing nothing.

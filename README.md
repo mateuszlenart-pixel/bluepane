@@ -45,6 +45,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Ctrl+M / Ctrl+Shift+M | zaznacz / odznacz po masce (np. `*.txt;*.md`, `?` = jeden znak) |
 | Ctrl+F3 … F6 | sortuj po nazwie / rozszerzeniu / dacie / rozmiarze (drugi raz = odwrotnie); klik w nagłówek kolumny też |
 | Ctrl+L | wiersz poleceń z `cd ` (przejście do wpisanej ścieżki) |
+| Ctrl+klik / Shift+klik / Ctrl+Shift+klik | zaznacz wiersz / zakres od ostatnio klikniętego / dodaj zakres (jak w Windows; zwykły klik tylko przesuwa kursor); komenda `click <wiersz> [ctrl\|shift\|ctrlshift]` |
 | Spacja, Insert | zaznacz i przejdź niżej |
 | F2 | zmień nazwę (okno z bieżącą nazwą; nie nadpisuje istniejących) |
 | F3 | podgląd pliku (tekst lub hex, dowolnie duży) |

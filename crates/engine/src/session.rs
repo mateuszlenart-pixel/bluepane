@@ -357,6 +357,12 @@ impl Session {
             Command::MultiRenameRun => self.multirename_run()?,
             Command::MultiRenameUndo => self.multirename_undo()?,
             Command::MultiRenameClose => self.rename = None,
+            Command::Click(row, mode) => {
+                if row > self.active_panel().entries.len() {
+                    return Err(EngineError(format!("click: nie ma wiersza {row}")));
+                }
+                self.active_panel_mut().click(row - 1, mode);
+            }
             Command::Tab(action) => self.tab_action(action)?,
             Command::Pack(args) => self.pack(args)?,
             Command::Unpack(args) => self.unpack(&args)?,
