@@ -38,7 +38,7 @@ pub enum JobKind {
     SyncCompare,
     /// Carries out a synchronization plan.
     SyncApply,
-    /// Something on an SFTP server: connect, list, transfer, delete, make a folder.
+    /// Something on a server (SFTP, FTP or FTPS): connect, list, transfer, delete, make a folder.
     Remote,
 }
 
@@ -57,7 +57,7 @@ impl JobKind {
             JobKind::ModifyArchive => "Zmiana archiwum",
             JobKind::SyncCompare => "Porównywanie folderów",
             JobKind::SyncApply => "Synchronizacja",
-            JobKind::Remote => "SFTP",
+            JobKind::Remote => "Serwer",
         }
     }
 
@@ -147,7 +147,7 @@ pub enum RemoteOp {
     /// Copies server paths to another server (the job's own connection is the source),
     /// through a temporary folder. With `remove_source` the source is deleted afterwards.
     Relay {
-        target: Arc<sftp::Connection>,
+        target: Arc<dyn sftp::RemoteFs>,
         sources: Vec<String>,
         dest: String,
         remove_source: bool,
@@ -162,7 +162,7 @@ pub enum RemoteOp {
 
 #[derive(Debug, Clone)]
 pub struct RemoteJob {
-    pub conn: Option<Arc<sftp::Connection>>,
+    pub conn: Option<Arc<dyn sftp::RemoteFs>>,
     pub op: RemoteOp,
     /// The panel (0 or 1) that asked.
     pub side: usize,
@@ -263,7 +263,7 @@ pub struct Report {
     /// SyncApply: what was done.
     pub sync_done: Option<sync::ExecReport>,
     /// Remote connect: the new session.
-    pub connected: Option<Arc<sftp::Connection>>,
+    pub connected: Option<Arc<dyn sftp::RemoteFs>>,
     /// Remote connect / list: the folder and what is in it.
     pub remote_listing: Option<(String, Vec<sftp::RemoteEntry>)>,
     /// Remote connect: the server's key is unknown.

@@ -605,7 +605,7 @@ fn take_name(command: &str, text: &str) -> Result<(String, String), EngineError>
 fn parse_siteset(args: &str) -> Result<Command, EngineError> {
     let usage = || {
         EngineError(
-            "siteset: użycie: siteset <nazwa> <host|port|user|key|start|secret> <wartość> (secret: ask, local:<hasło> albo bitwarden:<element>)"
+            "siteset: użycie: siteset <nazwa> <protocol|host|port|user|key|start|secret> <wartość> (secret: ask, local:<hasło> albo bitwarden:<element>)"
                 .into(),
         )
     };
