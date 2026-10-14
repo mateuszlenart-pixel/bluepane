@@ -52,6 +52,10 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 
 ## Notatki do późniejszych etapów
 
+### Podgląd dokumentów biurowych (po etapie 8)
+- [x] Crate `bluepane-docs`: F3 na DOCX, ODT, ODS, XLSX i PDF pokazuje tekst dokumentu (nagłówki, listy, tabele, strony PDF); także z archiwum, serwera i wyników wyszukiwania; F4 otwiera w programie systemu
+- [ ] Nie ma: podglądu graficznego PDF (strony jako obraz), formatowania i obrazków, RTF/PPTX, edycji w programie; PDF to ekstrakcja tekstu (skany bez OCR)
+
 ### Etap 5: podgląd i edycja
 - [x] Podgląd (F3) oknami przez seek: plik 1 GB otwiera się od razu (proces ok. 110 MB, tyle co sam interfejs), linie ograniczone do 16 KiB, wykrywanie plików binarnych
 - [x] Tryby tekst / hex, przewijanie, skok na początek/koniec/procent (`viewer goto`), przesuwanie w bok

@@ -87,6 +87,12 @@ zajmuje pamięci. Pliki z bajtami zerowymi otwierają się w trybie hex.
 Szukanie przeszukuje do 256 MiB na raz; jeśli nic nie znajdzie w tej części, pokazuje dokąd doszło
 i kolejne **N** szuka dalej. Komendy: `view`, `viewer scroll|page|hscroll|top|bottom|mode|goto|find|next|prev|close`.
 
+**Dokumenty biurowe:** F3 na pliku Word (`.docx`, `.docm`), OpenDocument (`.odt`, `.ods`), Excel (`.xlsx`) lub `.pdf` pokazuje **tekst dokumentu**:
+akapity, nagłówki (`#`), listy (`•`), tabele i arkusze jako wiersze `a | b | c`, a PDF strona po stronie. To podgląd do czytania, nie renderer: bez układu strony,
+obrazków i czcionek. Działa także dla plików w archiwum i na serwerze. Limity: 64 MB (PDF 32 MB); skan PDF bez tekstu i dokumenty chronione hasłem
+dają czytelny komunikat. **F4** otwiera taki plik w programie systemu (Word, LibreOffice, przeglądarka PDF) albo w `BLUEPANE_EDITOR`; bluepane nie edytuje dokumentów samodzielnie.
+
+
 ## Archiwa
 
 Obsługiwane formaty: **ZIP**, **7z**, **TAR**, **TAR.GZ** (`.tgz`). Archiwum otwiera się w panelu jak
