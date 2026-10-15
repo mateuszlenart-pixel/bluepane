@@ -168,10 +168,17 @@ tylko nawiązuje i zrywa połączenia TCP, więc nie potrzeba uprawnień adminis
   (urządzenie z zablokowanymi wszystkimi portami też odpowiada na ARP w sieci lokalnej). Ping ICMP nie jest używany (wymagałby uprawnień).
 - **Co o nim wiadomo:** adres IP, nazwa (odwrotny DNS, można wyłączyć), adres MAC (tylko w sieci lokalnej), producent (z wbudowanego rejestru IEEE), opóźnienie
   i **usługi**: otwarte porty z nazwami (HTTP, HTTPS, SSH/SFTP, FTP, RDP, SMB, drukarki, Proxmox 8006, Home Assistant 8123 i inne; własna lista portów, np. `22,80,8000-8010`).
+- **Akcje na wyniku:** kliknij wiersz, a pod filtrem pojawią się przyciski usług tego urządzenia:
+  HTTP/HTTPS (też Proxmox 8006, Home Assistant 8123) otwierają **przeglądarkę**; RDP uruchamia **pulpit zdalny** (Windows: `mstsc`, Linux: `remmina` albo `xfreerdp`);
+  SSH i FTP zapisują urządzenie jako **serwer** w menedżerze (Ctrl+S) i czekają na użytkownika i hasło; SMB (445/139) **szuka udziałów**. Do tego „Kopiuj adres” i gwiazdka „ulubione”.
+- **Udziały sieciowe (SMB):** listę udziałów pobiera program systemu (Linux: `smbclient -L`, pakiet `smbclient`; Windows: `net view`), anonimowo albo na Twoim koncie Windows. Gdy serwer
+  wymaga logowania, okno mówi to wprost zamiast pokazywać pustą listę. Udziały administracyjne (`C$`, `IPC$`) są ukryte. „Otwórz” otwiera udział w menedżerze plików systemu
+  (`\\adres\udział` na Windows, `smb://adres/udział` na Linuksie).
+- **Ulubione:** zakładka „Ulubione” trzyma wybrane urządzenia między uruchomieniami (plik `scan_favorites.conf` w katalogu konfiguracji) i pokazuje, które były widoczne w ostatnim skanie.
 - **Filtr** zawęża tabelę po nazwie, adresie, producencie, MACu i usługach. Wyniki zostają po zamknięciu okna (`Ctrl+N` pokazuje je znowu). Esc zatrzymuje skanowanie.
 - Na Windows tablica ARP jest czytana poleceniem `arp -a`, na Linuksie z `/proc/net/arp`.
 
-Komendy: `scan`, `scanset <pole> <wartość>` (pola: `range`, `ports`, `names`, `arp`, `filter`, `timeout`, `reset`), `scanrun`, `scanstop`, `scanclose`.
+Komendy: `scan`, `scanset <pole> <wartość>` (pola: `range`, `ports`, `names`, `arp`, `filter`, `timeout`, `reset`), `scanrun`, `scanstop`, `scanclose`, `scanselect <ip>`, `scanopen <ip> <port>`, `scanshares <ip>`, `scanshare <ip> <udział>`, `scansite <ip> sftp|ftp|ftps`, `scanfav <ip>`, `scanfavorites [off]`, `scancopy <ip>`.
 
 ## Kolejka zadań (Ctrl+J)
 

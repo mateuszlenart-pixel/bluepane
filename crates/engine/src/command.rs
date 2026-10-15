@@ -49,6 +49,14 @@ pub const COMMAND_NAMES: &[&str] = &[
     "scanrun",
     "scanstop",
     "scanclose",
+    "scanselect",
+    "scanfav",
+    "scanfavorites",
+    "scancopy",
+    "scanshares",
+    "scanshare",
+    "scanopen",
+    "scansite",
     "queue",
     "queueclose",
     "queuepause",
@@ -264,6 +272,22 @@ pub enum Command {
     ScanRun,
     ScanStop,
     ScanClose,
+    /// Select a host of the scan results (the actions below the table work on it).
+    ScanSelect(std::net::Ipv4Addr),
+    /// Add a host to the favorites or take it out.
+    ScanFavorite(std::net::Ipv4Addr),
+    /// Show the favorites (`true`) or the scan results (`false`).
+    ScanFavorites(bool),
+    /// Copy a host's address to the clipboard.
+    ScanCopy(std::net::Ipv4Addr),
+    /// Look for the shares of a host.
+    ScanShares(std::net::Ipv4Addr),
+    /// Open a share of a host in the file manager.
+    ScanShare(std::net::Ipv4Addr, String),
+    /// The usual thing to do with the service on a port (browser, remote desktop, ...).
+    ScanOpen(std::net::Ipv4Addr, u16),
+    /// Save a server for this host in the server manager, ready for a login.
+    ScanSite(std::net::Ipv4Addr, bluepane_remote::Protocol),
     /// Open the queue window (Ctrl+J): what runs, what waits, what finished.
     Queue,
     QueueClose,
@@ -398,6 +422,35 @@ impl Command {
             "scanrun" => Ok(Command::ScanRun),
             "scanstop" => Ok(Command::ScanStop),
             "scanclose" => Ok(Command::ScanClose),
+            "scanselect" => parse_ip(rest).map(Command::ScanSelect),
+            "scanfav" => parse_ip(rest).map(Command::ScanFavorite),
+            "scanfavorites" => Ok(Command::ScanFavorites(!matches!(rest, "off" | "0" | "nie"))),
+            "scancopy" => parse_ip(rest).map(Command::ScanCopy),
+            "scanshares" => parse_ip(rest).map(Command::ScanShares),
+            "scanshare" => {
+                let (ip, name) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+                let name = name.trim().trim_matches('"');
+                if name.is_empty() {
+                    Err(EngineError("scanshare: użycie: scanshare <ip> <nazwa udziału>".into()))
+                } else {
+                    parse_ip(ip).map(|ip| Command::ScanShare(ip, name.to_string()))
+                }
+            }
+            "scanopen" => {
+                let mut words = rest.split_whitespace();
+                match (words.next(), words.next().and_then(|p| p.parse().ok())) {
+                    (Some(ip), Some(port)) => parse_ip(ip).map(|ip| Command::ScanOpen(ip, port)),
+                    _ => Err(EngineError("scanopen: użycie: scanopen <ip> <port>".into())),
+                }
+            }
+            "scansite" => {
+                let mut words = rest.split_whitespace();
+                let protocol = words
+                    .nth(1)
+                    .and_then(bluepane_remote::Protocol::from_word)
+                    .ok_or_else(|| EngineError("scansite: użycie: scansite <ip> sftp|ftp|ftps".into()))?;
+                parse_ip(rest.split_whitespace().next().unwrap_or("")).map(|ip| Command::ScanSite(ip, protocol))
+            }
             "queue" => Ok(Command::Queue),
             "queueclose" => Ok(Command::QueueClose),
             "queuepause" => Ok(Command::QueuePause),
@@ -765,6 +818,12 @@ fn parse_findset(args: &str) -> Result<Command, EngineError> {
         Ok(Command::MultiRenameSet(field, value)) => Ok(Command::FindSet(field, value)),
         _ => Err(usage()),
     }
+}
+
+fn parse_ip(text: &str) -> Result<std::net::Ipv4Addr, EngineError> {
+    text.trim()
+        .parse()
+        .map_err(|_| EngineError(format!("niepoprawny adres IP: {}", text.trim())))
 }
 
 fn parse_row(name: &str, args: &str) -> Result<usize, EngineError> {

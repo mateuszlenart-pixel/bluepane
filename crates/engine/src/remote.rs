@@ -51,6 +51,7 @@ impl Session {
     /// Takes the sites and server keys from `dir` (`sites.conf`, `known_hosts`).
     pub fn use_config_dir(&mut self, dir: &Path) {
         self.config_loaded = true;
+        self.config_dir = Some(dir.to_path_buf());
         match Sites::load(&dir.join("sites.conf")) {
             Ok(sites) => self.sites = sites,
             Err(e) => {
