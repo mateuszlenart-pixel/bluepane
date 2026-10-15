@@ -115,7 +115,8 @@ impl BluepaneUi {
         // Collect what the background job reported; keep redrawing while it runs.
         self.session.poll();
         let searching = self.session.find.as_ref().is_some_and(|f| f.is_running())
-            || self.session.scan.as_ref().is_some_and(|v| v.is_running());
+            || self.session.scan.as_ref().is_some_and(|v| v.is_running())
+            || self.session.dir_sizes.is_running();
         if self.session.is_busy() || searching {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
@@ -897,6 +898,16 @@ impl BluepaneUi {
         ui.separator();
 
         let theme = self.theme.clone();
+        let session = &self.session;
+        // The longest bar is the biggest file (or counted folder) of this listing.
+        let biggest = panel
+            .entries
+            .iter()
+            .filter_map(|e| session.entry_size(e))
+            .max()
+            .unwrap_or(0)
+            .max(1);
+        let summary = session.panel_summary(index);
         let row_height = ui.spacing().interact_size.y;
         let stride = row_height + ui.spacing().item_spacing.y;
         let cursor = panel.cursor;
@@ -951,9 +962,12 @@ impl BluepaneUi {
             }
         }
 
+        // The line under the list (marked files, totals) keeps its own room.
+        let footer_height = row_height + 6.0;
         egui::ScrollArea::vertical()
             .id_salt(("panel", index))
             .auto_shrink([false, false])
+            .max_height((ui.available_height() - footer_height).max(row_height * 3.0))
             .show_rows(ui, row_height, panel.entries.len(), |ui, range| {
                 if is_active {
                     let y =
@@ -1027,11 +1041,32 @@ impl BluepaneUi {
                             name = format!("{name}    {}", dir.display());
                         }
                     }
-                    let size = if entry.is_dir() {
-                        "<DIR>".to_string()
-                    } else {
-                        human_size(entry.size)
+                    let known_size = session.entry_size(entry);
+                    let size = match (entry.is_dir(), known_size) {
+                        (true, None) => "<DIR>".to_string(),
+                        (_, Some(bytes)) => human_size(bytes),
+                        (false, None) => String::new(),
                     };
+                    // A bar behind the size, as long as the size is relative to the biggest.
+                    if let Some(bytes) =
+                        known_size.filter(|b| *b > 0 && !bluepane_engine::is_parent_entry(entry))
+                    {
+                        let fraction = (bytes as f64 / biggest as f64).clamp(0.02, 1.0) as f32;
+                        let bar = Rect::from_min_max(
+                            egui::pos2(
+                                cols.size.right() - cols.size.width() * fraction,
+                                rect.top() + 2.0,
+                            ),
+                            egui::pos2(cols.size.right(), rect.bottom() - 2.0),
+                        );
+                        ui.painter().rect_filled(
+                            bar,
+                            2.0,
+                            theme
+                                .accent
+                                .gamma_multiply(if entry.is_dir() { 0.30 } else { 0.18 }),
+                        );
+                    }
                     let painter = ui.painter();
                     let y = rect.center().y;
                     // Each text is clipped to its own column so long names do not spill over.
@@ -1078,6 +1113,9 @@ impl BluepaneUi {
                     }
                 }
             });
+
+        ui.separator();
+        ui.label(RichText::new(summary).color(theme.muted));
 
         if let Some(row) = entered {
             self.session.active = index;

@@ -5,6 +5,7 @@
 //! without a window.
 
 mod command;
+mod dirsize;
 mod documents;
 mod fileclass;
 mod find;
@@ -47,6 +48,7 @@ pub use command::{
     parse_size, Command, NameFormat, PackArgs, QueueMove, SpeedLimit, SyncArgs, TabAction,
     UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
+pub use dirsize::DirSizes;
 pub use fileclass::{class_of, class_of_name, FileClass};
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};

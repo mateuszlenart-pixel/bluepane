@@ -76,6 +76,8 @@ impl Session {
         if is_housekeeping(spec) {
             return;
         }
+        // Files were copied, moved or deleted: counted folder sizes may be wrong now.
+        self.dir_sizes.clear();
         self.finished.push_front(FinishedJob {
             title: spec.describe(),
             result: text.to_string(),

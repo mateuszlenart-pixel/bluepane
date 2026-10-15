@@ -46,6 +46,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "pageclose",
     "copynames",
     "theme",
+    "dirsize",
     "scan",
     "scanset",
     "scanrun",
@@ -334,6 +335,8 @@ pub enum Command {
     PageClose,
     /// Copy the names (or paths) of the selected entries, one per line, to the clipboard.
     CopyNames(NameFormat),
+    /// Count the size of the selected folders (or the one under the cursor) in the background.
+    DirSize,
     /// Show the colour theme and the available ones, or switch to another.
     Theme(Option<String>),
     /// Send the file edited with F4 on a server back to it (Ctrl+Shift+F4).
@@ -436,6 +439,7 @@ impl Command {
             "pagezoom" => parse_pagezoom(rest).map(Command::PageZoom),
             "pageclose" => Ok(Command::PageClose),
             "theme" => Ok(Command::Theme(optional(rest))),
+            "dirsize" => Ok(Command::DirSize),
             "copynames" => match rest.to_ascii_lowercase().as_str() {
                 "" | "file" | "name" | "ext" => Ok(Command::CopyNames(NameFormat::File)),
                 "stem" | "short" => Ok(Command::CopyNames(NameFormat::Stem)),
