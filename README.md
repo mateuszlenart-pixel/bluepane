@@ -34,6 +34,8 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
 | Ctrl+Shift+1 / 2 / 3 | skopiuj do schowka zaznaczone nazwy: bez rozszerzeń / z rozszerzeniami / pełne ścieżki (po jednej w linii; bez zaznaczenia: element pod kursorem) |
 | Ctrl+N | skaner sieci (urządzenia w zakresie adresów IP, ich porty i usługi) |
+| Alt+Shift+Enter | `dirsize`: policz w tle rozmiar zaznaczonych katalogów (albo tego pod kursorem); wynik pojawia się w kolumnie Rozmiar i w podsumowaniu pod listą (odświeżenie F9 i operacje na plikach czyszczą policzone rozmiary) |
+| — | pasek rozmiaru za kolumną Rozmiar (długość względem największego pliku lub policzonego katalogu) i podsumowanie pod listą: „Zaznaczono: 2 pliki (48.2 KB) z 10 elementów” albo suma katalogu |
 | — | ikony i kolory typów plików: katalogi, archiwa, dokumenty, obrazy, audio/wideo, kod, programy (klasa pliku z nazwy, bez otwierania) |
 | — | motyw kolorów: komenda `theme` (pokazuje dostępne), `theme dark`; wybór zapisuje się w `settings.conf` |
 | Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |
@@ -69,7 +71,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`chmod`, `sync`, `syncrun`, `syncset`, `syncclose`, `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queuemove`, `limit`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
+`chmod`, `dirsize`, `theme`, `sync`, `syncrun`, `syncset`, `syncclose`, `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queuemove`, `limit`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 

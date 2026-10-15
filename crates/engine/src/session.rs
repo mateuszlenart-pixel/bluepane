@@ -246,6 +246,8 @@ pub struct Session {
     pub(crate) config_dir: Option<PathBuf>,
     /// The colour theme (a name from `THEMES`).
     pub(crate) theme: String,
+    /// Folder sizes counted on request.
+    pub dir_sizes: crate::DirSizes,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
@@ -397,6 +399,7 @@ impl Session {
             scan_services: crate::ScanServices::default(),
             config_dir: None,
             theme: crate::settings::DEFAULT_THEME.to_string(),
+            dir_sizes: crate::DirSizes::default(),
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
@@ -551,6 +554,7 @@ impl Session {
             Command::QueueMove(n, to) => self.queue_move(n, to)?,
             Command::Limit(limit) => self.set_speed_limit(limit),
             Command::Theme(name) => self.set_theme(name)?,
+            Command::DirSize => self.count_dir_sizes()?,
             Command::QueueRetry(n) => self.queue_retry(n)?,
             Command::QueueClear => self.finished.clear(),
             Command::SitePassword(name, password) => self.site_password(&name, password)?,
@@ -599,6 +603,7 @@ impl Session {
             Command::Cursor(delta) => self.active_panel_mut().move_cursor(delta),
             Command::ToggleSelect => self.active_panel_mut().toggle_select(),
             Command::Refresh => {
+                self.dir_sizes.clear();
                 self.volumes = bluepane_vfs::volumes();
                 self.panels.iter_mut().for_each(Panel::reload);
                 self.remote_refresh_all();

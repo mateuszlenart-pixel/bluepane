@@ -120,7 +120,7 @@ Decyzje właściciela (2026-10-15):
 
 - [x] 10a Fundament: moduł `theme.rs` (paleta, `Visuals`, gęstsze odstępy, ostrzejsze rogi), motyw Modern Dark, komenda `theme` i zapis wyboru; ramka i tło odróżniają panel aktywny od nieaktywnego, kursor z obrysem, wiersze naprzemienne, katalogi/zaznaczone/ukryte w kolorach palety
 - [x] 10b Ikony i kolory typów plików (klasa pliku liczona w silniku: `class_of`; czcionka ikon Phosphor): ikona przy nazwie (katalog, archiwum, dokument, serwer, plik wykonywalny), kolory semantyczne (katalogi, archiwa, dokumenty, ukryte), zaznaczenie (Insert/Spacja) odróżnione od kursora
-- [ ] 10c Lista plików: nagłówki kolumn z kierunkiem sortowania (kliknięcie = komenda `sort`), kursor i zaznaczenie rysowane osobno, pasek rozmiaru w komórce `Size` (rozmiary katalogów liczone w tle na życzenie)
+- [x] 10c Lista plików: nagłówki kolumn z kierunkiem sortowania i kursor/zaznaczenie rysowane osobno były już w 10a; dodane: pasek rozmiaru w komórce rozmiaru, komenda `dirsize` (rozmiary katalogów w tle na życzenie, Alt+Shift+Enter) i podsumowanie zaznaczenia pod listą
 - [ ] 10d Nawigacja: ścieżka jako klikalne segmenty (breadcrumbs), edycja ścieżki po kliknięciu pustego miejsca (jak `cd`), pasek napędów z zajętością i wolnym miejscem, odznaka aktywnego filtra
 - [ ] 10e Dolny pasek: klawisze funkcyjne jako dwukolorowe przyciski (skrót + nazwa), mini-pasek bieżącego zadania z prędkością i postępem oraz skrótem do okna kolejki (Ctrl+J)
 - [ ] 10f Narzędzia jak jeden kombajn: Quick View w drugim panelu (strony/tekst/archiwum bez osobnego okna; skrót do uzgodnienia), podświetlenie zmienionych znaków i kolizji w zmianie nazw, kolory kierunków i konfliktów w synchronizacji
