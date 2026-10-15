@@ -1,0 +1,3 @@
+Zażółć gęślą jaźń — test polskich znaków w UTF-8.
+Drugi wiersz: ĄĆĘŁŃÓŚŹŻ ąćęłńóśźż.
+Trzeci wiersz: zwykły ASCII.

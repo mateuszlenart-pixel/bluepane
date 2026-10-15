@@ -164,6 +164,10 @@ Do zrobienia (8b i dalej):
 - [x] Hasła w systemowym magazynie (Secret Service / Menedżer poświadczeń) i zapis nowego hasła do Bitwarden (`bw create item`); `sitepassword`; testy na atrapach (bez prawdziwego keyringu i Bitwarden)
 - [ ] Do sprawdzenia ręcznie: prawdziwy keyring (Linux Mint: Gnome Keyring), Windows Credential Manager, `bw` z odblokowanym sejfem
 
+### Testy ręczne (przygotowane 2026-10-15)
+
+`docs/TESTOWANIE.md` (uruchomienie na Linuksie i Windows, lista kontrolna z oczekiwanymi wynikami), `testdata/` (gotowe pliki), `tools/dane-testowe.sh` i `.ps1` (reszta danych), workflow `Build testowy` (gotowe pliki release do pobrania, nie jest to dystrybucja).
+
 ## Znane uproszczenia szkieletu
 - Interfejs sprawdzony ręcznie na Linuksie (Linux Mint, X11, wgpu); **nie był jeszcze uruchamiany
   na Windows** (kompiluje się i przechodzi CI).

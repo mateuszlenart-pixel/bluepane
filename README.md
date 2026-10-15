@@ -1,9 +1,11 @@
 # bluepane
 
 Dwupanelowy menedżer plików w stylu Total Commandera. Rust + egui, natywny, sterowany
-klawiaturą, działa na **Windows i Linuksie**. Projekt we wczesnej fazie (szkielet, etap 1 z 9).
+klawiaturą, działa na **Windows i Linuksie**. Projekt w fazie testów ręcznych: patrz [docs/TESTOWANIE.md](docs/TESTOWANIE.md) (uruchomienie, dane testowe, lista kontrolna).
 
 ## Uruchomienie
+
+Gotowe pliki do testów (bez Rusta) buduje workflow **Build testowy** w zakładce Actions na GitHubie (artefakty `bluepane-linux` i `bluepane-windows`); szczegóły w [docs/TESTOWANIE.md](docs/TESTOWANIE.md). Ze źródeł:
 
 Wymagany Rust 1.95 lub nowszy (`rustup`).
 
