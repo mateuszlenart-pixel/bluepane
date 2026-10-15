@@ -31,6 +31,8 @@ pub enum InputKind {
     ArchivePassword,
     /// The password (or key passphrase) of this saved SFTP site; hidden like the above.
     SitePassword(String),
+    /// The password of this protected PDF; hidden like the above.
+    PdfPassword(PathBuf),
 }
 
 /// The settings dialog of `pack` (Alt+F5). The UI edits the fields; `confirm` validates them.
@@ -853,6 +855,19 @@ impl Session {
                 }
                 self.retry_with_password(text)?;
             }
+            Some(Pending::Input {
+                kind: InputKind::PdfPassword(path),
+                text,
+            }) => {
+                if text.is_empty() {
+                    self.pending = Some(Pending::Input {
+                        kind: InputKind::PdfPassword(path),
+                        text,
+                    });
+                    return Err(EngineError("podaj hasło".into()));
+                }
+                self.open_local_pdf(&path, Some(&text))?;
+            }
             Some(Pending::TrustHost(prompt)) => self.trust_host(prompt)?,
             Some(Pending::ConfirmRemoteDelete { side, paths }) => {
                 self.remote_delete(side, paths)?
@@ -875,7 +890,9 @@ impl Session {
                     InputKind::ViewerFind => {
                         self.viewer_action(ViewerAction::Find(Some(text.clone())))
                     }
-                    InputKind::ArchivePassword | InputKind::SitePassword(_) => {
+                    InputKind::ArchivePassword
+                    | InputKind::SitePassword(_)
+                    | InputKind::PdfPassword(_) => {
                         unreachable!("handled in the arms above")
                     }
                 };
@@ -1677,7 +1694,7 @@ impl Session {
         }
         let path = self.entry_to_open()?;
         match bluepane_docs::kind_of(&path) {
-            Some(bluepane_docs::Kind::Pdf) => return self.open_pdf_pages(&path),
+            Some(bluepane_docs::Kind::Pdf) => return self.open_local_pdf(&path, None),
             // Word, Excel, OpenDocument: pages through LibreOffice when it is there, the
             // text of the document when it is not.
             Some(_) if self.open_office_pages(&path) => return Ok(()),

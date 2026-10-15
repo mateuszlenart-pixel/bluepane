@@ -54,9 +54,10 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 ## Notatki do późniejszych etapów
 
 ### Podgląd dokumentów biurowych (po etapie 8)
+- [x] PDF chronione hasłem: F3 pyta o hasło (RC4/AES, test z plikiem z Ghostscript)
 - [x] Crate `bluepane-docs`: F3 na PDF pokazuje strony jako obraz (hayro, czysty Rust); DOCX/ODT/ODS/XLSX przez LibreOffice -> PDF (jeśli jest), inaczej tekst dokumentu; F4 otwiera w programie systemu
 - [x] Okno stron (zmiana strony, powiększenie, dopasowanie do szerokości), render w tle
-- [ ] Nie ma: dokumentów Office jako strony z archiwum i serwera, RTF/PPTX, edycji w programie, PDF chronionych hasłem, OCR skanów, zaznaczania tekstu na stronie; do sprawdzenia ręcznie z prawdziwymi dokumentami i LibreOffice
+- [ ] Nie ma: dokumentów Office jako strony z archiwum i serwera, RTF/PPTX, edycji w programie, OCR skanów, hasła do PDF z archiwum i serwera, zaznaczania tekstu na stronie; do sprawdzenia ręcznie z prawdziwymi dokumentami i LibreOffice
 
 ### Etap 5: podgląd i edycja
 - [x] Podgląd (F3) oknami przez seek: plik 1 GB otwiera się od razu (proces ok. 110 MB, tyle co sam interfejs), linie ograniczone do 16 KiB, wykrywanie plików binarnych
@@ -130,7 +131,7 @@ Do zrobienia (8b i dalej):
 - [x] Okno kolejki zadań (Ctrl+J): bieżące z postępem, oczekujące (usuwanie), zakończone (ponawianie), pauza kolejki; testy w silniku
 - [x] Kolejka: zmiana kolejności oczekujących zadań (`queuemove`, przyciski w oknie Ctrl+J)
 - [x] Kolejka: ograniczenie prędkości (`limit`, lista w oknie Ctrl+J)
-- [ ] Kolejka: równoległe transfery (wymaga przebudowy: jedno `current` w sesji, jedno pytanie o konflikt naraz)
+- [ ] Kolejka: równoległe transfery: pominięte na razie (decyzja właściciela, 2026-10-15); wymagają przebudowy (jedno `current` w sesji, jedno pytanie o konflikt naraz); ewentualnie wąska wersja tylko dla serwerów
 - [ ] ~~Wtyczki~~ pominięte (decyzja właściciela); w zamian ewentualnie osobny etap: skaner sieci IP
 - [x] Hasła w systemowym magazynie (Secret Service / Menedżer poświadczeń) i zapis nowego hasła do Bitwarden (`bw create item`); `sitepassword`; testy na atrapach (bez prawdziwego keyringu i Bitwarden)
 - [ ] Do sprawdzenia ręcznie: prawdziwy keyring (Linux Mint: Gnome Keyring), Windows Credential Manager, `bw` z odblokowanym sejfem

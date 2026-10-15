@@ -71,6 +71,8 @@ pub enum DocError {
     Corrupt(String),
     /// Protected with a password.
     Encrypted,
+    /// A password was given and it is not the right one.
+    WrongPassword,
     /// A PDF without any text (a scan, drawings).
     NoText,
 }
@@ -90,6 +92,7 @@ impl fmt::Display for DocError {
                 f,
                 "dokument jest chroniony hasłem: otwórz go w zewnętrznym programie (F4)"
             ),
+            DocError::WrongPassword => write!(f, "błędne hasło do dokumentu"),
             DocError::NoText => write!(
                 f,
                 "w tym PDF nie ma tekstu (skan lub rysunek): otwórz go w zewnętrznym programie (F4)"
