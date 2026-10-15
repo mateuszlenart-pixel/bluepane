@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interaktywna Makieta GUI - Bluepane</title>
+<style>
+  :root {
+    --bg-main: #12141c;
+    --bg-panel: #1a1d28;
+    --bg-panel-inactive: #151720;
+    --bg-header: #222634;
+    --bg-row-alt: #1e222f;
+    --bg-hover: #292e42;
+    --cursor-bg: rgba(61, 139, 253, 0.22);
+    --cursor-border: #3d8bfd;
+    --text-main: #e2e8f0;
+    --text-muted: #7c859e;
+    --text-selected: #ffb84d;
+    --text-dir: #7dcfff;
+    --accent: #3d8bfd;
+    --border: #2c3144;
+    --radius: 4px;
+    --shadow: none;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body.theme-tc {
+    --bg-main: #000055;
+    --bg-panel: #000080;
+    --bg-panel-inactive: #000068;
+    --bg-header: #0000a8;
+    --bg-row-alt: #000075;
+    --bg-hover: #003399;
+    --cursor-bg: #00aaaa;
+    --cursor-border: #55ffff;
+    --text-main: #ffffff;
+    --text-muted: #aaaaaa;
+    --text-selected: #ffff55;
+    --text-dir: #55ffff;
+    --accent: #00aaaa;
+    --border: #4466aa;
+  }
+
+  body.theme-catppuccin {
+    --bg-main: #181825;
+    --bg-panel: #1e1e2e;
+    --bg-panel-inactive: #1a1a27;
+    --bg-header: #313244;
+    --bg-row-alt: #232334;
+    --bg-hover: #313244;
+    --cursor-bg: rgba(203, 166, 247, 0.22);
+    --cursor-border: #cba6f7;
+    --text-main: #cdd6f4;
+    --text-muted: #7f849c;
+    --text-selected: #f9e2af;
+    --text-dir: #89b4fa;
+    --accent: #cba6f7;
+    --border: #45475a;
+  }
+
+  body.variant-raw {
+    --bg-main: #1b1b1b;
+    --bg-panel: #1b1b1b;
+    --bg-panel-inactive: #1b1b1b;
+    --bg-header: #262626;
+    --bg-row-alt: #1b1b1b;
+    --cursor-bg: #004b6e;
+    --cursor-border: transparent;
+    --border: #383838;
+    --radius: 2px;
+  }
+
+  body.variant-c {
+    --radius: 10px;
+    --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.45);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg-main);
+    color: var(--text-main);
+    font-family: var(--font-sans);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .mockup-controls {
+    background: #0b0d13;
+    border-bottom: 1px solid #2d3348;
+    padding: 8px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+  }
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .control-label {
+    color: #94a3b8;
+    font-weight: 600;
+    margin-right: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10px;
+  }
+  .btn-ctrl {
+    background: #1e2433;
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .btn-ctrl:hover { background: #2d364d; color: #fff; }
+  .btn-ctrl.active {
+    background: #2563eb;
+    border-color: #60a5fa;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .workspace {
+    flex: 1;
+    display: flex;
+    gap: 6px;
+    padding: 6px;
+    overflow: hidden;
+  }
+  body.variant-c .workspace { gap: 12px; padding: 12px; }
+  body.variant-raw .workspace { gap: 2px; padding: 2px; }
+
+  .panel {
+    flex: 1;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .panel.active-panel { border-color: var(--accent); }
+  .panel.inactive-panel { background: var(--bg-panel-inactive); }
+
+  .tabs-bar {
+    display: flex;
+    align-items: center;
+    background: var(--bg-header);
+    padding: 4px 6px 0 6px;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .tab {
+    padding: 5px 10px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tab.active {
+    background: var(--bg-panel);
+    color: var(--text-main);
+    border-color: var(--border);
+    font-weight: 600;
+  }
+
+  .path-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .vol-badge {
+    background: var(--bg-header);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-family: var(--font-mono);
+    flex: 1;
+    overflow: hidden;
+  }
+  .crumb {
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-dir);
+  }
+  .crumb:hover { background: var(--bg-hover); }
+  .crumb-sep { color: var(--text-muted); }
+
+  .col-header {
+    display: grid;
+    grid-template-columns: 1fr 65px 105px 135px;
+    padding: 5px 10px;
+    background: var(--bg-header);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .align-right { text-align: right; padding-right: 8px; }
+
+  .file-list {
+    flex: 1;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .file-row {
+    display: grid;
+    grid-template-columns: 1fr 65px 105px 135px;
+    padding: 4px 10px;
+    align-items: center;
+    border: 1px solid transparent;
+    cursor: pointer;
+    position: relative;
+  }
+  .file-row:nth-child(even) { background: var(--bg-row-alt); }
+  body.variant-raw .file-row:nth-child(even) { background: transparent; }
+  .file-row:hover { background: var(--bg-hover); }
+  .file-row.cursor {
+    background: var(--cursor-bg) !important;
+    border-color: var(--cursor-border);
+  }
+  .file-row.selected {
+    color: var(--text-selected) !important;
+    font-weight: 600;
+  }
+  .file-row.is-dir { color: var(--text-dir); }
+
+  .cell-name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .file-icon { width: 16px; text-align: center; font-style: normal; }
+  body.variant-raw .file-icon { display: none; }
+
+  .cell-size {
+    text-align: right;
+    padding-right: 8px;
+    position: relative;
+    z-index: 1;
+  }
+  .size-bar {
+    position: absolute;
+    right: 6px;
+    top: 3px;
+    bottom: 3px;
+    background: rgba(61, 139, 253, 0.16);
+    border-radius: 2px;
+    z-index: -1;
+  }
+  body.variant-raw .size-bar { display: none; }
+
+  .panel-footer {
+    padding: 5px 10px;
+    background: var(--bg-header);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .dock-panel {
+    width: 340px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  body.variant-b .dock-panel { display: flex; }
+
+  .inspector-box {
+    padding: 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .code-preview {
+    background: rgba(0,0,0,0.28);
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: #a5d6ff;
+    white-space: pre-wrap;
+    margin-top: 8px;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(61,139,253,0.2);
+    color: #7dcfff;
+    margin-right: 6px;
+  }
+  .diff-del { background: rgba(248, 113, 113, 0.25); color: #fca5a5; text-decoration: line-through; padding: 0 3px; border-radius: 2px; }
+  .diff-add { background: rgba(74, 222, 128, 0.25); color: #86efac; padding: 0 3px; border-radius: 2px; font-weight: 600; }
+
+  .bottom-area {
+    background: var(--bg-header);
+    border-top: 1px solid var(--border);
+    padding: 4px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .queue-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    background: rgba(0,0,0,0.2);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .progress-track {
+    width: 180px;
+    height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    width: 68%;
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  }
+  .cmd-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .cmd-input {
+    flex: 1;
+    background: var(--bg-main);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .fkey-bar {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 4px;
+  }
+  .fkey-btn {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .fkey-btn:hover { background: var(--bg-hover); border-color: var(--accent); }
+  .fkey-key { color: var(--accent); font-weight: 700; margin-right: 4px; }
+</style>
+</head>
+<body class="variant-c">
+
+<div class="mockup-controls">
+  <div class="control-group">
+    <span class="control-label">Wariant Architektury:</span>
+    <button class="btn-ctrl" onclick="setVariant('raw', this)">0. Surowe egui</button>
+    <button class="btn-ctrl" onclick="setVariant('a', this)">Wariant A: Tuning ui-egui</button>
+    <button class="btn-ctrl" onclick="setVariant('b', this)">Wariant B: egui_tiles Dock</button>
+    <button class="btn-ctrl active" onclick="setVariant('c', this)">Wariant C: ui-iced / gpui</button>
+  </div>
+
+  <div class="control-group" id="tool-buttons">
+    <span class="control-label">Widok Narzędzia (Krok 3):</span>
+    <button class="btn-ctrl active" onclick="setTool('panels', this)">Dwa Panele</button>
+    <button class="btn-ctrl" onclick="setTool('quickview', this)">Quick View (Ctrl+Q)</button>
+    <button class="btn-ctrl" onclick="setTool('rename', this)">Multi-Rename Diff (Ctrl+F2)</button>
+    <button class="btn-ctrl" onclick="setTool('sync', this)">Synchronizacja (Alt+S)</button>
+  </div>
+
+  <div class="control-group">
+    <span class="control-label">Motyw (F10):</span>
+    <button class="btn-ctrl active" onclick="setTheme('modern', this)">Modern Dark</button>
+    <button class="btn-ctrl" onclick="setTheme('tc', this)">Classic Blue (TC)</button>
+    <button class="btn-ctrl" onclick="setTheme('catppuccin', this)">Catppuccin</button>
+  </div>
+</div>
+
+<div class="workspace">
+  <div class="panel active-panel" id="left-panel">
+    <div class="tabs-bar">
+      <div class="tab active"><span>📁 bluepane-main</span></div>
+      <div class="tab"><span>🖧 sftp://proxmox</span></div>
+      <div class="tab"><span>+</span></div>
+    </div>
+    <div class="path-bar">
+      <span class="vol-badge">nvme0n1p2 (412 GB)</span>
+      <div class="breadcrumbs">
+        <span class="crumb">~</span><span class="crumb-sep">/</span>
+        <span class="crumb">projekty</span><span class="crumb-sep">/</span>
+        <span class="crumb">bluepane-main</span><span class="crumb-sep">/</span>
+        <span class="crumb">crates</span>
+      </div>
+    </div>
+    <div class="col-header">
+      <div>Nazwa ▲</div>
+      <div>Typ</div>
+      <div class="align-right">Rozmiar</div>
+      <div>Zmodyfikowano</div>
+    </div>
+    <div class="file-list" id="left-list"></div>
+    <div class="panel-footer">
+      <span>Zaznaczono: 2 pliki (48.2 KB) z 10 elementów</span>
+      <span>Filtr: brak (pisz, aby filtrować)</span>
+    </div>
+  </div>
+
+  <div class="panel inactive-panel" id="right-panel"></div>
+
+  <div class="dock-panel">
+    <div class="tabs-bar">
+      <div class="tab active">📄 Inspektor PDF / Docs</div>
+      <div class="tab">📡 Skaner LAN</div>
+    </div>
+    <div class="inspector-box">
+      <div style="margin-bottom:8px;"><strong>specyfikacja_ped_2026.pdf</strong> <span class="badge">Strona 1 / 14</span></div>
+      <div style="background:#fff; color:#111; padding:14px; border-radius:4px; height:210px; font-family:serif; font-size:11px;">
+        <h4 style="border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:6px;">DOKUMENTACJA TECHNICZNA (PED 2014/68/UE)</h4>
+        <p><strong>Projekt:</strong> Rurociąg technologiczny DN150 PN40</p>
+        <p><strong>Materiał:</strong> P265GH / 1.0425</p>
+        <p style="margin-top:8px; color:#444;">Renderowanie przez <code>crates/docs</code> bezpośrednio do tekstury GPU...</p>
+      </div>
+      <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:10px;">
+        <strong>Aktywne hosty w podsieci (crates/netscan):</strong>
+        <div style="margin-top:6px; font-size:11px; color:var(--text-muted);">
+          <div>🟢 192.168.1.10 — <strong>proxmox.lan</strong> (:22, :8006)</div>
+          <div>🟢 192.168.1.15 — <strong>truenas.lan</strong> (:22, :445 SMB)</div>
+          <div>🟢 192.168.1.20 — <strong>homeassistant.lan</strong> (:8123)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-area">
+  <div class="queue-bar">
+    <span class="badge">KOLEJKA (1 aktywne, 2 oczekują)</span>
+    <span>Kopiowanie <strong>backup_homelab_2026.tar.zst</strong> → sftp://truenas/backups/</span>
+    <div class="progress-track"><div class="progress-fill"></div></div>
+    <span style="color:var(--text-muted);">1.42 GB / 2.10 GB (42.5 MB/s)</span>
+  </div>
+  <div class="cmd-line">
+    <span style="color:var(--accent); font-weight:bold;">bluepane/crates &gt;</span>
+    <input class="cmd-input" type="text" value="sync --mirror --exclude target/">
+  </div>
+  <div class="fkey-bar">
+    <button class="fkey-btn"><span class="fkey-key">F2</span>Zmień nazwę</button>
+    <button class="fkey-btn" onclick="triggerTool('quickview', 1)"><span class="fkey-key">F3</span>Podgląd</button>
+    <button class="fkey-btn"><span class="fkey-key">F4</span>Edycja</button>
+    <button class="fkey-btn"><span class="fkey-key">F5</span>Kopiuj</button>
+    <button class="fkey-btn"><span class="fkey-key">F6</span>Przenieś</button>
+    <button class="fkey-btn"><span class="fkey-key">F7</span>Nowy kat.</button>
+    <button class="fkey-btn"><span class="fkey-key">F8</span>Do kosza</button>
+    <button class="fkey-btn" onclick="triggerTool('rename', 2)"><span class="fkey-key">^F2</span>Multi-Rename</button>
+    <button class="fkey-btn" onclick="triggerTool('sync', 3)"><span class="fkey-key">Alt+S</span>Synchronizuj</button>
+    <button class="fkey-btn" onclick="triggerTool('quickview', 1)"><span class="fkey-key">^Q</span>Quick View</button>
+  </div>
+</div>
+
+<script>
+  const leftFiles = [
+    { name: "..", ext: "", size: "<DIR>", bar: 0, date: "2026-10-15 09:10", dir: true, icon: "↩" },
+    { name: "archive", ext: "", size: "<DIR>", bar: 0, date: "2026-10-14 18:22", dir: true, icon: "📁" },
+    { name: "docs", ext: "", size: "<DIR>", bar: 0, date: "2026-10-14 17:05", dir: true, icon: "📁" },
+    { name: "engine", ext: "", size: "<DIR>", bar: 0, date: "2026-10-15 10:12", dir: true, icon: "📁" },
+    { name: "ui-iced", ext: "", size: "<DIR>", bar: 0, date: "2026-10-15 10:40", dir: true, icon: "📁" },
+    { name: "lib", ext: "rs", size: "28.4 KB", bar: 78, date: "2026-10-15 10:35", dir: false, icon: "🦀", selected: true },
+    { name: "rename_ui", ext: "rs", size: "19.8 KB", bar: 55, date: "2026-10-15 08:50", dir: false, icon: "🦀", selected: true },
+    { name: "Cargo", ext: "toml", size: "4.2 KB", bar: 18, date: "2026-10-12 14:15", dir: false, icon: "⚙" },
+    { name: "specyfikacja_ped_2026", ext: "pdf", size: "3.8 MB", bar: 100, date: "2026-10-10 11:30", dir: false, icon: "📕" },
+    { name: "backup_homelab", ext: "7z", size: "1.9 MB", bar: 62, date: "2026-10-09 21:00", dir: false, icon: "📦" }
+  ];
+
+  let cursorIndex = 5;
+  let currentTool = 'panels';
+
+  function renderLeftPanel() {
+    const container = document.getElementById('left-list');
+    container.innerHTML = '';
+    leftFiles.forEach((f, idx) => {
+      const row = document.createElement('div');
+      row.className = 'file-row' +
+        (idx === cursorIndex ? ' cursor' : '') +
+        (f.selected ? ' selected' : '') +
+        (f.dir ? ' is-dir' : '');
+      row.onclick = () => {
+        cursorIndex = idx;
+        renderLeftPanel();
+        if (currentTool === 'quickview') renderRightPanel();
+      };
+      row.ondblclick = () => {
+        f.selected = !f.selected;
+        renderLeftPanel();
+      };
+      const displayName = f.dir && f.name !== '..' ? '[' + f.name + ']' : f.name;
+      row.innerHTML =
+        '<div class="cell-name"><i class="file-icon">' + f.icon + '</i><span>' + displayName + '</span></div>' +
+        '<div>' + f.ext + '</div>' +
+        '<div class="cell-size">' +
+          (f.bar > 0 ? '<div class="size-bar" style="width:' + f.bar + '%"></div>' : '') +
+          '<span>' + f.size + '</span>' +
+        '</div>' +
+        '<div style="color:var(--text-muted)">' + f.date + '</div>';
+      container.appendChild(row);
+    });
+  }
+
+  function renderRightPanel() {
+    const right = document.getElementById('right-panel');
+    if (currentTool === 'panels') {
+      right.innerHTML = `
+        <div class="tabs-bar">
+          <div class="tab active"><span>🖧 sftp://192.168.1.15/backups</span></div>
+          <div class="tab"><span>📁 /mnt/truenas</span></div>
+        </div>
+        <div class="path-bar">
+          <span class="vol-badge">SFTP (TrueNAS)</span>
+          <div class="breadcrumbs">
+            <span class="crumb">mnt</span><span class="crumb-sep">/</span>
+            <span class="crumb">tank</span><span class="crumb-sep">/</span>
+            <span class="crumb">backups</span>
+          </div>
+        </div>
+        <div class="col-header">
+          <div>Nazwa ▲</div>
+          <div>Typ</div>
+          <div class="align-right">Rozmiar</div>
+          <div>Zmodyfikowano</div>
+        </div>
+        <div class="file-list">
+          <div class="file-row is-dir"><div class="cell-name"><i class="file-icon">↩</i><span>..</span></div><div></div><div class="cell-size">&lt;DIR&gt;</div><div style="color:var(--text-muted)">2026-10-01 12:00</div></div>
+          <div class="file-row is-dir"><div class="cell-name"><i class="file-icon">📁</i><span>[proxmox-vms]</span></div><div></div><div class="cell-size">&lt;DIR&gt;</div><div style="color:var(--text-muted)">2026-10-14 03:00</div></div>
+          <div class="file-row is-dir"><div class="cell-name"><i class="file-icon">📁</i><span>[homeassistant]</span></div><div></div><div class="cell-size">&lt;DIR&gt;</div><div style="color:var(--text-muted)">2026-10-15 04:00</div></div>
+          <div class="file-row"><div class="cell-name"><i class="file-icon">📦</i><span>ha_config_2026_10</span></div><div>tar.gz</div><div class="cell-size"><div class="size-bar" style="width:45%"></div>142.0 MB</div><div style="color:var(--text-muted)">2026-10-15 04:02</div></div>
+          <div class="file-row"><div class="cell-name"><i class="file-icon">🦀</i><span>session_snapshot</span></div><div>json</div><div class="cell-size"><div class="size-bar" style="width:12%"></div>18.4 KB</div><div style="color:var(--text-muted)">2026-10-14 22:19</div></div>
+        </div>
+        <div class="panel-footer">
+          <span>0 zaznaczonych z 5 elementów</span>
+          <span>Połączenie szyfrowane (SSH-2.0)</span>
+        </div>
+      `;
+    } else if (currentTool === 'quickview') {
+      const f = leftFiles[cursorIndex] || leftFiles[5];
+      right.innerHTML = `
+        <div class="tabs-bar">
+          <div class="tab active"><span>👁 Quick View (Ctrl+Q): ${f.name}${f.ext ? '.'+f.ext : ''}</span></div>
+        </div>
+        <div class="inspector-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:8px;">
+            <div>
+              <span class="badge">TRYB TEKST / HEX (H)</span>
+              <span class="badge">UTF-8</span>
+              <span style="color:var(--text-muted)">Rozmiar: ${f.size} · Zmodyfikowano: ${f.date}</span>
+            </div>
+          </div>
+          <div class="code-preview">//! crate: bluepane-ui-iced (Wariant C + Krok 3)
+use bluepane_engine::{Command, Session, ViewMode};
+use iced::{Element, Subscription, Task, Theme};
+
+pub struct BluepaneIced {
+    session: Session,
+    quick_view: bool,
+    theme_mode: ThemePalette,
+}
+
+impl BluepaneIced {
+    /// Przełącza szybki podgląd pliku w sąsiednim panelu (Ctrl+Q)
+    pub fn toggle_quick_view(&mut self) {
+        self.quick_view = !self.quick_view;
+    }
+}</div>
+        </div>
+      `;
+    } else if (currentTool === 'rename') {
+      right.innerHTML = `
+        <div class="tabs-bar">
+          <div class="tab active"><span>✏️ Wielokrotna Zmiana Nazw (Ctrl+F2) — Podgląd Diff na żywo</span></div>
+        </div>
+        <div class="inspector-box">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px;">
+            <div>
+              <div style="color:var(--text-muted); margin-bottom:4px;">Maska nazwy:</div>
+              <input class="cmd-input" style="width:100%" value="[YMD]_[N]_[C01+1:2]" readonly>
+            </div>
+            <div>
+              <div style="color:var(--text-muted); margin-bottom:4px;">Szukaj / Zamień (RegWy):</div>
+              <input class="cmd-input" style="width:100%" value="draft -> final_v2" readonly>
+            </div>
+          </div>
+          <div class="col-header" style="grid-template-columns: 1fr 1fr 90px;">
+            <div>Stara nazwa</div>
+            <div>Nowa nazwa (Wizualny Diff)</div>
+            <div class="align-right">Status</div>
+          </div>
+          <div class="file-list" style="margin-top:4px;">
+            <div class="file-row" style="grid-template-columns: 1fr 1fr 90px;">
+              <div>raport_<span class="diff-del">draft</span>_01.pdf</div>
+              <div><span class="diff-add">20261015_</span>raport_<span class="diff-add">final_v2</span>_01.pdf</div>
+              <div class="align-right" style="color:#4ade80;">Gotowe</div>
+            </div>
+            <div class="file-row" style="grid-template-columns: 1fr 1fr 90px;">
+              <div>schemat_<span class="diff-del">draft</span>_02.dwg</div>
+              <div><span class="diff-add">20261015_</span>schemat_<span class="diff-add">final_v2</span>_02.dwg</div>
+              <div class="align-right" style="color:#4ade80;">Gotowe</div>
+            </div>
+            <div class="file-row" style="grid-template-columns: 1fr 1fr 90px;">
+              <div>notatki_spotkanie.md</div>
+              <div><span class="diff-add">20261015_</span>notatki_spotkanie<span class="diff-add">_03</span>.md</div>
+              <div class="align-right" style="color:#4ade80;">Gotowe</div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (currentTool === 'sync') {
+      right.innerHTML = `
+        <div class="tabs-bar">
+          <div class="tab active"><span>🔄 Synchronizacja Katalogów (Alt+S) — Porównanie lewy ⇔ prawy</span></div>
+        </div>
+        <div class="inspector-box">
+          <div style="margin-bottom:10px; display:flex; gap:8px; align-items:center;">
+            <span class="badge">Tryb: Dwukierunkowa</span>
+            <span class="badge">Kryterium: Data i rozmiar</span>
+          </div>
+          <div class="col-header" style="grid-template-columns: 1fr 90px 60px 90px;">
+            <div>Ścieżka względna</div>
+            <div class="align-right">Lewy</div>
+            <div style="text-align:center;">Akcja</div>
+            <div class="align-right">Prawy</div>
+          </div>
+          <div class="file-list" style="margin-top:4px;">
+            <div class="file-row" style="grid-template-columns: 1fr 90px 60px 90px;">
+              <div>crates/ui-iced/src/lib.rs</div>
+              <div class="align-right">28.4 KB</div>
+              <div style="text-align:center; color:#4ade80; font-weight:bold;">→</div>
+              <div class="align-right" style="color:var(--text-muted)">brak</div>
+            </div>
+            <div class="file-row" style="grid-template-columns: 1fr 90px 60px 90px;">
+              <div>crates/engine/src/session.rs</div>
+              <div class="align-right">41.2 KB</div>
+              <div style="text-align:center; color:#facc15; font-weight:bold;">!!</div>
+              <div class="align-right">40.9 KB</div>
+            </div>
+            <div class="file-row" style="grid-template-columns: 1fr 90px 60px 90px;">
+              <div>crates/remote/src/sftp.rs</div>
+              <div class="align-right">19.1 KB</div>
+              <div style="text-align:center; color:#94a3b8;">==</div>
+              <div class="align-right">19.1 KB</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function setVariant(v, btn) {
+    document.body.classList.remove('variant-raw', 'variant-a', 'variant-b', 'variant-c');
+    document.body.classList.add('variant-' + v);
+    btn.parentElement.querySelectorAll('.btn-ctrl').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function setTool(t, btn) {
+    currentTool = t;
+    btn.parentElement.querySelectorAll('.btn-ctrl').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderRightPanel();
+  }
+
+  function triggerTool(t, idx) {
+    const btns = document.getElementById('tool-buttons').querySelectorAll('.btn-ctrl');
+    setTool(t, btns[idx]);
+  }
+
+  function setTheme(th, btn) {
+    document.body.classList.remove('theme-tc', 'theme-catppuccin');
+    if (th === 'tc') document.body.classList.add('theme-tc');
+    if (th === 'catppuccin') document.body.classList.add('theme-catppuccin');
+    btn.parentElement.querySelectorAll('.btn-ctrl').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  renderLeftPanel();
+  renderRightPanel();
+</script>
+</body>
+</html>

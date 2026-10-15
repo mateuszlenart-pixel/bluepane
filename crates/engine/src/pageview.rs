@@ -245,13 +245,6 @@ impl PageViewer {
 }
 
 impl Session {
-    /// Opens a PDF as pages.
-    pub(crate) fn open_pdf_pages(&mut self, path: &Path) -> Result<(), EngineError> {
-        let bytes = Self::read_pdf(path)?;
-        self.show_pages(PageViewer::from_pdf(path, bytes)?);
-        Ok(())
-    }
-
     /// Opens a PDF file of the panel; a protected one makes the interface ask for the
     /// password (`password` is what was typed, `None` the first time).
     pub(crate) fn open_local_pdf(
@@ -315,6 +308,65 @@ impl Session {
         self.preview_dir = Some(scratch.clone());
         self.show_pages(PageViewer::converting(path, program, scratch));
         true
+    }
+
+    /// Like [`open_office_pages`](Self::open_office_pages) for a file that lies in `dir`, a
+    /// folder the caller owns (and removes with the preview): the conversion happens inside it.
+    fn open_office_pages_in(&mut self, path: &Path, dir: &Path) -> bool {
+        let Some(program) = bluepane_docs::office_program() else {
+            return false;
+        };
+        self.show_pages(PageViewer::converting(path, program, dir.join("pages")));
+        true
+    }
+
+    /// A document that was fetched into `dir` (out of an archive or from a server) for F3:
+    /// PDF and, with LibreOffice, Office documents as pages; anything else as text. `origin`
+    /// is "z archiwum" or "z serwera". Returns the status line and whether it is an error.
+    pub(crate) fn show_fetched_document(
+        &mut self,
+        file: &Path,
+        dir: PathBuf,
+        origin: &str,
+    ) -> (String, bool) {
+        let name = file
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let kind = bluepane_docs::kind_of(file);
+        if kind.is_some() {
+            self.remove_preview_dir();
+            self.preview_dir = Some(dir.clone());
+            let opened = if kind == Some(bluepane_docs::Kind::Pdf) {
+                self.open_local_pdf(file, None).map(|()| true)
+            } else {
+                Ok(self.open_office_pages_in(file, &dir))
+            };
+            match opened {
+                // A protected PDF: the password question is on screen, keep its wording.
+                Ok(true) if self.pending.is_some() => return (self.status.clone(), false),
+                Ok(true) => return (format!("Podgląd {origin}: {name}"), false),
+                // No LibreOffice: the text of the document below.
+                Ok(false) => {}
+                Err(error) => {
+                    self.remove_preview_dir();
+                    return (format!("Podgląd {origin} nie powiódł się: {error}"), true);
+                }
+            }
+        }
+        match crate::documents::viewer_for_file(file, &dir) {
+            Ok(viewer) => {
+                self.remove_preview_dir();
+                self.preview_dir = Some(dir);
+                self.viewer = Some(viewer);
+                (format!("Podgląd {origin}: {name}"), false)
+            }
+            Err(error) => {
+                self.remove_preview_dir();
+                let _ = std::fs::remove_dir_all(&dir);
+                (format!("Podgląd {origin} nie powiódł się: {error}"), true)
+            }
+        }
     }
 
     fn show_pages(&mut self, viewer: PageViewer) {
@@ -496,6 +548,53 @@ mod tests {
         assert!(s.pending.is_some());
         s.run_line("cancel").unwrap();
         assert!(s.pending.is_none() && s.pages.is_none());
+    }
+
+    #[test]
+    fn a_protected_pdf_fetched_from_an_archive_or_server_asks_for_the_password_too() {
+        use crate::session::{InputKind, Pending};
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("fetched");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("locked.pdf");
+        std::fs::write(&file, include_bytes!("../../docs/tests/data/protected.pdf")).unwrap();
+        let mut s = Session::new(tmp.path(), tmp.path());
+        let (status, is_error) = s.show_fetched_document(&file, dir.clone(), "z serwera");
+        assert!(!is_error, "{status}");
+        assert!(status.contains("hasłem"), "{status}");
+        assert!(matches!(
+            &s.pending,
+            Some(Pending::Input {
+                kind: InputKind::PdfPassword(_),
+                ..
+            })
+        ));
+        // The fetched copy must survive the question.
+        assert!(file.exists());
+        if let Some(Pending::Input { text, .. }) = &mut s.pending {
+            *text = "sekret".into();
+        }
+        s.run_line("confirm").unwrap();
+        assert_eq!(s.pages.as_ref().unwrap().pages(), 1);
+        s.run_line("pageclose").unwrap();
+        assert!(!dir.exists(), "the fetched copy goes away with the preview");
+    }
+
+    #[test]
+    fn a_fetched_word_document_shows_its_text_without_libreoffice() {
+        std::env::set_var("BLUEPANE_NO_OFFICE", "1");
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("fetched");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("note.rtf");
+        std::fs::write(&file, "{\\rtf1 Hello from the server\\par}").unwrap();
+        let mut s = Session::new(tmp.path(), tmp.path());
+        let (status, is_error) = s.show_fetched_document(&file, dir.clone(), "z archiwum");
+        assert!(!is_error, "{status}");
+        assert!(status.contains("z archiwum"), "{status}");
+        assert!(s.viewer.is_some() && s.pages.is_none());
+        s.remove_preview_dir();
+        assert!(!dir.exists());
     }
 
     #[test]

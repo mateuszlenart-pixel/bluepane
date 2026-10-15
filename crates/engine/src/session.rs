@@ -1826,34 +1826,7 @@ impl Session {
                 Some(dir.join(relative))
             })
             .unwrap_or_else(|| dir.clone());
-        if bluepane_docs::kind_of(&file) == Some(bluepane_docs::Kind::Pdf) {
-            return match self.open_pdf_pages(&file) {
-                Ok(()) => {
-                    self.preview_dir = Some(dir);
-                    (format!("Podgląd z archiwum: {}", file.display()), false)
-                }
-                Err(error) => {
-                    let _ = std::fs::remove_dir_all(&dir);
-                    (format!("Podgląd z archiwum nie powiódł się: {error}"), true)
-                }
-            };
-        }
-        match crate::documents::viewer_for_file(&file, &dir) {
-            Ok(viewer) => {
-                self.remove_preview_dir();
-                self.preview_dir = Some(dir);
-                self.viewer = Some(viewer);
-                let name = file
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                (format!("Podgląd z archiwum: {name}"), false)
-            }
-            Err(error) => {
-                let _ = std::fs::remove_dir_all(&dir);
-                (format!("Podgląd z archiwum nie powiódł się: {error}"), true)
-            }
-        }
+        self.show_fetched_document(&file, dir, "z archiwum")
     }
 
     /// Deletes the temporary directory of the archive preview, if any.
