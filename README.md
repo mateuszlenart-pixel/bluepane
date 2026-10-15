@@ -67,7 +67,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`chmod`, `sync`, `syncrun`, `syncset`, `syncclose`, `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
+`chmod`, `sync`, `syncrun`, `syncset`, `syncclose`, `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queuemove`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -183,7 +183,7 @@ Komendy: `scan`, `scanset <pole> <wartość>` (pola: `range`, `ports`, `names`, 
 ## Kolejka zadań (Ctrl+J)
 
 Kopiowanie, przenoszenie, pakowanie, transfery z serwerów i inne długie zadania idą jedno po drugim. Okno kolejki pokazuje bieżące zadanie z postępem,
-oczekujące (każde można **usunąć z kolejki**, zanim ruszy) i ostatnie zakończone (każde można **ponowić**, np. po błędzie). **Wstrzymaj kolejkę** pozwala
+oczekujące (każde można **usunąć z kolejki** albo **przesunąć**: ▲ wyżej, ▼ niżej, „Na początek”; to samo robi `queuemove <numer> up|down|top`) i ostatnie zakończone (każde można **ponowić**, np. po błędzie). **Wstrzymaj kolejkę** pozwala
 bieżącemu zadaniu się dokończyć, a następne czekają, dopóki ich nie wznowisz; odświeżanie list serwerów i logowanie nie czekają. `stop` przerywa bieżące
 i czyści oczekujące.
 

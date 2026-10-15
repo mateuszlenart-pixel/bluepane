@@ -63,6 +63,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "queuepause",
     "queueresume",
     "queuedel",
+    "queuemove",
     "queueretry",
     "queueclear",
     "sitepassword",
@@ -158,6 +159,14 @@ pub struct UnpackArgs {
     pub password: Option<String>,
     /// `-s`: extract into a subfolder named after the archive.
     pub subfolder: bool,
+}
+
+/// Where `queuemove` puts a waiting job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueueMove {
+    Up,
+    Down,
+    Top,
 }
 
 /// Settings given to `sync`; whatever is left out keeps its previous (or default) value.
@@ -299,6 +308,8 @@ pub enum Command {
     QueueResume,
     /// Drop queued job n (1-based, in the order shown) before it starts.
     QueueDelete(usize),
+    /// Move queued job n (1-based, in the order shown) up, down or to the front.
+    QueueMove(usize, QueueMove),
     /// Queue a finished job (n = 1 is the newest) once more.
     QueueRetry(usize),
     /// Forget the list of finished jobs.
@@ -460,6 +471,7 @@ impl Command {
             "queuepause" => Ok(Command::QueuePause),
             "queueresume" => Ok(Command::QueueResume),
             "queuedel" => parse_row("queuedel", rest).map(Command::QueueDelete),
+            "queuemove" => parse_queue_move(rest),
             "queueretry" => parse_row("queueretry", rest).map(Command::QueueRetry),
             "queueclear" => Ok(Command::QueueClear),
             "siteset" => parse_siteset(rest),
@@ -837,6 +849,19 @@ fn parse_ip(text: &str) -> Result<std::net::Ipv4Addr, EngineError> {
     text.trim()
         .parse()
         .map_err(|_| EngineError(format!("niepoprawny adres IP: {}", text.trim())))
+}
+
+fn parse_queue_move(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("queuemove: użycie: queuemove <numer> up|down|top".into());
+    let (row, direction) = args.split_once(' ').ok_or_else(usage)?;
+    let row = parse_row("queuemove", row)?;
+    let direction = match direction.trim() {
+        "up" => QueueMove::Up,
+        "down" => QueueMove::Down,
+        "top" => QueueMove::Top,
+        _ => return Err(usage()),
+    };
+    Ok(Command::QueueMove(row, direction))
 }
 
 fn parse_row(name: &str, args: &str) -> Result<usize, EngineError> {

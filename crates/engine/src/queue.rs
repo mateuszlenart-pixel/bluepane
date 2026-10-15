@@ -1,6 +1,7 @@
 //! The job queue as the user sees it (Ctrl+J): what runs, what waits and can be removed,
 //! what finished and can be run again; the queue can be paused.
 
+use crate::command::QueueMove;
 use crate::job::{JobKind, JobSpec, RemoteOp};
 use crate::session::Session;
 use crate::EngineError;
@@ -117,6 +118,48 @@ impl Session {
         Ok(())
     }
 
+    /// Moves waiting job `n` (numbered like `queue_delete`) up, down or to the front of the
+    /// waiting jobs. The running job stays where it is.
+    pub(crate) fn queue_move(&mut self, n: usize, to: QueueMove) -> Result<(), EngineError> {
+        let running = usize::from(self.current_spec().is_some_and(|s| !is_housekeeping(s)));
+        let row = n
+            .checked_sub(1 + running)
+            .ok_or_else(|| EngineError("to zadanie już trwa: nie da się go przesunąć".into()))?;
+        // Positions in the real queue of the rows the user sees (listings and logins that
+        // wait in between are not shown, and keep their place relative to the neighbours).
+        let visible: Vec<usize> = self
+            .queue_specs()
+            .enumerate()
+            .filter(|(_, spec)| !is_housekeeping(spec))
+            .map(|(index, _)| index)
+            .collect();
+        let from = *visible
+            .get(row)
+            .ok_or_else(|| EngineError(format!("nie ma zadania {n} w kolejce")))?;
+        let target = match to {
+            QueueMove::Top if row == 0 => None,
+            QueueMove::Up if row == 0 => None,
+            QueueMove::Down if row + 1 == visible.len() => None,
+            QueueMove::Top => Some(visible[0]),
+            QueueMove::Up => Some(visible[row - 1]),
+            QueueMove::Down => Some(visible[row + 1]),
+        };
+        let Some(target) = target else {
+            return Err(EngineError(match to {
+                QueueMove::Down => "to zadanie jest już ostatnie".into(),
+                _ => "to zadanie jest już pierwsze".into(),
+            }));
+        };
+        let title = self
+            .queue_specs()
+            .nth(from)
+            .map(JobSpec::describe)
+            .unwrap_or_default();
+        self.move_queued(from, target);
+        self.status = format!("Przesunięto w kolejce: {title}");
+        Ok(())
+    }
+
     /// Queues finished job `n` (1 = the newest) again.
     pub(crate) fn queue_retry(&mut self, n: usize) -> Result<(), EngineError> {
         let spec = self
@@ -209,6 +252,70 @@ mod tests {
             "the removed job never ran"
         );
         assert!(tmp.path().join("right/b.txt").exists());
+    }
+
+    #[test]
+    fn waiting_jobs_can_be_reordered_and_run_in_the_new_order() {
+        let (tmp, mut s) = session();
+        s.run_line("queuepause").unwrap();
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            s.run_line(&format!("select {name}")).unwrap();
+            s.run_line("copy").unwrap();
+        }
+        let titles =
+            |s: &Session| -> Vec<String> { s.queue_lines().into_iter().map(|l| l.title).collect() };
+        assert_eq!(
+            titles(&s),
+            [
+                "Kopiowanie: a.txt",
+                "Kopiowanie: b.txt",
+                "Kopiowanie: c.txt"
+            ]
+        );
+        s.run_line("queuemove 3 top").unwrap();
+        assert_eq!(
+            titles(&s),
+            [
+                "Kopiowanie: c.txt",
+                "Kopiowanie: a.txt",
+                "Kopiowanie: b.txt"
+            ]
+        );
+        s.run_line("queuemove 1 down").unwrap();
+        s.run_line("queuemove 3 up").unwrap();
+        assert_eq!(
+            titles(&s),
+            [
+                "Kopiowanie: a.txt",
+                "Kopiowanie: b.txt",
+                "Kopiowanie: c.txt"
+            ]
+        );
+        // The ends and bad rows are explained, not silently ignored.
+        assert!(s.run_line("queuemove 1 up").is_err());
+        assert!(s.run_line("queuemove 1 top").is_err());
+        assert!(s.run_line("queuemove 3 down").is_err());
+        assert!(s.run_line("queuemove 9 up").is_err());
+        assert!(s.run_line("queuemove 1").is_err());
+        assert!(s.run_line("queuemove 1 sideways").is_err());
+        s.run_line("queuemove 2 top").unwrap();
+        s.run_line("queueresume").unwrap();
+        settle(&mut s);
+        let order: Vec<String> = s
+            .finished
+            .iter()
+            .rev()
+            .map(|job| job.title.clone())
+            .collect();
+        assert_eq!(
+            order,
+            [
+                "Kopiowanie: b.txt",
+                "Kopiowanie: a.txt",
+                "Kopiowanie: c.txt"
+            ]
+        );
+        assert!(tmp.path().join("right/c.txt").exists());
     }
 
     #[test]
