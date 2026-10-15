@@ -122,7 +122,8 @@ Zrobione (etap 8a, SFTP):
 
 Do zrobienia (8b i dalej):
 - [x] FTP i FTPS (jawny i niejawny; certyfikat przypinany odciskiem SHA-256) przez wspólny interfejs `RemoteFs` (crate `bluepane-remote`, dawniej `bluepane-sftp`); serwery FTP/FTPS w testach
-- [ ] FTP: tryb aktywny, ustawianie daty pliku na serwerze, serwery bez SIZE/MDTM (część rzadkich serwerów); sprawdzić ręcznie z prawdziwym serwerem FTP/FTPS
+- [x] FTP: tryb aktywny (przełącznik w witrynie, `siteset <n> mode active`; testy FTP i FTPS)
+- [ ] FTP: ustawianie daty pliku na serwerze, serwery bez SIZE/MDTM (część rzadkich serwerów); sprawdzić ręcznie z prawdziwym serwerem FTP/FTPS (też tryb aktywny)
 - [x] F6 (przenoszenie w każdą stronę, także w obrębie serwera), podgląd F3 pliku z serwera (plik tymczasowy), kopiowanie serwer -> serwer (przez katalog tymczasowy)
 - [x] F4 pliku z serwera (kopia w edytorze, odesłanie `editsend`), zakładki i historia (Alt+Lewo/Prawo) na serwerze
 - [x] Uprawnienia/chmod na serwerze: komenda `chmod <ósemkowo>` na zaznaczeniu, SFTP (setstat) i FTP/FTPS (`SITE CHMOD`); bez rekurencji, bez wyświetlania uprawnień w kolumnie (do zrobienia)

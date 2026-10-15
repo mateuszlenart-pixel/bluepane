@@ -160,6 +160,8 @@ struct State {
     rest: u64,
     rename_from: Option<String>,
     pasv: Option<TcpListener>,
+    /// Where the client asked the server to connect for data (`PORT` / `EPRT`).
+    active: Option<std::net::SocketAddr>,
     protected: bool,
 }
 
@@ -230,6 +232,7 @@ fn serve(
         rest: 0,
         rename_from: None,
         pasv: None,
+        active: None,
         protected: settings.tls == Tls::Implicit,
     };
     let mut user_ok = false;
@@ -343,7 +346,32 @@ fn serve(
                 state.rest = argument.parse().unwrap_or(0);
                 reply(&mut control, "350 restarting");
             }
+            "PORT" => {
+                let n: Vec<u16> = argument.split(',').filter_map(|p| p.trim().parse().ok()).collect();
+                if n.len() == 6 && n.iter().all(|v| *v < 256) {
+                    let ip = std::net::Ipv4Addr::new(n[0] as u8, n[1] as u8, n[2] as u8, n[3] as u8);
+                    state.active = Some(std::net::SocketAddr::from((ip, n[4] * 256 + n[5])));
+                    state.pasv = None;
+                    reply(&mut control, "200 PORT ok");
+                } else {
+                    reply(&mut control, "501 bad PORT");
+                }
+            }
+            "EPRT" => {
+                // |1|127.0.0.1|34567|
+                let parts: Vec<&str> = argument.split('|').collect();
+                match (parts.get(2).and_then(|a| a.parse().ok()), parts.get(3).and_then(|p| p.parse().ok())) {
+                    (Some(ip), Some(port)) => {
+                        let ip: std::net::IpAddr = ip;
+                        state.active = Some(std::net::SocketAddr::new(ip, port));
+                        state.pasv = None;
+                        reply(&mut control, "200 EPRT ok");
+                    }
+                    _ => reply(&mut control, "501 bad EPRT"),
+                }
+            }
             "PASV" | "EPSV" => {
+                state.active = None;
                 let listener = TcpListener::bind("127.0.0.1:0")?;
                 let port = listener.local_addr()?.port();
                 state.pasv = Some(listener);
@@ -383,17 +411,28 @@ fn data_command(
         "RETR" if !path.is_file() => return reply(control, "550 no such file"),
         _ => {}
     }
-    let Some(listener) = state.pasv.take() else {
-        return reply(control, "425 use PASV first");
-    };
-    reply(control, "150 opening data connection");
-    let _ = listener.set_nonblocking(true);
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let tcp = loop {
-        match listener.accept() {
-            Ok((tcp, _)) => break tcp,
-            Err(_) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
-            Err(_) => return reply(control, "425 no data connection"),
+    let tcp = if let Some(address) = state.active.take() {
+        reply(control, "150 opening data connection");
+        match TcpStream::connect_timeout(&address, Duration::from_secs(5)) {
+            Ok(tcp) => {
+                super::record_active_transfer(state.root.clone());
+                tcp
+            }
+            Err(_) => return reply(control, "425 cannot connect to client"),
+        }
+    } else {
+        let Some(listener) = state.pasv.take() else {
+            return reply(control, "425 use PASV or PORT first");
+        };
+        reply(control, "150 opening data connection");
+        let _ = listener.set_nonblocking(true);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match listener.accept() {
+                Ok((tcp, _)) => break tcp,
+                Err(_) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+                Err(_) => return reply(control, "425 no data connection"),
+            }
         }
     };
     let _ = tcp.set_nonblocking(false);

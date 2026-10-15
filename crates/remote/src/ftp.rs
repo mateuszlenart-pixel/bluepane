@@ -108,6 +108,7 @@ impl FtpConnection {
         timeout: Duration,
         known: &KnownHosts,
         trust: Option<&str>,
+        active: bool,
     ) -> Result<FtpConnection, RemoteError> {
         let address = (host, port)
             .to_socket_addrs()
@@ -119,7 +120,7 @@ impl FtpConnection {
                 .map_err(|e| RemoteError::Connect(e.to_string()))
         };
         let mut session = match protocol {
-            Protocol::Ftp => Session::Plain(connect_plain()?),
+            Protocol::Ftp => Session::Plain(with_mode(connect_plain()?, active)),
             Protocol::FtpsExplicit | Protocol::FtpsImplicit => {
                 let (config, observed) = pinned_config(host, port, known, trust)
                     .map_err(|e| RemoteError::Connect(e.to_string()))?;
@@ -138,7 +139,7 @@ impl FtpConnection {
                     RustlsFtpStream::connect_secure_implicit((host, port), connector, host)
                 };
                 match secured {
-                    Ok(stream) => Session::Secure(stream),
+                    Ok(stream) => Session::Secure(with_mode(stream, active)),
                     Err(error) => {
                         return Err(tls_failure(&error.to_string(), &observed, host, port))
                     }
@@ -163,6 +164,22 @@ impl FtpConnection {
 
     fn lock(&self) -> MutexGuard<'_, Session> {
         self.session.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// How long the server gets to connect back to us in active mode.
+const ACTIVE_ACCEPT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Passive mode (the client connects for data) is the default; active mode makes the server
+/// connect to a port we open, which needs this machine to be reachable from the server.
+fn with_mode<T: suppaftp::TlsStream>(
+    stream: suppaftp::ImplFtpStream<T>,
+    active: bool,
+) -> suppaftp::ImplFtpStream<T> {
+    if active {
+        stream.active_mode(ACTIVE_ACCEPT_TIMEOUT)
+    } else {
+        stream
     }
 }
 

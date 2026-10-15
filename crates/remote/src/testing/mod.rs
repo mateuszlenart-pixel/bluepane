@@ -24,6 +24,23 @@ pub fn last_chmod(path: impl AsRef<Path>) -> Option<u32> {
     list.iter().rev().find(|(p, _)| p == path).map(|(_, m)| *m)
 }
 
+static ACTIVE_TRANSFERS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+pub(crate) fn record_active_transfer(root: PathBuf) {
+    ACTIVE_TRANSFERS.lock().unwrap().push(root);
+}
+
+/// How many data connections the FTP test server over `root` made to the client (active mode).
+pub fn active_transfers(root: impl AsRef<Path>) -> usize {
+    let root = root.as_ref();
+    ACTIVE_TRANSFERS
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|r| *r == root)
+        .count()
+}
+
 pub use ftp_server::{start_ftp, FtpServer, FtpSettings, Tls};
 pub use memory::{FakeBitwarden, MemoryKeys, MemoryServices};
 pub use sftp_server::{start, write_file, Settings, TestServer};

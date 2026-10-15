@@ -54,6 +54,8 @@ pub struct Site {
     pub secret: SecretStore,
     /// Directory to open after connecting; empty means the login directory.
     pub start_dir: String,
+    /// FTP and FTPS only: active mode (the server connects back for data) instead of passive.
+    pub active: bool,
 }
 
 impl Site {
@@ -67,6 +69,7 @@ impl Site {
             key: None,
             secret: SecretStore::Ask,
             start_dir: String::new(),
+            active: false,
         }
     }
 
@@ -119,6 +122,7 @@ impl Site {
                     Duration::from_secs(20),
                     known,
                     trust,
+                    self.active,
                 )?;
                 Ok(Arc::new(conn))
             }
@@ -262,6 +266,7 @@ impl Sites {
                     site.key = Some(PathBuf::from(value)).filter(|p| !p.as_os_str().is_empty())
                 }
                 "start" => site.start_dir = value,
+                "mode" => site.active = value.trim().eq_ignore_ascii_case("active"),
                 "secret" => {
                     site.secret = if let Some(secret) = value.strip_prefix("local:") {
                         SecretStore::Local(secret.to_string())
@@ -331,6 +336,9 @@ impl Sites {
             if !site.start_dir.is_empty() {
                 text.push_str(&format!("start = {}\n", escape(&site.start_dir)));
             }
+            if site.active {
+                text.push_str("mode = active\n");
+            }
             let secret = match &site.secret {
                 SecretStore::Ask => "ask".to_string(),
                 SecretStore::Local(secret) => format!("local:{secret}"),
@@ -358,7 +366,11 @@ mod tests {
         let mut ha = Site::new("Home Assistant", "ha.local", "hass");
         ha.port = 2222;
         ha.secret = SecretStore::Local("p@ss = word\\with\nnewline".into());
-        vec![proxmox, ha, Site::new("Ask me", "example.com", "bob")]
+        let mut nas = Site::new("NAS", "nas.local", "bob");
+        nas.protocol = Protocol::Ftp;
+        nas.port = 21;
+        nas.active = true;
+        vec![proxmox, ha, Site::new("Ask me", "example.com", "bob"), nas]
     }
 
     #[test]
