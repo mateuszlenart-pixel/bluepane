@@ -11,7 +11,7 @@ use bluepane_search::{Encoding, Hit, Location, Query, Summary, TextQuery};
 use chrono::{Local, NaiveDate, TimeZone};
 
 use crate::session::Session;
-use crate::{parse_size, EngineError, Viewer};
+use crate::{parse_size, EngineError};
 
 /// What the user typed in the search window; turned into a `Query` by `findrun`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -419,7 +419,7 @@ impl Session {
         if hit.is_dir {
             return Err(EngineError("to katalog, nie plik (użyj findgo)".into()));
         }
-        let mut viewer = Viewer::open(path)?;
+        let mut viewer = self.viewer_for_local(path)?;
         let text =
             self.find.as_ref().map(|v| v.form.text.clone()).filter(|t| {
                 !t.is_empty() && !self.find.as_ref().is_some_and(|v| v.form.text_regex)

@@ -11,6 +11,7 @@ pub struct Keymap {
     bindings: HashMap<String, String>,
     /// Keys while the file viewer is open.
     viewer_bindings: HashMap<String, String>,
+    pages_bindings: HashMap<String, String>,
 }
 
 impl Default for Keymap {
@@ -108,6 +109,22 @@ impl Default for Keymap {
             ("Escape", "viewer close"),
             ("Q", "viewer close"),
         ];
+        let pages_pairs = [
+            ("PageDown", "page next"),
+            ("ArrowRight", "page next"),
+            ("Space", "page next"),
+            ("PageUp", "page prev"),
+            ("ArrowLeft", "page prev"),
+            ("Backspace", "page prev"),
+            ("Home", "page first"),
+            ("End", "page last"),
+            ("Plus", "pagezoom in"),
+            ("Equals", "pagezoom in"),
+            ("Minus", "pagezoom out"),
+            ("Num0", "pagezoom fit"),
+            ("Escape", "pageclose"),
+            ("Q", "pageclose"),
+        ];
         let to_map = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
             pairs
                 .iter()
@@ -117,6 +134,7 @@ impl Default for Keymap {
         Self {
             bindings: to_map(&pairs),
             viewer_bindings: to_map(&viewer_pairs),
+            pages_bindings: to_map(&pages_pairs),
         }
     }
 }
@@ -128,6 +146,11 @@ impl Keymap {
     }
 
     /// The command line bound to a key while the file viewer is open.
+    /// The command for a key while a document is shown as pages.
+    pub fn lookup_pages(&self, key: &str) -> Option<&str> {
+        self.pages_bindings.get(key).map(String::as_str)
+    }
+
     pub fn lookup_viewer(&self, key: &str) -> Option<&str> {
         self.viewer_bindings.get(key).map(String::as_str)
     }

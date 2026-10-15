@@ -5,6 +5,7 @@ use bluepane_ops::Resolution;
 use bluepane_sync::{CompareBy, Deletion, Direction, Variant};
 use std::time::Duration;
 
+use crate::pageview::{PageMove, ZoomChange};
 use crate::{ClickMode, EngineError, SortKey};
 
 /// Names accepted at the command line (aliases excluded).
@@ -39,6 +40,9 @@ pub const COMMAND_NAMES: &[&str] = &[
     "siteset",
     "sitedel",
     "editsend",
+    "page",
+    "pagezoom",
+    "pageclose",
     "copynames",
     "scan",
     "scanset",
@@ -296,6 +300,12 @@ pub enum Command {
     QueueRetry(usize),
     /// Forget the list of finished jobs.
     QueueClear,
+    /// Turn the pages of the open document (PDF, or a document converted by LibreOffice).
+    Page(PageMove),
+    /// Zoom the open document: `pagezoom in`, `out`, `fit`, or a percentage.
+    PageZoom(ZoomChange),
+    /// Close the page view.
+    PageClose,
     /// Copy the names (or paths) of the selected entries, one per line, to the clipboard.
     CopyNames(NameFormat),
     /// Send the file edited with F4 on a server back to it (Ctrl+Shift+F4).
@@ -393,6 +403,9 @@ impl Command {
             "sites" => Ok(Command::Sites),
             "siteclose" => Ok(Command::SiteClose),
             "editsend" => Ok(Command::EditSend),
+            "page" => parse_page(rest).map(Command::Page),
+            "pagezoom" => parse_pagezoom(rest).map(Command::PageZoom),
+            "pageclose" => Ok(Command::PageClose),
             "copynames" => match rest.to_ascii_lowercase().as_str() {
                 "" | "file" | "name" | "ext" => Ok(Command::CopyNames(NameFormat::File)),
                 "stem" | "short" => Ok(Command::CopyNames(NameFormat::Stem)),
@@ -714,6 +727,37 @@ fn parse_sync(args: &str) -> Result<SyncArgs, EngineError> {
         }
     }
     Ok(sync)
+}
+
+fn parse_page(args: &str) -> Result<PageMove, EngineError> {
+    match args.trim().to_ascii_lowercase().as_str() {
+        "next" | "+" => Ok(PageMove::Next),
+        "prev" | "-" => Ok(PageMove::Prev),
+        "first" => Ok(PageMove::First),
+        "last" => Ok(PageMove::Last),
+        number => number
+            .parse()
+            .ok()
+            .filter(|n| *n >= 1)
+            .map(PageMove::To)
+            .ok_or_else(|| {
+                EngineError("page: użycie: page next|prev|first|last|<numer strony>".into())
+            }),
+    }
+}
+
+fn parse_pagezoom(args: &str) -> Result<ZoomChange, EngineError> {
+    match args.trim().to_ascii_lowercase().as_str() {
+        "in" | "+" => Ok(ZoomChange::In),
+        "out" | "-" => Ok(ZoomChange::Out),
+        "fit" => Ok(ZoomChange::Fit),
+        percent => percent
+            .trim_end_matches('%')
+            .parse()
+            .ok()
+            .map(ZoomChange::Percent)
+            .ok_or_else(|| EngineError("pagezoom: użycie: pagezoom in|out|fit|<procent>".into())),
+    }
 }
 
 /// A site name at the start of `text`: one word, or several in double quotes

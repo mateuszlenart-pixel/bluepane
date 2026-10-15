@@ -5,12 +5,14 @@
 //! without a window.
 
 mod command;
+mod documents;
 mod find;
 mod format;
 mod job;
 mod keymap;
 mod mask;
 mod multirename;
+mod pageview;
 mod panel;
 mod queue;
 mod remote;
@@ -20,6 +22,7 @@ mod session;
 mod viewer;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
+pub use bluepane_docs::PageImage;
 pub use bluepane_netscan::{local_range, Host as ScanHost, ScanSummary, Service as ScanService};
 pub use bluepane_ops::Resolution;
 pub use bluepane_remote::{bitwarden_available, Protocol, SecretServices, SecretStore, Site};
@@ -51,6 +54,7 @@ pub use job::{
 pub use keymap::Keymap;
 pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};
+pub use pageview::{PageMove, PageState, PageViewer, PageZoom, RenderedPage, ZoomChange};
 pub use panel::{
     is_parent_entry, ArchiveView, ClickMode, Panel, RemoteView, Sort, SortKey, VirtualList,
     PARENT_NAME,

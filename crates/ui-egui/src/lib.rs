@@ -4,6 +4,7 @@
 //! It contains no file system logic.
 
 mod find_ui;
+mod pages_ui;
 mod queue_ui;
 mod rename_ui;
 mod scan_ui;
@@ -56,6 +57,8 @@ pub struct BluepaneUi {
     rename_edit: Option<(usize, String)>,
     /// The selected row of the search results.
     find_selected: usize,
+    /// The picture of the page on screen (see `pages_ui`).
+    page_texture: Option<(pages_ui::TextureKey, egui::TextureHandle)>,
     /// The site being edited in the site manager.
     site_form: Option<sites_ui::SiteForm>,
 }
@@ -72,6 +75,7 @@ impl BluepaneUi {
             sync_form: None,
             rename_edit: None,
             find_selected: 0,
+            page_texture: None,
             site_form: None,
         }
     }
@@ -104,7 +108,9 @@ impl BluepaneUi {
             self.bottom_bar(ui, cmd_id);
         });
         egui::CentralPanel::default_margins().show(ui, |ui| {
-            if self.session.viewer.is_some() {
+            if self.session.pages.is_some() {
+                self.pages_ui(ui);
+            } else if self.session.viewer.is_some() {
                 self.viewer_ui(ui);
             } else if self.session.sync.is_some() {
                 self.sync_ui(ui);
@@ -506,6 +512,10 @@ impl BluepaneUi {
             return;
         };
         ui.horizontal(|ui| {
+            // The cancel button comes first so a long file name can never push it away.
+            if ui.button("Anuluj").clicked() {
+                self.dispatch("stop");
+            }
             let queued = if job.queued > 0 {
                 format!(" (w kolejce: {})", job.queued)
             } else {
@@ -529,13 +539,10 @@ impl BluepaneUi {
                     human_size(job.bytes_total)
                 ));
             }
-            ui.label(RichText::new(&job.current).weak());
             if job.waiting_for_answer {
                 ui.label(RichText::new("czeka na decyzję").color(Color32::YELLOW));
             }
-            if ui.button("Anuluj").clicked() {
-                self.dispatch("stop");
-            }
+            ui.add(egui::Label::new(RichText::new(&job.current).weak()).truncate());
         });
     }
 
@@ -580,6 +587,10 @@ impl BluepaneUi {
                     _ => {}
                 }
             }
+            return;
+        }
+        if self.session.pages.is_some() {
+            self.pages_keys(&pressed);
             return;
         }
         if self.session.viewer.is_some() {
