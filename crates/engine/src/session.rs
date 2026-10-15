@@ -248,6 +248,9 @@ pub struct Session {
     pub(crate) theme: String,
     /// Folder sizes counted on request.
     pub dir_sizes: crate::DirSizes,
+    /// Cached footer text and bar scale of each panel (see `panel_stats`).
+    pub(crate) stats_cache:
+        std::sync::Mutex<[Option<(crate::dirsize::StatsKey, crate::PanelStats)>; 2]>,
     /// Free space of the drives shown above the panels (asked in the background).
     pub disk_usage: crate::DiskUsage,
     /// Quick View (Ctrl+Q): the preview in the other panel, when it is on.
@@ -407,6 +410,7 @@ impl Session {
             config_dir: None,
             theme: crate::settings::DEFAULT_THEME.to_string(),
             dir_sizes: crate::DirSizes::default(),
+            stats_cache: std::sync::Mutex::default(),
             disk_usage: crate::DiskUsage::default(),
             quick: None,
             quick_want: None,

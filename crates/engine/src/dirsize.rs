@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::format::human_size;
@@ -18,9 +18,16 @@ pub struct DirSizes {
     sizes: Arc<Mutex<HashMap<PathBuf, u64>>>,
     running: Arc<AtomicUsize>,
     cancel: Arc<AtomicBool>,
+    /// Grows whenever a size is added or the counts are forgotten.
+    version: Arc<AtomicU64>,
 }
 
 impl DirSizes {
+    /// Changes whenever the counted sizes do (for caches built on them).
+    pub fn version(&self) -> u64 {
+        self.version.load(Ordering::Relaxed)
+    }
+
     pub fn get(&self, path: &Path) -> Option<u64> {
         self.sizes.lock().ok()?.get(path).copied()
     }
@@ -38,13 +45,15 @@ impl DirSizes {
         if let Ok(mut sizes) = self.sizes.lock() {
             sizes.clear();
         }
+        self.version.fetch_add(1, Ordering::Relaxed);
     }
 
     fn start(&self, folders: Vec<PathBuf>) {
-        let (sizes, running, cancel) = (
+        let (sizes, running, cancel, version) = (
             self.sizes.clone(),
             self.running.clone(),
             self.cancel.clone(),
+            self.version.clone(),
         );
         running.fetch_add(1, Ordering::Relaxed);
         std::thread::spawn(move || {
@@ -54,6 +63,7 @@ impl DirSizes {
                         if let Ok(mut map) = sizes.lock() {
                             map.insert(folder, total);
                         }
+                        version.fetch_add(1, Ordering::Relaxed);
                     }
                     None => break,
                 }
@@ -137,49 +147,106 @@ impl Session {
         }
     }
 
+    /// What the panel's footer and size bars need, cached until the listing, the selection or
+    /// the counted folder sizes change (they are asked for in every frame, and a folder can
+    /// hold a hundred thousand files).
+    pub fn panel_stats(&self, side: usize) -> PanelStats {
+        let panel = &self.panels[side];
+        let key = StatsKey {
+            cwd: panel.cwd.clone(),
+            entries: panel.entries.len(),
+            revision: panel.revision,
+            selection: panel.selected.revision(),
+            sizes: self.dir_sizes.version(),
+        };
+        let mut cache = self.stats_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((cached, stats)) = &cache[side] {
+            if *cached == key {
+                return stats.clone();
+            }
+        }
+        let stats = self.compute_stats(side);
+        cache[side] = Some((key, stats.clone()));
+        stats
+    }
+
     /// The line under a panel: how much is marked, or what the folder holds.
     pub fn panel_summary(&self, side: usize) -> String {
+        self.panel_stats(side).summary
+    }
+
+    fn compute_stats(&self, side: usize) -> PanelStats {
         let panel = &self.panels[side];
-        let real: Vec<&bluepane_vfs::Entry> = panel
-            .entries
-            .iter()
-            .filter(|e| !is_parent_entry(e))
-            .collect();
-        let describe = |list: &[&bluepane_vfs::Entry]| -> (usize, usize, u64) {
-            let dirs = list.iter().filter(|e| e.is_dir()).count();
-            let bytes: u64 = list.iter().filter_map(|e| self.entry_size(e)).sum();
-            (list.len() - dirs, dirs, bytes)
-        };
-        let marked: Vec<&bluepane_vfs::Entry> = real
-            .iter()
-            .copied()
-            .filter(|e| panel.selected.contains(&e.path))
-            .collect();
-        let (files, dirs, bytes) = describe(&marked);
-        if !marked.is_empty() {
+        let mut biggest = 0u64;
+        let (mut files, mut dirs, mut bytes) = (0usize, 0usize, 0u64);
+        let (mut marked_files, mut marked_dirs, mut marked_bytes) = (0usize, 0usize, 0u64);
+        let mut real = 0usize;
+        for entry in panel.entries.iter().filter(|e| !is_parent_entry(e)) {
+            real += 1;
+            let size = self.entry_size(entry);
+            biggest = biggest.max(size.unwrap_or(0));
+            let is_dir = entry.is_dir();
+            if is_dir {
+                dirs += 1;
+            } else {
+                files += 1;
+            }
+            bytes += size.unwrap_or(0);
+            if panel.selected.contains(&entry.path) {
+                if is_dir {
+                    marked_dirs += 1;
+                } else {
+                    marked_files += 1;
+                }
+                marked_bytes += size.unwrap_or(0);
+            }
+        }
+        let summary = if marked_files + marked_dirs > 0 {
             let mut parts = Vec::new();
-            if files > 0 {
-                parts.push(plural(files, "plik", "pliki", "plików"));
+            if marked_files > 0 {
+                parts.push(plural(marked_files, "plik", "pliki", "plików"));
             }
-            if dirs > 0 {
-                parts.push(plural(dirs, "katalog", "katalogi", "katalogów"));
+            if marked_dirs > 0 {
+                parts.push(plural(marked_dirs, "katalog", "katalogi", "katalogów"));
             }
-            return format!(
+            format!(
                 "Zaznaczono: {} ({}) z {}",
                 parts.join(", "),
-                human_size(bytes),
-                plural(real.len(), "elementu", "elementów", "elementów")
-            );
+                human_size(marked_bytes),
+                plural(real, "elementu", "elementów", "elementów")
+            )
+        } else {
+            format!(
+                "{}: {}, {} ({})",
+                plural(real, "element", "elementy", "elementów"),
+                plural(dirs, "katalog", "katalogi", "katalogów"),
+                plural(files, "plik", "pliki", "plików"),
+                human_size(bytes)
+            )
+        };
+        PanelStats {
+            summary,
+            biggest: biggest.max(1),
         }
-        let (files, dirs, bytes) = describe(&real);
-        format!(
-            "{}: {}, {} ({})",
-            plural(real.len(), "element", "elementy", "elementów"),
-            plural(dirs, "katalog", "katalogi", "katalogów"),
-            plural(files, "plik", "pliki", "plików"),
-            human_size(bytes)
-        )
     }
+}
+
+/// The footer text of a panel and the size the longest bar stands for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelStats {
+    pub summary: String,
+    /// Size of the biggest file or counted folder (at least 1).
+    pub biggest: u64,
+}
+
+/// What the cached [`PanelStats`] were computed from.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct StatsKey {
+    cwd: PathBuf,
+    entries: usize,
+    revision: u64,
+    selection: u64,
+    sizes: u64,
 }
 
 #[cfg(test)]
@@ -274,5 +341,77 @@ mod tests {
         assert!(text.starts_with("Zaznaczono: 1 plik, 1 katalog"), "{text}");
         assert!(text.contains("(4.0 KB)") || text.contains("KB"), "{text}");
         assert!(text.ends_with("z 4 elementów"), "{text}");
+    }
+
+    #[test]
+    fn the_footer_follows_selection_listing_and_counted_sizes_but_is_not_recomputed_needlessly() {
+        let (tmp, mut s) = session();
+        let before = s.panel_stats(0);
+        assert_eq!(s.panel_stats(0), before, "same state, same answer");
+        s.run_line("select a.txt").unwrap();
+        let marked = s.panel_stats(0);
+        assert_ne!(marked.summary, before.summary);
+        assert!(
+            marked.summary.starts_with("Zaznaczono: 1 plik"),
+            "{}",
+            marked.summary
+        );
+        // Unmarking returns to the plain line.
+        s.run_line("unselectall").unwrap();
+        assert_eq!(s.panel_stats(0).summary, before.summary);
+        // A new file shows up after a refresh.
+        write(&tmp.path().join("left/new.txt"), 5);
+        s.run_line("refresh").unwrap();
+        assert_ne!(s.panel_stats(0).summary, before.summary);
+        // Counting a folder changes the bar scale.
+        let small = s.panel_stats(0).biggest;
+        s.run_line("select big").unwrap();
+        s.run_line("dirsize").unwrap();
+        wait(&s);
+        assert!(
+            s.panel_stats(0).biggest > small,
+            "{} > {small}",
+            s.panel_stats(0).biggest
+        );
+    }
+
+    #[test]
+    fn a_hundred_thousand_entries_cost_one_pass_and_then_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = Session::new(tmp.path(), tmp.path());
+        s.panels[0].entries = (0..100_000)
+            .map(|i| bluepane_vfs::Entry {
+                name: format!("file-{i:06}.txt"),
+                path: tmp.path().join(format!("file-{i:06}.txt")),
+                kind: if i % 10 == 0 {
+                    bluepane_vfs::EntryKind::Dir
+                } else {
+                    bluepane_vfs::EntryKind::File
+                },
+                size: i as u64,
+                modified: None,
+                hidden: false,
+            })
+            .collect();
+        s.panels[0].revision += 1;
+        for i in (0..100_000).step_by(7) {
+            let path = s.panels[0].entries[i].path.clone();
+            s.panels[0].selected.insert(path);
+        }
+        let first = s.panel_stats(0);
+        assert!(
+            first.summary.starts_with("Zaznaczono:"),
+            "{}",
+            first.summary
+        );
+        let start = std::time::Instant::now();
+        for _ in 0..1000 {
+            assert_eq!(s.panel_stats(0), first);
+        }
+        assert!(
+            start.elapsed() < Duration::from_millis(250),
+            "1000 repeated frames took {:?}",
+            start.elapsed()
+        );
     }
 }

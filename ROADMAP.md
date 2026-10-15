@@ -190,8 +190,8 @@ Wnioski z audytu: `session.rs` ma ok. 4400 linii i 55 publicznych pól (stan ka�
 osobno, UI czyta pola wprost); część danych panelu liczy się w każdej klatce; pięć różnych
 formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 
-- [ ] 11a Narzędzia jako moduły: wspólny interfejs narzędzia (stan, komendy, klawisze, zamykanie, tytuł zakładki) zamiast osobnych pól i gałęzi w `Session`; dok i obsługa klawiszy biorą listę narzędzi z jednego miejsca. Bez zmian dla użytkownika, wszystkie testy przechodzą bez zmian
-- [ ] 11b Wydajność listy: podsumowanie panelu, największy rozmiar (paski), klasa pliku i okruszki liczone przy zmianie listy, nie w każdej klatce; test na 100 tys. plików (czas klatki, pamięć) jako cel etapu 3
+- [x] 11a (wersja okrojona: lista narzędzi `Tool` w silniku, dok i klawisze z jednego miejsca; stan narzędzi nadal w `Session`) Narzędzia jako moduły: wspólny interfejs narzędzia (stan, komendy, klawisze, zamykanie, tytuł zakładki) zamiast osobnych pól i gałęzi w `Session`; dok i obsługa klawiszy biorą listę narzędzi z jednego miejsca. Bez zmian dla użytkownika, wszystkie testy przechodzą bez zmian
+- [x] 11b (statystyki panelu liczone raz i buforowane: `panel_stats`, liczniki zmian zaznaczenia/listy/rozmiarów katalogów; kolumny panelu chowają się w wąskim panelu, nazwy zostają czytelne; testy 100 tys. wpisów) Wydajność listy: podsumowanie panelu, największy rozmiar (paski), klasa pliku i okruszki liczone przy zmianie listy, nie w każdej klatce; test na 100 tys. plików (czas klatki, pamięć) jako cel etapu 3
 - [ ] 11c Jedna konfiguracja: `settings.toml` (albo JSON) z wersją formatu i przeniesieniem starych plików (`settings.conf`, `scan_favorites.conf`, układ; `sites.conf` i `known_hosts` zostają osobno lub wchodzą po decyzji); **konfigurowalne skróty** (sekcja `[keys]`, komenda `bind <klawisz> <komenda>`), z walidacją, że komenda istnieje
 - [ ] 11d Testy GUI w CI: `egui_kittest` (zależność do zgody) — scenariusze: start, otwarcie narzędzia w doku, Quick View, zmiana nazw z podświetleniem; porównanie zrzutów z wzorcem
 - [ ] 11e Dług techniczny: łatka `suppaftp` zgłoszona upstream (i usunięcie `vendor/` po wydaniu), wspólna tabela CP1250 (dziś w dwóch crate'ach), na Windows bez okna konsoli w wersji release (z plikiem logów zamiast niej), ikona aplikacji, plik logów (`bluepane.log` w katalogu konfiguracji) do zgłaszania błędów
@@ -211,7 +211,7 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 - [ ] 12j **Ściąga klawiszy**: przytrzymanie Ctrl (albo `?`) nakłada skróty na przyciski; wyraźny wskaźnik, która zakładka doku ma klawiaturę
 - [ ] 12k **Obrazy**: widok miniatur (przełącznik lista/siatka) i podgląd obrazów w Quick View i F3 (zależność `image` do zgody; tylko popularne formaty)
 - [ ] 12l **Kolumny**: wybór kolumn (uprawnienia, właściciel, data utworzenia, suma SHA-256, status gita), szerokość przeciągana myszą, zapamiętana; gęstość zwarta/wygodna; **jasny motyw** (po decyzji właściciela) 
-- [ ] 12m Dok — poprawki z etapu 10: wąskie panele bez nakładania nagłówków (chowanie kolumn), komendy `layout save`/`layout reset`, Quick View jako zakładka doku (do wyboru zamiast zastępowania panelu), oba panele zawsze widoczne
+- [ ] 12m Dok — poprawki z etapu 10 (wąskie panele: zrobione w 11b): komendy `layout save`/`layout reset`, Quick View jako zakładka doku (do wyboru zamiast zastępowania panelu), oba panele zawsze widoczne
 
 #### Etap 13: automatyzacja (wykorzystanie modelu komend)
 

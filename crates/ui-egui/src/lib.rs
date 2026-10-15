@@ -923,15 +923,9 @@ impl BluepaneUi {
 
         let theme = self.theme.clone();
         let session = &self.session;
-        // The longest bar is the biggest file (or counted folder) of this listing.
-        let biggest = panel
-            .entries
-            .iter()
-            .filter_map(|e| session.entry_size(e))
-            .max()
-            .unwrap_or(0)
-            .max(1);
-        let summary = session.panel_summary(index);
+        // Footer text and the size the longest bar stands for: cached by the engine.
+        let stats = session.panel_stats(index);
+        let (biggest, summary) = (stats.biggest, stats.summary);
         let row_height = ui.spacing().interact_size.y;
         let stride = row_height + ui.spacing().item_spacing.y;
         let cursor = panel.cursor;
@@ -953,6 +947,10 @@ impl BluepaneUi {
             (columns.size, SortKey::Size, "Rozmiar"),
             (columns.date, SortKey::Date, "Data"),
         ] {
+            // A column dropped because the panel is narrow has no title either.
+            if rect.width() < 1.0 {
+                continue;
+            }
             let response = ui.interact(
                 rect,
                 ui.id().with(("sort", index, label)),
@@ -1072,9 +1070,11 @@ impl BluepaneUi {
                         (false, None) => String::new(),
                     };
                     // A bar behind the size, as long as the size is relative to the biggest.
-                    if let Some(bytes) =
-                        known_size.filter(|b| *b > 0 && !bluepane_engine::is_parent_entry(entry))
-                    {
+                    if let Some(bytes) = known_size.filter(|b| {
+                        *b > 0
+                            && cols.size.width() > 1.0
+                            && !bluepane_engine::is_parent_entry(entry)
+                    }) {
                         let fraction = (bytes as f64 / biggest as f64).clamp(0.02, 1.0) as f32;
                         let bar = Rect::from_min_max(
                             egui::pos2(
@@ -1187,19 +1187,45 @@ impl Columns {
     const EXT: f32 = 56.0;
     const SIZE: f32 = 80.0;
     const DATE: f32 = 140.0;
+    /// The name column never gets narrower than this while another column is shown.
+    const NAME_MIN: f32 = 140.0;
 
+    /// The columns of a row. Size is dropped last, then the type, then the date goes first:
+    /// a column that would squeeze the name below [`Self::NAME_MIN`] is not shown (zero width
+    /// at the right edge), so a narrow panel (tools docked beside it) still shows names.
     fn split(row: Rect) -> Columns {
-        let date_left = row.right() - Self::DATE;
-        let size_left = date_left - Self::SIZE;
-        let ext_left = size_left - Self::EXT;
         let cut = |left: f32, right: f32| {
             Rect::from_min_max(egui::pos2(left, row.top()), egui::pos2(right, row.bottom()))
         };
+        let mut room = row.width() - Self::NAME_MIN;
+        let show_size = room >= Self::SIZE;
+        if show_size {
+            room -= Self::SIZE;
+        }
+        let show_ext = show_size && room >= Self::EXT;
+        if show_ext {
+            room -= Self::EXT;
+        }
+        let show_date = show_ext && room >= Self::DATE;
+        // Placed from the right edge: date, size, type; the name takes what is left.
+        let mut right = row.right();
+        let mut place = |shown: bool, width: f32| {
+            if shown {
+                let rect = cut(right - width, right);
+                right -= width;
+                rect
+            } else {
+                cut(row.right(), row.right())
+            }
+        };
+        let date = place(show_date, Self::DATE);
+        let size = place(show_size, Self::SIZE);
+        let ext = place(show_ext, Self::EXT);
         Columns {
-            name: cut(row.left(), ext_left.max(row.left())),
-            ext: cut(ext_left.max(row.left()), size_left.max(row.left())),
-            size: cut(size_left.max(row.left()), date_left.max(row.left())),
-            date: cut(date_left.max(row.left()), row.right()),
+            name: cut(row.left(), right),
+            ext,
+            size,
+            date,
         }
     }
 }
@@ -1253,6 +1279,41 @@ mod tests {
         assert_eq!(c.ext.right(), c.size.left());
         assert_eq!(c.size.right(), c.date.left());
         assert_eq!(c.date.right(), 500.0);
+    }
+
+    #[test]
+    fn a_panel_beside_a_tool_drops_columns_but_keeps_the_name_readable() {
+        let columns = |w: f32| {
+            Columns::split(Rect::from_min_max(
+                egui::pos2(0.0, 0.0),
+                egui::pos2(w, 20.0),
+            ))
+        };
+        // Wide: everything.
+        let wide = columns(500.0);
+        assert!(wide.date.width() > 0.0 && wide.ext.width() > 0.0 && wide.size.width() > 0.0);
+        // Narrower: the date goes first, then the type; the size stays longest.
+        let medium = columns(340.0);
+        assert_eq!(medium.date.width(), 0.0);
+        assert!(medium.ext.width() > 0.0 && medium.size.width() > 0.0);
+        let narrow = columns(240.0);
+        assert_eq!((narrow.date.width(), narrow.ext.width()), (0.0, 0.0));
+        assert!(narrow.size.width() > 0.0);
+        let tiny = columns(150.0);
+        assert_eq!(tiny.size.width(), 0.0);
+        assert_eq!(tiny.name.width(), 150.0);
+        // Whenever a column is shown the name keeps its minimum width.
+        for w in (100..700).step_by(10) {
+            let c = columns(w as f32);
+            if c.size.width() > 0.0 {
+                assert!(
+                    c.name.width() >= Columns::NAME_MIN,
+                    "{w}: {}",
+                    c.name.width()
+                );
+            }
+            assert!(c.name.width() >= 0.0);
+        }
     }
 
     #[test]
