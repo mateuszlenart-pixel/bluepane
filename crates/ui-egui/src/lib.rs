@@ -10,6 +10,7 @@ mod rename_ui;
 mod scan_ui;
 mod sites_ui;
 mod sync_ui;
+mod theme;
 
 use std::time::Duration;
 
@@ -61,10 +62,16 @@ pub struct BluepaneUi {
     page_texture: Option<(pages_ui::TextureKey, egui::TextureHandle)>,
     /// The site being edited in the site manager.
     site_form: Option<sites_ui::SiteForm>,
+    /// The palette in use and the name of the theme egui was last given.
+    theme: theme::Theme,
+    theme_applied: bool,
 }
 
 impl BluepaneUi {
-    pub fn new(session: Session) -> Self {
+    pub fn new(mut session: Session) -> Self {
+        // The saved settings (theme) are needed before the first frame.
+        session.load_config();
+        let theme_name = session.theme().to_string();
         Self {
             session,
             command_line: String::new(),
@@ -77,6 +84,8 @@ impl BluepaneUi {
             find_selected: 0,
             page_texture: None,
             site_form: None,
+            theme: theme::Theme::by_name(&theme_name),
+            theme_applied: false,
         }
     }
 
@@ -87,6 +96,12 @@ impl BluepaneUi {
     /// Draws one frame. Call this from `eframe::App::ui`.
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // The colours follow the session's theme (`theme` command, saved settings).
+        if !self.theme_applied || self.theme.name != self.session.theme() {
+            self.theme = theme::Theme::by_name(self.session.theme());
+            self.theme.apply(&ctx);
+            self.theme_applied = true;
+        }
         // Text a command wants on the clipboard (`copynames`).
         if let Some(text) = self.session.take_clipboard() {
             ctx.copy_text(text);
@@ -668,9 +683,9 @@ impl BluepaneUi {
 
     fn bottom_bar(&mut self, ui: &mut egui::Ui, cmd_id: egui::Id) {
         let status_color = if self.session.status_is_error {
-            Color32::LIGHT_RED
+            self.theme.error
         } else {
-            ui.visuals().weak_text_color()
+            self.theme.muted
         };
         self.progress_ui(ui);
         // Conflicts and name dialogs have their own window; only yes/no questions use the bar.
@@ -685,7 +700,7 @@ impl BluepaneUi {
             )
         );
         if simple_question {
-            ui.label(RichText::new(&self.session.status).color(Color32::YELLOW));
+            ui.label(RichText::new(&self.session.status).color(self.theme.warn));
             ui.horizontal(|ui| {
                 if ui.button("Tak (Enter)").clicked() {
                     self.dispatch("confirm");
@@ -821,7 +836,7 @@ impl BluepaneUi {
                 .font(egui::TextStyle::Monospace)
                 .desired_width(f32::INFINITY);
             if is_active {
-                edit = edit.text_color(Color32::from_rgb(120, 200, 255));
+                edit = edit.text_color(self.theme.accent);
             }
             let response = ui.add(edit);
             if response.gained_focus() {
@@ -840,23 +855,42 @@ impl BluepaneUi {
         }
     }
 
+    /// One side: a frame that shows whether it has the keyboard, with the panel inside.
     fn panel_ui(&mut self, ui: &mut egui::Ui, index: usize) {
+        let (fill, stroke) = if self.session.active == index {
+            (self.theme.panel, egui::Stroke::new(1.5, self.theme.accent))
+        } else {
+            (
+                self.theme.panel_inactive,
+                egui::Stroke::new(1.0, self.theme.border),
+            )
+        };
+        egui::Frame::new()
+            .fill(fill)
+            .stroke(stroke)
+            .corner_radius(4)
+            .inner_margin(6)
+            .show(ui, |ui| self.panel_body(ui, index));
+    }
+
+    fn panel_body(&mut self, ui: &mut egui::Ui, index: usize) {
         let is_active = self.session.active == index;
         self.tabs_ui(ui, index);
         self.header_ui(ui, index);
         let panel: &Panel = &self.session.panels[index];
 
         if let Some(err) = &panel.error {
-            ui.colored_label(Color32::LIGHT_RED, err);
+            ui.colored_label(self.theme.error, err);
         }
         if !panel.filter.is_empty() {
             ui.label(
                 RichText::new(format!("Filtr: {}  (Esc czyści)", panel.filter))
-                    .color(Color32::YELLOW),
+                    .color(self.theme.warn),
             );
         }
         ui.separator();
 
+        let theme = self.theme.clone();
         let row_height = ui.spacing().interact_size.y;
         let stride = row_height + ui.spacing().item_spacing.y;
         let cursor = panel.cursor;
@@ -889,9 +923,9 @@ impl BluepaneUi {
                 (true, true) => " ▼",
             };
             let color = if response.hovered() {
-                ui.visuals().strong_text_color()
+                self.theme.text
             } else {
-                ui.visuals().weak_text_color()
+                self.theme.muted
             };
             let (pos, align) = if key == SortKey::Size {
                 (
@@ -934,25 +968,32 @@ impl BluepaneUi {
                     );
                     let is_selected = panel.selected.contains(&entry.path);
                     if row == cursor {
-                        let fill = if is_active {
-                            ui.visuals().selection.bg_fill
+                        // The cursor is a filled, outlined row; marks are text colour.
+                        let (fill, outline) = if is_active {
+                            (theme.cursor_fill, theme.cursor_stroke)
                         } else {
-                            ui.visuals().widgets.inactive.weak_bg_fill
+                            (theme.cursor_fill_inactive, theme.cursor_stroke_inactive)
                         };
-                        ui.painter().rect_filled(rect, 2.0, fill);
-                    } else if response.hovered() {
-                        ui.painter().rect_filled(
+                        ui.painter().rect(
                             rect,
                             2.0,
-                            ui.visuals().widgets.hovered.weak_bg_fill,
+                            fill,
+                            egui::Stroke::new(1.0, outline),
+                            egui::StrokeKind::Inside,
                         );
+                    } else if response.hovered() {
+                        ui.painter().rect_filled(rect, 2.0, theme.hover);
+                    } else if row % 2 == 1 {
+                        ui.painter().rect_filled(rect, 0.0, theme.row_alt);
                     }
                     let color = if is_selected {
-                        Color32::YELLOW
+                        theme.selected
                     } else if entry.hidden {
-                        ui.visuals().weak_text_color()
+                        theme.muted
+                    } else if entry.is_dir() {
+                        theme.dir
                     } else {
-                        ui.visuals().text_color()
+                        theme.text
                     };
                     let cols = Columns::split(rect);
                     let (stem, ext) = name_parts(&entry.name, entry.is_dir());

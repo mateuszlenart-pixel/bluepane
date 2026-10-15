@@ -244,6 +244,8 @@ pub struct Session {
     pub scan_services: crate::ScanServices,
     /// Where the settings files live (set when they are loaded).
     pub(crate) config_dir: Option<PathBuf>,
+    /// The colour theme (a name from `THEMES`).
+    pub(crate) theme: String,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
@@ -394,6 +396,7 @@ impl Session {
             scan: None,
             scan_services: crate::ScanServices::default(),
             config_dir: None,
+            theme: crate::settings::DEFAULT_THEME.to_string(),
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
@@ -547,6 +550,7 @@ impl Session {
             Command::QueueDelete(n) => self.queue_delete(n)?,
             Command::QueueMove(n, to) => self.queue_move(n, to)?,
             Command::Limit(limit) => self.set_speed_limit(limit),
+            Command::Theme(name) => self.set_theme(name)?,
             Command::QueueRetry(n) => self.queue_retry(n)?,
             Command::QueueClear => self.finished.clear(),
             Command::SitePassword(name, password) => self.site_password(&name, password)?,

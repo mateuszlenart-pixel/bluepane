@@ -114,11 +114,11 @@ Każdy podetap = osobna gałąź i PR, GUI sprawdzane ręcznie na Windows i Linu
 
 Decyzje właściciela (2026-10-15):
 - Wariant **B**: `egui` z **dokowaniem** (`egui_dock` albo `egui_tiles`; wybór biblioteki po próbie w 10g, ma działać na egui 0.36): panele plików, podgląd, kolejka jako przesuwalne zakładki. Inny toolkit (`iced`/`gpui`) odpada.
-- **Trzy motywy**: Classic Blue, Modern Dark i jasny; wybór zapamiętany w konfiguracji, komenda `theme classic|dark|light`.
+- **Motywy** (korekta 2026-10-15): Classic Blue odpada; **Modern Dark** na pewno; jasny motyw (albo Catppuccin) dołożymy, jeśli właściciel zdecyduje po obejrzeniu. Mechanizm gotowy na kolejne motywy: nazwa w `bluepane_engine::THEMES`, paleta w `ui-egui/src/theme.rs`, komenda `theme <nazwa>`, wybór zapisany w `settings.conf`.
 - Ikony: **czcionka ikon wbudowana w program** (np. `egui-phosphor`); zgoda na tę jedną zależność, trafia do `[workspace.dependencies]`.
 - Zakres: Quick View w drugim panelu, pasek rozmiaru w kolumnie `Size`, mini-pasek zadania na dole, podświetlanie zmian w oknach zmiany nazw i synchronizacji.
 
-- [ ] 10a Fundament: moduł `theme.rs` (paleta, `Visuals`, gęstsze odstępy, ostrzejsze rogi), trzy motywy i komenda `theme`, zapis wyboru; wyraźne rozróżnienie panelu aktywnego i nieaktywnego
+- [x] 10a Fundament: moduł `theme.rs` (paleta, `Visuals`, gęstsze odstępy, ostrzejsze rogi), motyw Modern Dark, komenda `theme` i zapis wyboru; ramka i tło odróżniają panel aktywny od nieaktywnego, kursor z obrysem, wiersze naprzemienne, katalogi/zaznaczone/ukryte w kolorach palety
 - [ ] 10b Ikony i kolory typów plików: czcionka ikon, ikona przy nazwie (katalog, archiwum, dokument, serwer, plik wykonywalny), kolory semantyczne (katalogi, archiwa, dokumenty, ukryte), zaznaczenie (Insert/Spacja) odróżnione od kursora
 - [ ] 10c Lista plików: nagłówki kolumn z kierunkiem sortowania (kliknięcie = komenda `sort`), kursor i zaznaczenie rysowane osobno, pasek rozmiaru w komórce `Size` (rozmiary katalogów liczone w tle na życzenie)
 - [ ] 10d Nawigacja: ścieżka jako klikalne segmenty (breadcrumbs), edycja ścieżki po kliknięciu pustego miejsca (jak `cd`), pasek napędów z zajętością i wolnym miejscem, odznaka aktywnego filtra
