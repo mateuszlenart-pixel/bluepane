@@ -18,6 +18,37 @@ pub use platform::{
     open_external, set_mode, volumes,
 };
 
+/// How full the drive holding a path is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DiskSpace {
+    /// Bytes a normal user can still write.
+    pub free: u64,
+    pub total: u64,
+}
+
+impl DiskSpace {
+    /// Share of the drive in use, 0.0 to 1.0.
+    pub fn used_fraction(&self) -> f32 {
+        if self.total == 0 {
+            return 0.0;
+        }
+        (1.0 - self.free as f64 / self.total as f64).clamp(0.0, 1.0) as f32
+    }
+}
+
+/// Free and total space of the drive that holds `path`; `None` when it cannot be asked
+/// (the path is gone, or the drive does not say).
+pub fn disk_space(path: &Path) -> Option<DiskSpace> {
+    // Windows answers for the drive even when the folder is gone; Linux refuses. A missing
+    // path gets the same answer on both.
+    if !path.exists() {
+        return None;
+    }
+    let total = fs4::total_space(path).ok()?;
+    let free = fs4::available_space(path).ok()?;
+    (total > 0).then_some(DiskSpace { free, total })
+}
+
 /// What a directory entry is, from the user's point of view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
@@ -106,6 +137,24 @@ pub fn list_dir(path: &Path) -> io::Result<Vec<Entry>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn disk_space_of_a_real_folder_is_sane_and_of_a_missing_one_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let space = disk_space(dir.path()).expect("the temp drive answers");
+        assert!(space.total > 0 && space.free <= space.total, "{space:?}");
+        assert!((0.0..=1.0).contains(&space.used_fraction()));
+        assert_eq!(disk_space(&dir.path().join("missing/nowhere")), None);
+        assert_eq!(
+            DiskSpace {
+                free: 25,
+                total: 100
+            }
+            .used_fraction(),
+            0.75
+        );
+        assert_eq!(DiskSpace { free: 0, total: 0 }.used_fraction(), 0.0);
+    }
 
     #[test]
     fn dirs_come_first_then_names_case_insensitive() {
