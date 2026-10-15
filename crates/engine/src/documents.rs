@@ -98,6 +98,26 @@ mod tests {
     }
 
     #[test]
+    fn f3_on_an_rtf_file_shows_its_text() {
+        std::env::set_var("BLUEPANE_NO_OFFICE", "1");
+        let tmp = tempfile::tempdir().unwrap();
+        let left = tmp.path().join("left");
+        std::fs::create_dir_all(&left).unwrap();
+        std::fs::write(
+            left.join("note.rtf"),
+            "{\\rtf1\\ansi{\\fonttbl{\\f0 Arial;}}\\f0 Dear reader\\par Second line\\par}",
+        )
+        .unwrap();
+        let mut s = Session::new(&left, tmp.path().join("right"));
+        s.run_line("select note.rtf").unwrap();
+        s.run_line("view").unwrap();
+        let dir = s.preview_dir.clone().unwrap();
+        let shown = std::fs::read_to_string(dir.join("note.rtf.txt")).unwrap();
+        assert_eq!(shown, "Dear reader\nSecond line\n");
+        s.remove_preview_dir();
+    }
+
+    #[test]
     fn a_broken_document_is_an_error_and_leaves_nothing_behind() {
         std::env::set_var("BLUEPANE_NO_OFFICE", "1");
         let tmp = tempfile::tempdir().unwrap();

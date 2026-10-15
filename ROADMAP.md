@@ -19,6 +19,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 8 | Sieć | 🟡 | SFTP i FTP działają jak katalog lokalny |
 | 8f | Skaner sieci | ✅ | lista urządzeń z usługami, udziałami i akcjami (jak Advanced IP Scanner) |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
+| 10 | Nowoczesne GUI | ⬜ | okno wygląda jak dopracowane narzędzie, a nie prototyp; logika w `engine` bez zmian |
 
 ## Stan szkieletu (etap 1) i co dalej
 
@@ -54,10 +55,11 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 ## Notatki do późniejszych etapów
 
 ### Podgląd dokumentów biurowych (po etapie 8)
+- [x] RTF, PPTX i ODP: strony przez LibreOffice, bez niego tekst (RTF: własny prosty czytnik z cp1250/Unicode; PPTX i ODP: tekst slajdów)
 - [x] PDF chronione hasłem: F3 pyta o hasło (RC4/AES, test z plikiem z Ghostscript)
 - [x] Crate `bluepane-docs`: F3 na PDF pokazuje strony jako obraz (hayro, czysty Rust); DOCX/ODT/ODS/XLSX przez LibreOffice -> PDF (jeśli jest), inaczej tekst dokumentu; F4 otwiera w programie systemu
 - [x] Okno stron (zmiana strony, powiększenie, dopasowanie do szerokości), render w tle
-- [ ] Nie ma: dokumentów Office jako strony z archiwum i serwera, RTF/PPTX, edycji w programie, OCR skanów, hasła do PDF z archiwum i serwera, zaznaczania tekstu na stronie; do sprawdzenia ręcznie z prawdziwymi dokumentami i LibreOffice
+- [ ] Nie ma: dokumentów Office jako strony z archiwum i serwera, edycji w programie, OCR skanów, hasła do PDF z archiwum i serwera, zaznaczania tekstu na stronie; do sprawdzenia ręcznie z prawdziwymi dokumentami i LibreOffice
 
 ### Etap 5: podgląd i edycja
 - [x] Podgląd (F3) oknami przez seek: plik 1 GB otwiera się od razu (proces ok. 110 MB, tyle co sam interfejs), linie ograniczone do 16 KiB, wykrywanie plików binarnych
@@ -103,6 +105,28 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] Komendy `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`; okno Ctrl+F2 z listą stara/nowa nazwa na żywo i ręczną edycją pojedynczej nazwy
 - [ ] Nie ma: wtyczek `[=?]` (pole z zrzutu wzorca), zapisu/odczytu zestawów ustawień (F2 w oknie wzorca), kolumn sortowania w oknie, wstawiania pól w miejscu kursora (przyciski dopisują na końcu maski)
 - [ ] Do sprawdzenia ręcznie (Linux i Windows): wygląd okna, klikanie w nową nazwę, nazwy niedozwolone w Windows
+
+### Etap 10: nowoczesne GUI (plan)
+
+Źródło: analiza właściciela (2026-10-15). Silnik jest niezależny od `ui-egui`, więc zmiana dotyczy tylko rysowania; reguły warstw i komendy zostają.
+Każdy podetap = osobna gałąź i PR, GUI sprawdzane ręcznie na Windows i Linuksie.
+
+Decyzje właściciela (2026-10-15):
+- Wariant **B**: `egui` z **dokowaniem** (`egui_dock` albo `egui_tiles`; wybór biblioteki po próbie w 10g, ma działać na egui 0.36): panele plików, podgląd, kolejka jako przesuwalne zakładki. Inny toolkit (`iced`/`gpui`) odpada.
+- **Trzy motywy**: Classic Blue, Modern Dark i jasny; wybór zapamiętany w konfiguracji, komenda `theme classic|dark|light`.
+- Ikony: **czcionka ikon wbudowana w program** (np. `egui-phosphor`); zgoda na tę jedną zależność, trafia do `[workspace.dependencies]`.
+- Zakres: Quick View w drugim panelu, pasek rozmiaru w kolumnie `Size`, mini-pasek zadania na dole, podświetlanie zmian w oknach zmiany nazw i synchronizacji.
+
+- [ ] 10a Fundament: moduł `theme.rs` (paleta, `Visuals`, gęstsze odstępy, ostrzejsze rogi), trzy motywy i komenda `theme`, zapis wyboru; wyraźne rozróżnienie panelu aktywnego i nieaktywnego
+- [ ] 10b Ikony i kolory typów plików: czcionka ikon, ikona przy nazwie (katalog, archiwum, dokument, serwer, plik wykonywalny), kolory semantyczne (katalogi, archiwa, dokumenty, ukryte), zaznaczenie (Insert/Spacja) odróżnione od kursora
+- [ ] 10c Lista plików: nagłówki kolumn z kierunkiem sortowania (kliknięcie = komenda `sort`), kursor i zaznaczenie rysowane osobno, pasek rozmiaru w komórce `Size` (rozmiary katalogów liczone w tle na życzenie)
+- [ ] 10d Nawigacja: ścieżka jako klikalne segmenty (breadcrumbs), edycja ścieżki po kliknięciu pustego miejsca (jak `cd`), pasek napędów z zajętością i wolnym miejscem, odznaka aktywnego filtra
+- [ ] 10e Dolny pasek: klawisze funkcyjne jako dwukolorowe przyciski (skrót + nazwa), mini-pasek bieżącego zadania z prędkością i postępem oraz skrótem do okna kolejki (Ctrl+J)
+- [ ] 10f Narzędzia jak jeden kombajn: Quick View w drugim panelu (strony/tekst/archiwum bez osobnego okna; skrót do uzgodnienia), podświetlenie zmienionych znaków i kolizji w zmianie nazw, kolory kierunków i konfliktów w synchronizacji
+- [ ] 10g Dokowanie: panele plików, podgląd i kolejka jako zakładki układane przez użytkownika (zapamiętany układ); największy podetap, na końcu
+
+Już jest (nie robimy od nowa): zakładki katalogów w panelu (`tab`, Ctrl+T), pasek napędów jako przyciski, własne rysowanie wierszy w kolumnach, filtr „wpisz, żeby zawęzić”, okno kolejki.
+Uwagi: skróty z analizy kolidują z istniejącymi (Ctrl+S = witryny, Ctrl+M = maska zaznaczenia, Ctrl+Q może znaczyć wyjście), więc nowe komendy dostają skróty po uzgodnieniu; każdy element to `Command` z nazwą w wierszu poleceń. Nowe zależności (czcionka ikon, biblioteka dokowania, ewentualnie `egui_extras`) tylko przez `[workspace.dependencies]`.
 
 ### Etap 8f: skaner sieci
 Wymaganie właściciela (zamiast wtyczek): funkcje jak Advanced IP Scanner. Zakres: 1) urządzenia w zakresie IP, 2) porty i usługi, 3) udziały (SMB) i akcje na wyniku.

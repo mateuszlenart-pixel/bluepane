@@ -1,5 +1,5 @@
-//! Text of documents for the viewer: Word (DOCX), OpenDocument (ODT, ODS), Excel (XLSX) and
-//! PDF. It is a reading aid, not a renderer: paragraphs, headings, lists and tables come
+//! Text of documents for the viewer: Word (DOCX), RTF, OpenDocument (ODT, ODS, ODP),
+//! PowerPoint (PPTX), Excel (XLSX) and PDF. It is a reading aid, not a renderer: paragraphs, headings, lists and tables come
 //! out as plain text; layout, pictures and fonts do not. Nothing is written and nothing
 //! runs: the files are only read (the XML formats are zip archives).
 
@@ -7,7 +7,9 @@ mod docx;
 mod odf;
 mod office;
 mod pdf;
+mod pptx;
 mod render;
+mod rtf;
 mod xlsx;
 mod xml;
 
@@ -33,6 +35,9 @@ pub enum Kind {
     Ods,
     Xlsx,
     Pdf,
+    Rtf,
+    Pptx,
+    Odp,
 }
 
 impl Kind {
@@ -43,6 +48,9 @@ impl Kind {
             Kind::Ods => "arkusz OpenDocument",
             Kind::Xlsx => "skoroszyt Excel",
             Kind::Pdf => "dokument PDF",
+            Kind::Rtf => "dokument RTF",
+            Kind::Pptx => "prezentacja PowerPoint",
+            Kind::Odp => "prezentacja OpenDocument",
         }
     }
 }
@@ -56,6 +64,9 @@ pub fn kind_of(path: &Path) -> Option<Kind> {
         "ods" | "ots" => Kind::Ods,
         "xlsx" | "xlsm" => Kind::Xlsx,
         "pdf" => Kind::Pdf,
+        "rtf" => Kind::Rtf,
+        "pptx" | "pptm" | "ppsx" => Kind::Pptx,
+        "odp" | "otp" => Kind::Odp,
         _ => return None,
     })
 }
@@ -131,7 +142,9 @@ pub fn extract(path: &Path) -> Result<Text, DocError> {
     }
     let mut text = match kind {
         Kind::Docx => docx::extract(path)?,
-        Kind::Odt | Kind::Ods => odf::extract(path)?,
+        Kind::Odt | Kind::Ods | Kind::Odp => odf::extract(path)?,
+        Kind::Rtf => rtf::extract(path)?,
+        Kind::Pptx => pptx::extract(path)?,
         Kind::Xlsx => xlsx::extract(path)?,
         Kind::Pdf => pdf::extract(path)?,
     };
@@ -214,6 +227,10 @@ mod tests {
             ("a.ods", Kind::Ods),
             ("a.xlsx", Kind::Xlsx),
             ("a.pdf", Kind::Pdf),
+            ("a.RTF", Kind::Rtf),
+            ("a.pptx", Kind::Pptx),
+            ("a.ppsx", Kind::Pptx),
+            ("a.odp", Kind::Odp),
         ] {
             assert_eq!(kind_of(Path::new(name)), Some(kind), "{name}");
         }

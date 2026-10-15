@@ -26,6 +26,7 @@ pub(crate) fn text_of(xml: &str) -> String {
     let mut row: Vec<String> = Vec::new();
     let mut cell: Vec<String> = Vec::new();
     let mut rows = 0;
+    let mut slides = 0;
 
     for event in events(xml) {
         match event {
@@ -38,6 +39,10 @@ pub(crate) fn text_of(xml: &str) -> String {
                             .and_then(|l| l.parse().ok())
                             .unwrap_or(1)
                     });
+                }
+                "draw:page" => {
+                    slides += 1;
+                    out.push(format!("──── slajd {slides} ────"));
                 }
                 "text:s" => {
                     let count: usize = attr(&attrs, "text:c")
