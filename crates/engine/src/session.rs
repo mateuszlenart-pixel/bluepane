@@ -250,6 +250,11 @@ pub struct Session {
     pub dir_sizes: crate::DirSizes,
     /// Free space of the drives shown above the panels (asked in the background).
     pub disk_usage: crate::DiskUsage,
+    /// Quick View (Ctrl+Q): the preview in the other panel, when it is on.
+    pub quick: Option<crate::QuickView>,
+    /// A preview waiting for the cursor to rest on a file.
+    pub(crate) quick_want: Option<(crate::QuickKey, std::time::Instant)>,
+    pub(crate) quick_delay: std::time::Duration,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
@@ -403,6 +408,9 @@ impl Session {
             theme: crate::settings::DEFAULT_THEME.to_string(),
             dir_sizes: crate::DirSizes::default(),
             disk_usage: crate::DiskUsage::default(),
+            quick: None,
+            quick_want: None,
+            quick_delay: crate::QUICK_DELAY,
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
@@ -558,6 +566,7 @@ impl Session {
             Command::Limit(limit) => self.set_speed_limit(limit),
             Command::Theme(name) => self.set_theme(name)?,
             Command::DirSize => self.count_dir_sizes()?,
+            Command::Quick(action) => self.quick_action(action)?,
             Command::QueueRetry(n) => self.queue_retry(n)?,
             Command::QueueClear => self.finished.clear(),
             Command::SitePassword(name, password) => self.site_password(&name, password)?,
@@ -1078,6 +1087,7 @@ impl Session {
     /// about and the final result. Cheap; call it every frame.
     pub fn poll(&mut self) {
         self.poll_pages();
+        self.update_quick();
         loop {
             let Some(job) = &self.current else { return };
             match job.try_event() {

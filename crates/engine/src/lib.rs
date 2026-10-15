@@ -18,6 +18,7 @@ mod navbar;
 mod pageview;
 mod panel;
 mod queue;
+mod quickview;
 mod remote;
 mod remote_job;
 mod scan;
@@ -47,8 +48,8 @@ pub use bluepane_sync::{
 };
 pub use bluepane_vfs::{Share, ShareKind};
 pub use command::{
-    parse_size, Command, NameFormat, PackArgs, QueueMove, SpeedLimit, SyncArgs, TabAction,
-    UnpackArgs, ViewerAction, COMMAND_NAMES,
+    parse_size, Command, NameFormat, PackArgs, QueueMove, QuickAction, SpeedLimit, SyncArgs,
+    TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
 pub use dirsize::DirSizes;
 pub use fileclass::{class_of, class_of_name, FileClass};
@@ -68,6 +69,7 @@ pub use panel::{
     PARENT_NAME,
 };
 pub use queue::{FinishedJob, QueueLine};
+pub use quickview::{QuickContent, QuickKey, QuickView, QUICK_DELAY};
 pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, ShareList};
 pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,

@@ -33,6 +33,7 @@ impl Default for Keymap {
             ("F4", "edit"),
             ("Ctrl+Shift+P", "chmod "),
             ("Alt+Shift+Enter", "dirsize"),
+            ("Ctrl+Q", "quick"),
             ("Alt+F5", "pack"),
             ("Alt+F9", "unpack"),
             ("Alt+S", "sync"),

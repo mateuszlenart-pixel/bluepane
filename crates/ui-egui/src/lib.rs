@@ -7,6 +7,7 @@ mod bottom_ui;
 mod find_ui;
 mod pages_ui;
 mod queue_ui;
+mod quick_ui;
 mod rename_ui;
 mod scan_ui;
 mod sites_ui;
@@ -89,6 +90,8 @@ impl BluepaneUi {
             let mut fonts = egui::FontDefinitions::default();
             egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
             ctx.set_fonts(fonts);
+            // egui closes the program on Ctrl+Q by default; Ctrl+Q is Quick View here.
+            ctx.options_mut(|options| options.quit_shortcuts.clear());
         }
         if !self.theme_applied || self.theme.name != self.session.theme() {
             self.theme = theme::Theme::by_name(self.session.theme());
@@ -104,7 +107,8 @@ impl BluepaneUi {
         let searching = self.session.find.as_ref().is_some_and(|f| f.is_running())
             || self.session.scan.as_ref().is_some_and(|v| v.is_running())
             || self.session.dir_sizes.is_running()
-            || self.session.disk_usage.is_asking();
+            || self.session.disk_usage.is_asking()
+            || self.session.quick_pending();
         if self.session.is_busy() || searching {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
@@ -137,7 +141,12 @@ impl BluepaneUi {
             } else {
                 ui.columns(2, |columns| {
                     for (index, ui) in columns.iter_mut().enumerate() {
-                        self.panel_ui(ui, index);
+                        // Quick View takes the place of the panel that does not have the keyboard.
+                        if self.session.quick.is_some() && index != self.session.active {
+                            self.quick_ui(ui, index);
+                        } else {
+                            self.panel_ui(ui, index);
+                        }
                     }
                 });
             }

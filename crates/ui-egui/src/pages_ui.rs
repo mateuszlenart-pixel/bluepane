@@ -106,56 +106,67 @@ impl BluepaneUi {
         let Some(viewer) = self.session.pages.as_ref() else {
             return;
         };
-        let ppp = ui.ctx().pixels_per_point();
-        // How wide the page should be on screen, in egui points.
-        let Some((page_width, _)) = viewer.page_size() else {
-            return;
-        };
-        let wanted_points = match zoom {
-            PageZoom::Fit => (ui.available_width() - 24.0).max(100.0),
-            PageZoom::Percent(p) => page_width * 96.0 / 72.0 * p as f32 / 100.0,
-        };
-        viewer.want((wanted_points * ppp).round() as u32);
-        let Some(rendered) = viewer.rendered() else {
-            ui.spinner();
-            return;
-        };
-        let (image, source) = (rendered.image.clone(), viewer.source.clone());
-        let key = TextureKey {
-            page: rendered.page,
-            width: image.width,
-            height: image.height,
-            source,
-        };
-        if self.page_texture.as_ref().map(|(k, _)| k) != Some(&key) {
-            let color = egui::ColorImage::from_rgba_unmultiplied(
-                [image.width as usize, image.height as usize],
-                &image.rgba,
-            );
-            let handle =
-                ui.ctx()
-                    .load_texture("bluepane-page", color, egui::TextureOptions::LINEAR);
-            self.page_texture = Some((key, handle));
-        }
-        let Some((_, texture)) = &self.page_texture else {
-            return;
-        };
-        // Until the sharper picture is ready the old one is stretched to the wanted size.
-        let aspect = image.height as f32 / image.width as f32;
-        let size = egui::vec2(wanted_points, wanted_points * aspect);
-        let fits = size.x <= ui.available_width();
-        egui::ScrollArea::both()
-            .auto_shrink(false)
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
-            .show(ui, |ui| {
-                // A page wider than the window is not centred, or its left edge would be cut off.
-                if fits {
-                    ui.vertical_centered(|ui| {
-                        ui.add(egui::Image::new((texture.id(), size)));
-                    });
-                } else {
-                    ui.add(egui::Image::new((texture.id(), size)));
-                }
-            });
+        paint_page(ui, viewer, zoom, &mut self.page_texture);
     }
+}
+
+/// Draws the current page of `viewer` as a picture (sharper once it is rendered at the size
+/// wanted; until then the old picture is stretched). `texture` keeps the picture on the GPU.
+pub(crate) fn paint_page(
+    ui: &mut egui::Ui,
+    viewer: &bluepane_engine::PageViewer,
+    zoom: PageZoom,
+    texture_slot: &mut Option<(TextureKey, egui::TextureHandle)>,
+) {
+    let ppp = ui.ctx().pixels_per_point();
+    // How wide the page should be on screen, in egui points.
+    let Some((page_width, _)) = viewer.page_size() else {
+        return;
+    };
+    let wanted_points = match zoom {
+        PageZoom::Fit => (ui.available_width() - 24.0).max(100.0),
+        PageZoom::Percent(p) => page_width * 96.0 / 72.0 * p as f32 / 100.0,
+    };
+    viewer.want((wanted_points * ppp).round() as u32);
+    let Some(rendered) = viewer.rendered() else {
+        ui.spinner();
+        return;
+    };
+    let (image, source) = (rendered.image.clone(), viewer.source.clone());
+    let key = TextureKey {
+        page: rendered.page,
+        width: image.width,
+        height: image.height,
+        source,
+    };
+    if texture_slot.as_ref().map(|(k, _)| k) != Some(&key) {
+        let color = egui::ColorImage::from_rgba_unmultiplied(
+            [image.width as usize, image.height as usize],
+            &image.rgba,
+        );
+        let handle = ui
+            .ctx()
+            .load_texture("bluepane-page", color, egui::TextureOptions::LINEAR);
+        *texture_slot = Some((key, handle));
+    }
+    let Some((_, texture)) = texture_slot.as_ref() else {
+        return;
+    };
+    // Until the sharper picture is ready the old one is stretched to the wanted size.
+    let aspect = image.height as f32 / image.width as f32;
+    let size = egui::vec2(wanted_points, wanted_points * aspect);
+    let fits = size.x <= ui.available_width();
+    egui::ScrollArea::both()
+        .auto_shrink(false)
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+        .show(ui, |ui| {
+            // A page wider than the window is not centred, or its left edge would be cut off.
+            if fits {
+                ui.vertical_centered(|ui| {
+                    ui.add(egui::Image::new((texture.id(), size)));
+                });
+            } else {
+                ui.add(egui::Image::new((texture.id(), size)));
+            }
+        });
 }
