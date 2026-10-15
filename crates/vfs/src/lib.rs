@@ -39,6 +39,11 @@ impl DiskSpace {
 /// Free and total space of the drive that holds `path`; `None` when it cannot be asked
 /// (the path is gone, or the drive does not say).
 pub fn disk_space(path: &Path) -> Option<DiskSpace> {
+    // Windows answers for the drive even when the folder is gone; Linux refuses. A missing
+    // path gets the same answer on both.
+    if !path.exists() {
+        return None;
+    }
     let total = fs4::total_space(path).ok()?;
     let free = fs4::available_space(path).ok()?;
     (total > 0).then_some(DiskSpace { free, total })
