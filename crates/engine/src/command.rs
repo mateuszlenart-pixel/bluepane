@@ -26,6 +26,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "copy",
     "move",
     "mkdir",
+    "chmod",
     "delete",
     "confirm",
     "cancel",
@@ -228,6 +229,8 @@ pub enum Command {
     Move,
     /// Create a directory in the active panel (F7). Without a name a dialog asks for it.
     Mkdir(Option<String>),
+    /// Set the Unix permission bits (octal, e.g. `755`) of the selection on a server.
+    Chmod(u32),
     /// Open, close or switch tabs of the active panel.
     Tab(TabAction),
     /// Pack the selection into an archive in the other panel's directory (Alt+F5). Without
@@ -394,6 +397,7 @@ impl Command {
                 .map(Command::Cursor)
                 .map_err(|_| EngineError("cursor: oczekiwano liczby, np. cursor -1".into())),
             "mkdir" => Ok(Command::Mkdir(optional(rest))),
+            "chmod" => parse_chmod(rest).map(Command::Chmod),
             "rename" => Ok(Command::Rename(optional(rest))),
             "stop" => Ok(Command::StopJob),
             "sync" => parse_sync(rest).map(Command::Sync),
@@ -668,6 +672,15 @@ fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {
         "close" => ViewerAction::Close,
         _ => return Err(usage()),
     })
+}
+
+fn parse_chmod(text: &str) -> Result<u32, EngineError> {
+    let usage =
+        || EngineError("chmod: podaj uprawnienia ósemkowo, np. chmod 755 albo chmod 0644".into());
+    if !(3..=4).contains(&text.len()) {
+        return Err(usage());
+    }
+    u32::from_str_radix(text, 8).map_err(|_| usage())
 }
 
 fn optional(text: &str) -> Option<String> {
@@ -952,6 +965,11 @@ mod tests {
         assert_eq!(Command::parse("  CP "), Ok(Command::Copy));
         assert_eq!(Command::parse("rm"), Ok(Command::Delete));
         assert_eq!(Command::parse("cursor -3"), Ok(Command::Cursor(-3)));
+        assert_eq!(Command::parse("chmod 755"), Ok(Command::Chmod(0o755)));
+        assert_eq!(Command::parse("chmod 0644"), Ok(Command::Chmod(0o644)));
+        for bad in ["chmod", "chmod 75", "chmod 789", "chmod rwx", "chmod 07555"] {
+            assert!(Command::parse(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

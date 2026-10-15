@@ -666,6 +666,7 @@ impl Session {
                     text: name,
                 });
             }
+            Command::Chmod(mode) => self.remote_chmod(mode)?,
             Command::Delete => self.propose_delete()?,
         }
         Ok(())

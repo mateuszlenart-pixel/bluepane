@@ -288,6 +288,9 @@ impl russh_sftp::server::Handler for Files {
         path: String,
         attrs: FileAttributes,
     ) -> Result<Status, StatusCode> {
+        if let Some(mode) = attrs.permissions {
+            super::record_chmod(self.local(&path), mode & 0o7777);
+        }
         if let Some(mtime) = attrs.mtime {
             let file = fs::OpenOptions::new()
                 .write(true)

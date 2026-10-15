@@ -304,6 +304,12 @@ impl SftpConnection {
         Ok(self.run(self.sftp.remove_dir(path))?)
     }
 
+    pub fn chmod(&self, path: &str, mode: u32) -> Result<(), RemoteError> {
+        let mut attrs = russh_sftp::protocol::FileAttributes::empty();
+        attrs.permissions = Some(mode & 0o7777);
+        Ok(self.run(self.sftp.set_metadata(path, attrs))?)
+    }
+
     /// Renames within the server. Never replaces an existing target.
     pub fn rename(&self, from: &str, to: &str) -> Result<(), RemoteError> {
         if self.stat(to)?.is_some() {
@@ -349,6 +355,10 @@ impl RemoteFs for SftpConnection {
 
     fn remove_dir(&self, path: &str) -> Result<(), RemoteError> {
         SftpConnection::remove_dir(self, path)
+    }
+
+    fn chmod(&self, path: &str, mode: u32) -> Result<(), RemoteError> {
+        SftpConnection::chmod(self, path, mode)
     }
 
     fn rename(&self, from: &str, to: &str) -> Result<(), RemoteError> {

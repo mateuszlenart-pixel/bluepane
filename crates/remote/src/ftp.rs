@@ -461,6 +461,17 @@ impl RemoteFs for FtpConnection {
         on!(&mut *self.lock(), s => s.rmdir(path).map_err(remote))
     }
 
+    fn chmod(&self, path: &str, mode: u32) -> Result<(), RemoteError> {
+        // `SITE CHMOD` is not part of the FTP standard, but nearly every Unix server has it.
+        on!(&mut *self.lock(), s => s
+            .custom_command(
+                format!("SITE CHMOD {:o} {path}", mode & 0o7777),
+                &[suppaftp::Status::CommandOk],
+            )
+            .map(|_| ())
+            .map_err(remote))
+    }
+
     fn rename(&self, from: &str, to: &str) -> Result<(), RemoteError> {
         on!(&mut *self.lock(), s => {
             if stat_path(s, to)?.is_some() {

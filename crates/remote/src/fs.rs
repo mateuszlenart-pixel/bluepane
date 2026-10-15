@@ -103,6 +103,9 @@ pub trait RemoteFs: Send + Sync + Debug {
     fn remove_file(&self, path: &str) -> Result<(), RemoteError>;
     fn remove_dir(&self, path: &str) -> Result<(), RemoteError>;
 
+    /// Sets the Unix permission bits (`0o755`) of a file or directory.
+    fn chmod(&self, path: &str, mode: u32) -> Result<(), RemoteError>;
+
     /// Renames on the server. Never replaces an existing target.
     fn rename(&self, from: &str, to: &str) -> Result<(), RemoteError>;
 

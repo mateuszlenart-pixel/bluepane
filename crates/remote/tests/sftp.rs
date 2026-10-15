@@ -420,3 +420,14 @@ fn a_partial_file_older_than_the_source_is_not_continued() {
         "started over"
     );
 }
+
+#[test]
+fn chmod_sets_the_permission_bits() {
+    let fx = fixture();
+    let conn = connect(&fx);
+    conn.chmod("/hello.txt", 0o600).unwrap();
+    assert_eq!(
+        bluepane_remote::testing::last_chmod(fx.server.root.join("hello.txt")),
+        Some(0o600)
+    );
+}

@@ -344,3 +344,15 @@ fn a_wrong_ftps_password_is_an_auth_error() {
     let err = connect_with(&fx, "nope", &KnownHosts::in_memory(), Some(&fingerprint)).unwrap_err();
     assert!(matches!(err, RemoteError::Auth(_)), "{err}");
 }
+
+#[test]
+fn chmod_sends_site_chmod_and_reports_a_refusal() {
+    let fx = fixture();
+    let conn = connect(&fx);
+    conn.chmod("/hello.txt", 0o640).unwrap();
+    assert_eq!(
+        bluepane_remote::testing::last_chmod(fx.server.root.join("hello.txt")),
+        Some(0o640)
+    );
+    assert!(conn.chmod("/missing.txt", 0o644).is_err());
+}

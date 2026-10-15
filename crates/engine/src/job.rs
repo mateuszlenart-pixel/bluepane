@@ -128,6 +128,11 @@ pub enum RemoteOp {
     Mkdir {
         path: String,
     },
+    /// Sets Unix permission bits on each of these server paths.
+    Chmod {
+        paths: Vec<String>,
+        mode: u32,
+    },
     Rename {
         from: String,
         to: String,
@@ -272,6 +277,10 @@ impl JobSpec {
                     last_name(to)
                 )
             }
+            RemoteOp::Chmod { paths, mode } => format!(
+                "Uprawnienia {mode:o} na serwerze: {}",
+                names_summary(paths.iter().map(|p| last_name(p)))
+            ),
             RemoteOp::Delete { paths } => format!(
                 "Usuwanie z serwera: {}",
                 names_summary(paths.iter().map(|p| last_name(p)))
