@@ -94,7 +94,7 @@ strzałki ←/→, Spacja i Backspace zmieniają stronę, Home/End skaczą na pi
 Pliki Word (`.docx`, `.docm`), OpenDocument (`.odt`, `.ods`) i Excel (`.xlsx`) są najpierw zamieniane na PDF przez **LibreOffice** (jeśli jest zainstalowany;
 uruchamiany w tle, bez okna, we własnym profilu, z limitem 90 s; `BLUEPANE_OFFICE=<ścieżka>` wskazuje program, `BLUEPANE_NO_OFFICE=1` wyłącza to) i pokazywane tak samo.
 Bez LibreOffice, a także gdy konwersja się nie uda, F3 pokazuje **tekst** dokumentu (akapity, nagłówki, listy, tabele, strony PDF). Dla plików z archiwum i z serwera
-strony pokazuje tylko PDF; dokumenty Office są tam pokazywane jako tekst. Ograniczenia: PDF chroniony hasłem nie jest renderowany, limit 32 MB dla PDF i 64 MB dla pozostałych.
+strony pokazuje tylko PDF; dokumenty Office są tam pokazywane jako tekst. PDF chroniony hasłem: F3 pyta o hasło (pole ukryte; błędne hasło pyta ponownie, Esc rezygnuje); działa to dla plików z panelu lokalnego, dla PDF z archiwum i serwera pokazuje się komunikat. Limit 32 MB dla PDF i 64 MB dla pozostałych.
 **F4** otwiera plik w programie systemu (Word, LibreOffice, czytnik PDF) albo w `BLUEPANE_EDITOR`; bluepane nie edytuje dokumentów samodzielnie.
 
 

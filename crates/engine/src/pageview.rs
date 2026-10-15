@@ -115,12 +115,12 @@ impl PageViewer {
     /// A PDF file, read now (opening it only parses the page list).
     pub fn from_pdf(source: &Path, bytes: Vec<u8>) -> Result<PageViewer, EngineError> {
         let doc = PdfDocument::open(bytes).map_err(|e| EngineError(e.to_string()))?;
-        Ok(PageViewer::new(
-            source.to_path_buf(),
-            PageState::Ready,
-            Some(doc),
-            false,
-        ))
+        Ok(PageViewer::from_document(source, doc))
+    }
+
+    /// An already opened PDF.
+    pub fn from_document(source: &Path, doc: PdfDocument) -> PageViewer {
+        PageViewer::new(source.to_path_buf(), PageState::Ready, Some(doc), false)
     }
 
     /// A document that LibreOffice turns into a PDF in `scratch` on a thread of its own.
@@ -247,6 +247,46 @@ impl PageViewer {
 impl Session {
     /// Opens a PDF as pages.
     pub(crate) fn open_pdf_pages(&mut self, path: &Path) -> Result<(), EngineError> {
+        let bytes = Self::read_pdf(path)?;
+        self.show_pages(PageViewer::from_pdf(path, bytes)?);
+        Ok(())
+    }
+
+    /// Opens a PDF file of the panel; a protected one makes the interface ask for the
+    /// password (`password` is what was typed, `None` the first time).
+    pub(crate) fn open_local_pdf(
+        &mut self,
+        path: &Path,
+        password: Option<&str>,
+    ) -> Result<(), EngineError> {
+        let bytes = Self::read_pdf(path)?;
+        match PdfDocument::open_with_password(bytes, password.unwrap_or("")) {
+            Ok(doc) => {
+                self.show_pages(PageViewer::from_document(path, doc));
+                Ok(())
+            }
+            Err(bluepane_docs::DocError::Encrypted | bluepane_docs::DocError::WrongPassword)
+                if self.pending.is_none() || password.is_some() =>
+            {
+                self.pending = Some(crate::session::Pending::Input {
+                    kind: crate::session::InputKind::PdfPassword(path.to_path_buf()),
+                    text: String::new(),
+                });
+                if password.is_some() {
+                    // The dialog stays open; the error is shown in it.
+                    return Err(EngineError(
+                        "Błędne hasło: spróbuj ponownie (Esc = anuluj)".into(),
+                    ));
+                }
+                self.status =
+                    "Ten PDF jest chroniony hasłem: wpisz je (Enter = otwórz, Esc = anuluj)".into();
+                Ok(())
+            }
+            Err(error) => Err(EngineError(error.to_string())),
+        }
+    }
+
+    fn read_pdf(path: &Path) -> Result<Vec<u8>, EngineError> {
         let size = std::fs::metadata(path)
             .map_err(|e| EngineError(format!("{}: {e}", path.display())))?
             .len();
@@ -257,10 +297,7 @@ impl Session {
                 bluepane_docs::MAX_PDF / (1024 * 1024)
             )));
         }
-        let bytes =
-            std::fs::read(path).map_err(|e| EngineError(format!("{}: {e}", path.display())))?;
-        self.show_pages(PageViewer::from_pdf(path, bytes)?);
-        Ok(())
+        std::fs::read(path).map_err(|e| EngineError(format!("{}: {e}", path.display())))
     }
 
     /// Opens a document through LibreOffice when it is installed; `false` when it is not
@@ -406,6 +443,59 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         panic!("the page was not rendered");
+    }
+
+    #[test]
+    fn a_protected_pdf_asks_for_the_password_and_opens_with_the_right_one() {
+        use crate::session::{InputKind, Pending};
+        let tmp = tempfile::tempdir().unwrap();
+        let left = tmp.path().join("left");
+        std::fs::create_dir_all(&left).unwrap();
+        std::fs::write(
+            left.join("locked.pdf"),
+            include_bytes!("../../docs/tests/data/protected.pdf"),
+        )
+        .unwrap();
+        let mut s = Session::new(&left, tmp.path().join("right"));
+        s.run_line("select locked.pdf").unwrap();
+        s.run_line("view").unwrap();
+        assert!(s.pages.is_none());
+        assert!(
+            matches!(
+                &s.pending,
+                Some(Pending::Input {
+                    kind: InputKind::PdfPassword(_),
+                    ..
+                })
+            ),
+            "{}",
+            s.status
+        );
+        // Nothing typed: the dialog stays.
+        assert!(s.run_line("confirm").is_err());
+        assert!(s.pending.is_some());
+        // A wrong password asks again and says so.
+        if let Some(Pending::Input { text, .. }) = &mut s.pending {
+            *text = "nope".into();
+        }
+        assert!(s.run_line("confirm").is_err());
+        assert!(s.pages.is_none());
+        assert!(s.pending.is_some());
+        assert!(s.status_is_error, "{}", s.status);
+        assert!(s.status.contains("Błędne hasło"), "{}", s.status);
+        // The right one opens the pages.
+        if let Some(Pending::Input { text, .. }) = &mut s.pending {
+            *text = "sekret".into();
+        }
+        s.run_line("confirm").unwrap();
+        assert!(s.pending.is_none());
+        assert_eq!(s.pages.as_ref().unwrap().pages(), 1);
+        // Escape on the dialog opens nothing.
+        s.run_line("pageclose").unwrap();
+        s.run_line("view").unwrap();
+        assert!(s.pending.is_some());
+        s.run_line("cancel").unwrap();
+        assert!(s.pending.is_none() && s.pages.is_none());
     }
 
     #[test]

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use hayro::hayro_interpret::InterpreterSettings;
-use hayro::hayro_syntax::Pdf;
+use hayro::hayro_syntax::{LoadPdfError, Pdf};
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::{render, PixmapSettings, RenderCache, RenderSettings};
 
@@ -24,6 +24,8 @@ pub struct PageImage {
 #[derive(Clone)]
 pub struct PdfDocument {
     bytes: Arc<Vec<u8>>,
+    /// The password the file was opened with (empty for an unprotected file).
+    password: Arc<String>,
     /// Page sizes in points (1/72 inch), after rotation.
     sizes: Vec<(f32, f32)>,
 }
@@ -34,23 +36,36 @@ impl std::fmt::Debug for PdfDocument {
     }
 }
 
-fn parse(bytes: &Arc<Vec<u8>>) -> Result<Pdf, DocError> {
-    Pdf::new(bytes.clone()).map_err(|e| {
-        let text = format!("{e:?}");
-        if text.to_lowercase().contains("encrypt") {
-            DocError::Encrypted
-        } else {
-            DocError::Corrupt(format!("PDF: {text}"))
+fn parse(bytes: &Arc<Vec<u8>>, password: &str) -> Result<Pdf, DocError> {
+    Pdf::new_with_password(bytes.clone(), password).map_err(|e| match e {
+        // The library does not tell "no password" from "wrong password"; we know which we sent.
+        LoadPdfError::Decryption(why) if format!("{why:?}") == "PasswordProtected" => {
+            if password.is_empty() {
+                DocError::Encrypted
+            } else {
+                DocError::WrongPassword
+            }
         }
+        LoadPdfError::Decryption(why) => {
+            DocError::Corrupt(format!("PDF: nieobsługiwane szyfrowanie ({why:?})"))
+        }
+        LoadPdfError::Invalid => DocError::Corrupt("PDF: niepoprawny plik".into()),
     })
 }
 
 impl PdfDocument {
     pub fn open(bytes: Vec<u8>) -> Result<PdfDocument, DocError> {
+        Self::open_with_password(bytes, "")
+    }
+
+    /// Opens a protected PDF. [`DocError::Encrypted`] means a password is needed (none was
+    /// given), [`DocError::WrongPassword`] that the given one does not fit.
+    pub fn open_with_password(bytes: Vec<u8>, password: &str) -> Result<PdfDocument, DocError> {
         let bytes = Arc::new(bytes);
+        let password = Arc::new(password.to_string());
         // The renderer meets damaged and exotic files; a panic must not end the program.
         let sizes = std::panic::catch_unwind(|| {
-            let pdf = parse(&bytes)?;
+            let pdf = parse(&bytes, &password)?;
             Ok::<_, DocError>(
                 pdf.pages()
                     .iter()
@@ -62,7 +77,11 @@ impl PdfDocument {
         if sizes.is_empty() {
             return Err(DocError::Corrupt("PDF nie ma stron".into()));
         }
-        Ok(PdfDocument { bytes, sizes })
+        Ok(PdfDocument {
+            bytes,
+            password,
+            sizes,
+        })
     }
 
     pub fn pages(&self) -> usize {
@@ -83,9 +102,9 @@ impl PdfDocument {
         let scale = width as f32 / page_width.max(1.0);
         // The pixmap is at most 65535 pixels either way.
         let scale = scale.min(60_000.0 / page_height.max(1.0));
-        let bytes = self.bytes.clone();
+        let (bytes, password) = (self.bytes.clone(), self.password.clone());
         std::panic::catch_unwind(move || {
-            let pdf = parse(&bytes)?;
+            let pdf = parse(&bytes, &password)?;
             let page = pdf
                 .pages()
                 .get(page)

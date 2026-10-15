@@ -155,10 +155,11 @@ impl BluepaneUi {
             InputKind::ViewerFind => "Szukaj w pliku",
             InputKind::ArchivePassword => "Hasło archiwum",
             InputKind::SitePassword(_) => "Hasło do serwera SFTP",
+            InputKind::PdfPassword(_) => "Hasło do dokumentu PDF",
         };
         let secret = matches!(
             kind,
-            InputKind::ArchivePassword | InputKind::SitePassword(_)
+            InputKind::ArchivePassword | InputKind::SitePassword(_) | InputKind::PdfPassword(_)
         );
         let (status, is_error) = (&session.status, session.status_is_error);
         let mut accepted = None;
