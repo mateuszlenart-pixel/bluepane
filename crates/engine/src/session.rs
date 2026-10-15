@@ -451,7 +451,7 @@ impl Session {
         self.clipboard = Some(text);
     }
 
-    pub(crate) fn config_dir(&self) -> Option<PathBuf> {
+    pub fn config_dir(&self) -> Option<PathBuf> {
         self.config_dir.clone()
     }
 

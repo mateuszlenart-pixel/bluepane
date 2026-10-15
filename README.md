@@ -5,7 +5,7 @@ klawiaturą, działa na **Windows i Linuksie**. Projekt we wczesnej fazie (szkie
 
 ## Uruchomienie
 
-Wymagany Rust 1.92 lub nowszy (`rustup`).
+Wymagany Rust 1.95 lub nowszy (`rustup`).
 
 ```
 cargo run --release -p bluepane              # oba panele w bieżącym katalogu
@@ -36,6 +36,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Ctrl+N | skaner sieci (urządzenia w zakresie adresów IP, ich porty i usługi) |
 | Alt+Shift+Enter | `dirsize`: policz w tle rozmiar zaznaczonych katalogów (albo tego pod kursorem); wynik pojawia się w kolumnie Rozmiar i w podsumowaniu pod listą (odświeżenie F9 i operacje na plikach czyszczą policzone rozmiary) |
 | — | pasek rozmiaru za kolumną Rozmiar (długość względem największego pliku lub policzonego katalogu) i podsumowanie pod listą: „Zaznaczono: 2 pliki (48.2 KB) z 10 elementów” albo suma katalogu |
+| — | **Układ okna jako dok**: oba panele i każde narzędzie (podgląd pliku, strony dokumentu, synchronizacja, szukanie, zmiana nazw, skaner, kolejka, serwery) to zakładki, które można przeciągać, dzielić, wyciągać do osobnego okna i zamykać (×). Otwarte narzędzie dostaje zakładkę po prawej stronie paneli (kilka narzędzi naraz jako zakładki obok siebie); skróty narzędzia działają, gdy jego zakładka ma fokus (ostatnia, w którą kliknięto). Układ paneli zapisuje się w `layout.json` w katalogu konfiguracji; narzędzia przy starcie są zamknięte |
 | Ctrl+Q | **Quick View**: drugi panel pokazuje na żywo plik pod kursorem aktywnego (po chwili spoczynku kursora): tekst lub hex dowolnego pliku, pierwszą stronę PDF z przyciskami stron, tekst dokumentów (Word, Excel, RTF, PowerPoint, OpenDocument), liczbę elementów katalogu; kółko myszy przewija, Ctrl+Q zamyka. Tylko pliki lokalne. Komenda `quick` (też `quick scroll <n>`, `quick page <1\|-1>`). Ctrl+Q nie zamyka już programu (wbudowany skrót egui jest wyłączony) |
 | — | zmiana nazw (Ctrl+F2): w kolumnie nowych nazw podświetlone tylko dodane znaki, zielony znak = gotowe, ostrzeżenie = konflikt; synchronizacja (Alt+S): zielona strzałka kopiuje w prawo, niebieska w lewo, czerwony kosz usuwa, ostrzeżenie to konflikt |
 | — | na dole: pasek bieżącego zadania (nazwa, postęp, bajty, prędkość i czas do końca, Anuluj, przycisk „Kolejka”) oraz dwa rzędy przycisków klawiszy funkcyjnych (klawisz na ciemnej plakietce i nazwa akcji), rozciągnięte na całą szerokość okna |
