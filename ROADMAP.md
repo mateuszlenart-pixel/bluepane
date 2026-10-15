@@ -59,7 +59,8 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 - [x] PDF chronione hasłem: F3 pyta o hasło (RC4/AES, test z plikiem z Ghostscript)
 - [x] Crate `bluepane-docs`: F3 na PDF pokazuje strony jako obraz (hayro, czysty Rust); DOCX/ODT/ODS/XLSX przez LibreOffice -> PDF (jeśli jest), inaczej tekst dokumentu; F4 otwiera w programie systemu
 - [x] Okno stron (zmiana strony, powiększenie, dopasowanie do szerokości), render w tle
-- [ ] Nie ma: dokumentów Office jako strony z archiwum i serwera, edycji w programie, OCR skanów, hasła do PDF z archiwum i serwera, zaznaczania tekstu na stronie; do sprawdzenia ręcznie z prawdziwymi dokumentami i LibreOffice
+- [x] Dokumenty z archiwum i serwera otwierają się jak lokalne: strony (PDF, Office przez LibreOffice) albo tekst, PDF z hasłem pyta o hasło
+- [ ] Nie ma: edycji w programie, zaznaczania tekstu na stronie (OCR skanów odrzucony przez właściciela); do sprawdzenia ręcznie z prawdziwymi dokumentami i LibreOffice
 
 ### Etap 5: podgląd i edycja
 - [x] Podgląd (F3) oknami przez seek: plik 1 GB otwiera się od razu (proces ok. 110 MB, tyle co sam interfejs), linie ograniczone do 16 KiB, wykrywanie plików binarnych
@@ -125,8 +126,10 @@ Decyzje właściciela (2026-10-15):
 - [ ] 10f Narzędzia jak jeden kombajn: Quick View w drugim panelu (strony/tekst/archiwum bez osobnego okna; skrót do uzgodnienia), podświetlenie zmienionych znaków i kolizji w zmianie nazw, kolory kierunków i konfliktów w synchronizacji
 - [ ] 10g Dokowanie: panele plików, podgląd i kolejka jako zakładki układane przez użytkownika (zapamiętany układ); największy podetap, na końcu
 
+Koncepcja wyglądu od właściciela (2026-10-15, tylko inspiracja, **nie zatwierdzony projekt**): `docs/concepts/gui-mockup.html` (otwórz w przeglądarce; przełączniki motywu, narzędzi i wariantu). Z niej wynika m.in.: zakładki nad panelem z ikoną typu (katalog lokalny, serwer), plakietka woluminu z rozmiarem obok ścieżki-okruszków, nagłówek kolumn `Nazwa ▲ / Typ / Rozmiar / Zmodyfikowano`, paski rozmiaru w komórce rozmiaru, zaznaczone pliki bursztynowe i kursor z obrysem, pasek stanu panelu („Zaznaczono: 2 pliki (48.2 KB) z 10 elementów”, „Filtr: brak (pisz, aby filtrować)”), dok po prawej z zakładkami (Inspektor PDF/Docs, Skaner LAN), na dole pasek kolejki z prędkością nad wierszem poleceń i rzędem klawiszy funkcyjnych z dwukolorowymi przyciskami (F2, F3, F4, F5, F6, F7, F8, ^F2, Alt+S, ^Q). Motywy w makiecie: Modern Dark, Classic Blue (TC) i Catppuccin; w planie trzeci motyw to jasny, więc do rozstrzygnięcia przy 10a (może być i Catppuccin).
+
 Już jest (nie robimy od nowa): zakładki katalogów w panelu (`tab`, Ctrl+T), pasek napędów jako przyciski, własne rysowanie wierszy w kolumnach, filtr „wpisz, żeby zawęzić”, okno kolejki.
-Uwagi: skróty z analizy kolidują z istniejącymi (Ctrl+S = witryny, Ctrl+M = maska zaznaczenia, Ctrl+Q może znaczyć wyjście), więc nowe komendy dostają skróty po uzgodnieniu; każdy element to `Command` z nazwą w wierszu poleceń. Nowe zależności (czcionka ikon, biblioteka dokowania, ewentualnie `egui_extras`) tylko przez `[workspace.dependencies]`.
+Skróty (decyzja właściciela): zostają nasze obecne (Ctrl+S witryny, Ctrl+M maska zaznaczenia itd.); skrótów z analizy nie przejmujemy, nowe komendy dostają wolne skróty, poprawki w codziennym użyciu. Dokowanie (10g) robimy (zakładki katalogów w panelu już są, to osobna rzecz); każdy element to `Command` z nazwą w wierszu poleceń. Nowe zależności (czcionka ikon, biblioteka dokowania, ewentualnie `egui_extras`) tylko przez `[workspace.dependencies]`.
 
 ### Etap 8f: skaner sieci
 Wymaganie właściciela (zamiast wtyczek): funkcje jak Advanced IP Scanner. Zakres: 1) urządzenia w zakresie IP, 2) porty i usługi, 3) udziały (SMB) i akcje na wyniku.
