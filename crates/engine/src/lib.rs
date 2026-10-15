@@ -52,7 +52,7 @@ pub use command::{
     parse_size, Command, NameFormat, PackArgs, QueueMove, QuickAction, SpeedLimit, SyncArgs,
     TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
-pub use dirsize::DirSizes;
+pub use dirsize::{DirSizes, PanelStats};
 pub use fileclass::{class_of, class_of_name, FileClass};
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};

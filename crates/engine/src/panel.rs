@@ -15,6 +15,72 @@ pub const PARENT_NAME: &str = "..";
 /// How many visited directories each panel remembers.
 const HISTORY_LIMIT: usize = 100;
 
+/// The marked entries of a panel. Reads work like a `BTreeSet`; every change counts, so what is
+/// derived from the selection (the summary line) is recomputed only when it changed.
+#[derive(Debug, Clone, Default)]
+pub struct Selection {
+    set: BTreeSet<PathBuf>,
+    revision: u64,
+}
+
+impl Selection {
+    /// Grows with every change of the selection.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub fn insert(&mut self, path: PathBuf) -> bool {
+        self.revision += 1;
+        self.set.insert(path)
+    }
+
+    pub fn remove(&mut self, path: &Path) -> bool {
+        self.revision += 1;
+        self.set.remove(path)
+    }
+
+    pub fn clear(&mut self) {
+        self.revision += 1;
+        self.set.clear();
+    }
+
+    pub fn extend(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        self.revision += 1;
+        self.set.extend(paths);
+    }
+
+    pub fn retain(&mut self, keep: impl FnMut(&PathBuf) -> bool) {
+        self.revision += 1;
+        self.set.retain(keep);
+    }
+}
+
+impl std::ops::Deref for Selection {
+    type Target = BTreeSet<PathBuf>;
+
+    fn deref(&self) -> &BTreeSet<PathBuf> {
+        &self.set
+    }
+}
+
+impl<'a> IntoIterator for &'a Selection {
+    type Item = &'a PathBuf;
+    type IntoIter = std::collections::btree_set::Iter<'a, PathBuf>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.set.iter()
+    }
+}
+
+impl FromIterator<PathBuf> for Selection {
+    fn from_iter<I: IntoIterator<Item = PathBuf>>(iter: I) -> Self {
+        Selection {
+            set: iter.into_iter().collect(),
+            revision: 1,
+        }
+    }
+}
+
 /// The rows for one directory of an archive.
 fn archive_entries(view: &ArchiveView) -> Vec<Entry> {
     view.listing
@@ -168,9 +234,11 @@ pub struct Panel {
     pub cwd: PathBuf,
     pub entries: Vec<Entry>,
     pub cursor: usize,
-    pub selected: BTreeSet<PathBuf>,
+    pub selected: Selection,
     /// The row a Shift+click range starts from (the last plain or Ctrl+click).
     anchor: Option<PathBuf>,
+    /// Grows every time `entries` is recomputed (listing, filter, sort).
+    pub revision: u64,
     /// Quick filter: only entries whose name contains this text (case-insensitive) are shown.
     pub filter: String,
     pub sort: Sort,
@@ -199,8 +267,9 @@ impl Panel {
             cwd,
             entries: Vec::new(),
             cursor: 0,
-            selected: BTreeSet::new(),
+            selected: Selection::default(),
             anchor: None,
+            revision: 0,
             filter: String::new(),
             sort: Sort {
                 key: SortKey::Name,
@@ -222,8 +291,9 @@ impl Panel {
             cwd: PathBuf::new(),
             entries: Vec::new(),
             cursor: 0,
-            selected: BTreeSet::new(),
+            selected: Selection::default(),
             anchor: None,
+            revision: 0,
             filter: String::new(),
             sort: Sort {
                 key: SortKey::Name,
@@ -382,6 +452,7 @@ impl Panel {
     /// Recomputes `entries` from the listing and the filter and puts the cursor on `keep`
     /// (or, when that is gone, near the old position).
     fn rebuild(&mut self, keep: Option<&Path>) {
+        self.revision += 1;
         let needle = self.filter.to_lowercase();
         self.entries.clear();
         let parent = match &self.archive {
