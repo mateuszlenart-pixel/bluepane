@@ -1,0 +1,88 @@
+name: Build testowy
+
+# Buduje bluepane w trybie release dla Linuksa i Windows i wystawia gotowe pliki do pobrania
+# (zakładka "Actions" > uruchomienie > "Artifacts"). To nie jest dystrybucja: pliki służą do
+# testów ręcznych i są kasowane po 14 dniach.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - ".github/workflows/build.yml"
+      - "tools/**"
+      - "testdata/**"
+      - "docs/TESTOWANIE.md"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Starszy Ubuntu: plik działa też na starszych dystrybucjach (nowsza biblioteka libc).
+          - { os: ubuntu-22.04, name: linux }
+          - { os: windows-latest, name: windows }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3-dev
+      - name: Build (release)
+        run: cargo build --release -p bluepane -p bluepane-cli
+
+      - name: Smoke test of the test-data script (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          tools/dane-testowe.sh "$RUNNER_TEMP/dane"
+          test -f "$RUNNER_TEMP/dane/synchronizacja/lewy/nowszy-w-lewym.txt"
+          test -f "$RUNNER_TEMP/dane/dokumenty/raport.docx"
+      - name: Smoke test of the test-data script (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./tools/dane-testowe.ps1 "$env:RUNNER_TEMP\dane"
+          if (-not (Test-Path "$env:RUNNER_TEMP\dane\synchronizacja\lewy\nowszy-w-lewym.txt")) { throw 'brak plików synchronizacji' }
+          if (-not (Test-Path "$env:RUNNER_TEMP\dane\nazwy\Zażółć gęślą.txt")) { throw 'brak pliku z polskimi znakami' }
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist/bluepane
+          cp target/release/bluepane target/release/bluepane-cli dist/bluepane/
+          cp -r tools testdata dist/bluepane/
+          cp README.md ROADMAP.md dist/bluepane/
+          cp docs/TESTOWANIE.md dist/bluepane/
+          echo "commit: $(git rev-parse --short HEAD)" > dist/bluepane/WERSJA.txt
+          tar -czf bluepane-linux.tar.gz -C dist bluepane
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/bluepane | Out-Null
+          Copy-Item target/release/bluepane.exe, target/release/bluepane-cli.exe dist/bluepane/
+          Copy-Item -Recurse tools, testdata dist/bluepane/
+          Copy-Item README.md, ROADMAP.md, docs/TESTOWANIE.md dist/bluepane/
+          "commit: $(git rev-parse --short HEAD)" | Out-File -Encoding utf8 dist/bluepane/WERSJA.txt
+          Compress-Archive -Path dist/bluepane -DestinationPath bluepane-windows.zip
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: bluepane-linux
+          path: bluepane-linux.tar.gz
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: bluepane-windows
+          path: bluepane-windows.zip
+          retention-days: 14

@@ -1,0 +1,3 @@
+Za¿ó³æ gêœl¹ jaŸñ — test polskich znaków w UTF-8.
+Drugi wiersz: ¥ÆÊ£ÑÓŒ¯ ¹æê³ñóœŸ¿.
+Trzeci wiersz: zwyk³y ASCII.
