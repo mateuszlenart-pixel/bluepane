@@ -806,8 +806,26 @@ impl Session {
                 ..
             } => {
                 let file = dest.join(sources.first().map_or("", |s| remote_name(s)));
+                if report.done == 1
+                    && report.failed.is_empty()
+                    && bluepane_docs::kind_of(&file) == Some(bluepane_docs::Kind::Pdf)
+                {
+                    return match self.open_pdf_pages(&file) {
+                        Ok(()) => {
+                            self.preview_dir = Some(dest.clone());
+                            (
+                                format!("Podgląd z serwera: {}", remote_name(&sources[0])),
+                                false,
+                            )
+                        }
+                        Err(error) => {
+                            let _ = std::fs::remove_dir_all(dest);
+                            (error.to_string(), true)
+                        }
+                    };
+                }
                 if report.done == 1 && report.failed.is_empty() {
-                    match crate::Viewer::open(&file) {
+                    match crate::documents::viewer_for_file(&file, dest) {
                         Ok(viewer) => {
                             self.remove_preview_dir();
                             self.preview_dir = Some(dest.clone());

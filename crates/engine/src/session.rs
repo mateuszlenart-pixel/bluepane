@@ -234,6 +234,8 @@ pub struct Session {
     /// The search window (Alt+F7). Its search runs on its own thread, apart from the job
     /// queue, so copying and the like keep working meanwhile.
     pub find: Option<crate::FindView>,
+    /// A document shown as pages (F3 on a PDF; Word, Excel, OpenDocument through LibreOffice).
+    pub pages: Option<crate::PageViewer>,
     /// The network scanner window (Ctrl+N).
     pub scan: Option<crate::ScanView>,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
@@ -380,6 +382,7 @@ impl Session {
             sync: None,
             rename: None,
             find: None,
+            pages: None,
             scan: None,
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
@@ -497,6 +500,9 @@ impl Session {
             Command::SiteSet(name, field, value) => self.site_set(&name, &field, &value)?,
             Command::SiteDelete(name) => self.site_delete(&name)?,
             Command::EditSend => self.remote_edit_send()?,
+            Command::Page(target) => self.page_move(target)?,
+            Command::PageZoom(change) => self.page_zoom(change)?,
+            Command::PageClose => self.page_close(),
             Command::CopyNames(format) => self.copy_names(format)?,
             Command::Scan => self.open_scan(),
             Command::ScanSet(field, value) => self.scan_set(&field, &value)?,
@@ -1003,6 +1009,7 @@ impl Session {
     /// Collects what the background job reported since the last call: conflicts to ask
     /// about and the final result. Cheap; call it every frame.
     pub fn poll(&mut self) {
+        self.poll_pages();
         loop {
             let Some(job) = &self.current else { return };
             match job.try_event() {
@@ -1630,7 +1637,14 @@ impl Session {
             return self.preview_from_archive();
         }
         let path = self.entry_to_open()?;
-        let viewer = Viewer::open(&path)?;
+        match bluepane_docs::kind_of(&path) {
+            Some(bluepane_docs::Kind::Pdf) => return self.open_pdf_pages(&path),
+            // Word, Excel, OpenDocument: pages through LibreOffice when it is there, the
+            // text of the document when it is not.
+            Some(_) if self.open_office_pages(&path) => return Ok(()),
+            _ => {}
+        }
+        let viewer = self.viewer_for_local(&path)?;
         self.status = format!(
             "Podgląd: {}",
             path.file_name()
@@ -1756,7 +1770,19 @@ impl Session {
                 Some(dir.join(relative))
             })
             .unwrap_or_else(|| dir.clone());
-        match Viewer::open(&file) {
+        if bluepane_docs::kind_of(&file) == Some(bluepane_docs::Kind::Pdf) {
+            return match self.open_pdf_pages(&file) {
+                Ok(()) => {
+                    self.preview_dir = Some(dir);
+                    (format!("Podgląd z archiwum: {}", file.display()), false)
+                }
+                Err(error) => {
+                    let _ = std::fs::remove_dir_all(&dir);
+                    (format!("Podgląd z archiwum nie powiódł się: {error}"), true)
+                }
+            };
+        }
+        match crate::documents::viewer_for_file(&file, &dir) {
             Ok(viewer) => {
                 self.remove_preview_dir();
                 self.preview_dir = Some(dir);

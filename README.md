@@ -5,7 +5,7 @@ klawiaturą, działa na **Windows i Linuksie**. Projekt we wczesnej fazie (szkie
 
 ## Uruchomienie
 
-Wymagany Rust 1.88 lub nowszy (`rustup`).
+Wymagany Rust 1.92 lub nowszy (`rustup`).
 
 ```
 cargo run --release -p bluepane              # oba panele w bieżącym katalogu
@@ -88,6 +88,15 @@ zajmuje pamięci. Pliki z bajtami zerowymi otwierają się w trybie hex.
 
 Szukanie przeszukuje do 256 MiB na raz; jeśli nic nie znajdzie w tej części, pokazuje dokąd doszło
 i kolejne **N** szuka dalej. Komendy: `view`, `viewer scroll|page|hscroll|top|bottom|mode|goto|find|next|prev|close`.
+
+**Dokumenty jako strony (graficznie):** F3 na pliku `.pdf` pokazuje **strony jako obraz** (renderowanie w czystym Rust, bez programów zewnętrznych): PgUp/PgDn,
+strzałki ←/→, Spacja i Backspace zmieniają stronę, Home/End skaczą na pierwszą i ostatnią, `+`/`-` powiększają i pomniejszają, `0` dopasowuje do szerokości okna, Esc/Q zamyka.
+Pliki Word (`.docx`, `.docm`), OpenDocument (`.odt`, `.ods`) i Excel (`.xlsx`) są najpierw zamieniane na PDF przez **LibreOffice** (jeśli jest zainstalowany;
+uruchamiany w tle, bez okna, we własnym profilu, z limitem 90 s; `BLUEPANE_OFFICE=<ścieżka>` wskazuje program, `BLUEPANE_NO_OFFICE=1` wyłącza to) i pokazywane tak samo.
+Bez LibreOffice, a także gdy konwersja się nie uda, F3 pokazuje **tekst** dokumentu (akapity, nagłówki, listy, tabele, strony PDF). Dla plików z archiwum i z serwera
+strony pokazuje tylko PDF; dokumenty Office są tam pokazywane jako tekst. Ograniczenia: PDF chroniony hasłem nie jest renderowany, limit 32 MB dla PDF i 64 MB dla pozostałych.
+**F4** otwiera plik w programie systemu (Word, LibreOffice, czytnik PDF) albo w `BLUEPANE_EDITOR`; bluepane nie edytuje dokumentów samodzielnie.
+
 
 ## Archiwa
 
