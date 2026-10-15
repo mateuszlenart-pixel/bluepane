@@ -97,6 +97,12 @@ impl BluepaneUi {
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         // The colours follow the session's theme (`theme` command, saved settings).
+        if !self.theme_applied {
+            // Icon font: Phosphor symbols become available in every proportional text.
+            let mut fonts = egui::FontDefinitions::default();
+            egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+            ctx.set_fonts(fonts);
+        }
         if !self.theme_applied || self.theme.name != self.session.theme() {
             self.theme = theme::Theme::by_name(self.session.theme());
             self.theme.apply(&ctx);
@@ -986,14 +992,27 @@ impl BluepaneUi {
                     } else if row % 2 == 1 {
                         ui.painter().rect_filled(rect, 0.0, theme.row_alt);
                     }
+                    // The kind of file gives the icon and, unless the row is marked or hidden,
+                    // the colour of the name.
+                    let (icon, class_color) = theme.look(bluepane_engine::class_of(entry));
                     let color = if is_selected {
                         theme.selected
                     } else if entry.hidden {
                         theme.muted
-                    } else if entry.is_dir() {
-                        theme.dir
-                    } else {
+                    } else if matches!(
+                        bluepane_engine::class_of(entry),
+                        bluepane_engine::FileClass::Text | bluepane_engine::FileClass::Other
+                    ) {
                         theme.text
+                    } else {
+                        class_color
+                    };
+                    let icon_color = if is_selected {
+                        theme.selected
+                    } else if entry.hidden {
+                        theme.muted
+                    } else {
+                        class_color
                     };
                     let cols = Columns::split(rect);
                     let (stem, ext) = name_parts(&entry.name, entry.is_dir());
@@ -1030,7 +1049,19 @@ impl BluepaneUi {
                             color,
                         );
                     };
-                    cell(cols.name, Align2::LEFT_CENTER, name);
+                    // Icon in its own narrow column, then the name next to it.
+                    painter.with_clip_rect(cols.name).text(
+                        egui::pos2(cols.name.left() + COLUMN_PAD, y),
+                        Align2::LEFT_CENTER,
+                        icon,
+                        FontId::proportional(15.0),
+                        icon_color,
+                    );
+                    let name_col = Rect::from_min_max(
+                        egui::pos2(cols.name.left() + ICON_WIDTH, cols.name.top()),
+                        cols.name.max,
+                    );
+                    cell(name_col, Align2::LEFT_CENTER, name);
                     cell(cols.ext, Align2::LEFT_CENTER, ext.to_string());
                     cell(cols.size, Align2::RIGHT_CENTER, size);
                     cell(
@@ -1075,6 +1106,8 @@ impl BluepaneUi {
 }
 
 const COLUMN_PAD: f32 = 6.0;
+/// Room for the file type icon before the name.
+const ICON_WIDTH: f32 = 22.0;
 
 /// Horizontal layout of a panel row: a flexible name column and fixed columns on the right.
 struct Columns {

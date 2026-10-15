@@ -119,7 +119,7 @@ Decyzje właściciela (2026-10-15):
 - Zakres: Quick View w drugim panelu, pasek rozmiaru w kolumnie `Size`, mini-pasek zadania na dole, podświetlanie zmian w oknach zmiany nazw i synchronizacji.
 
 - [x] 10a Fundament: moduł `theme.rs` (paleta, `Visuals`, gęstsze odstępy, ostrzejsze rogi), motyw Modern Dark, komenda `theme` i zapis wyboru; ramka i tło odróżniają panel aktywny od nieaktywnego, kursor z obrysem, wiersze naprzemienne, katalogi/zaznaczone/ukryte w kolorach palety
-- [ ] 10b Ikony i kolory typów plików: czcionka ikon, ikona przy nazwie (katalog, archiwum, dokument, serwer, plik wykonywalny), kolory semantyczne (katalogi, archiwa, dokumenty, ukryte), zaznaczenie (Insert/Spacja) odróżnione od kursora
+- [x] 10b Ikony i kolory typów plików (klasa pliku liczona w silniku: `class_of`; czcionka ikon Phosphor): ikona przy nazwie (katalog, archiwum, dokument, serwer, plik wykonywalny), kolory semantyczne (katalogi, archiwa, dokumenty, ukryte), zaznaczenie (Insert/Spacja) odróżnione od kursora
 - [ ] 10c Lista plików: nagłówki kolumn z kierunkiem sortowania (kliknięcie = komenda `sort`), kursor i zaznaczenie rysowane osobno, pasek rozmiaru w komórce `Size` (rozmiary katalogów liczone w tle na życzenie)
 - [ ] 10d Nawigacja: ścieżka jako klikalne segmenty (breadcrumbs), edycja ścieżki po kliknięciu pustego miejsca (jak `cd`), pasek napędów z zajętością i wolnym miejscem, odznaka aktywnego filtra
 - [ ] 10e Dolny pasek: klawisze funkcyjne jako dwukolorowe przyciski (skrót + nazwa), mini-pasek bieżącego zadania z prędkością i postępem oraz skrótem do okna kolejki (Ctrl+J)

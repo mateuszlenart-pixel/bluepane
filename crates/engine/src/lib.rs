@@ -6,6 +6,7 @@
 
 mod command;
 mod documents;
+mod fileclass;
 mod find;
 mod format;
 mod job;
@@ -46,6 +47,7 @@ pub use command::{
     parse_size, Command, NameFormat, PackArgs, QueueMove, SpeedLimit, SyncArgs, TabAction,
     UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
+pub use fileclass::{class_of, class_of_name, FileClass};
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};
 pub use job::{
