@@ -20,6 +20,7 @@ impl BluepaneUi {
         let status = self.session.job_status();
         let paused = self.session.paused;
         let mut commands: Vec<Command> = Vec::new();
+        let mut limit_line: Option<&str> = None;
 
         ui.label(RichText::new("Kolejka zadań").strong());
         ui.horizontal(|ui| {
@@ -55,6 +56,33 @@ impl BluepaneUi {
                     "Kolejka wstrzymana: bieżące zadanie się dokończy, następne czekają.",
                 );
             }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Limit prędkości:");
+            let current = self.session.speed_limit();
+            let label = |limit: Option<u64>| match limit {
+                None => "bez limitu".to_string(),
+                Some(bytes) => format!("{}/s", human_size(bytes)),
+            };
+            egui::ComboBox::from_id_salt("speed_limit")
+                .selected_text(label(current))
+                .show_ui(ui, |ui| {
+                    for (text, line) in [
+                        ("bez limitu", "limit off"),
+                        ("256 KB/s", "limit 256k"),
+                        ("1 MB/s", "limit 1m"),
+                        ("5 MB/s", "limit 5m"),
+                        ("20 MB/s", "limit 20m"),
+                    ] {
+                        if ui.selectable_label(false, text).clicked() {
+                            limit_line = Some(line);
+                        }
+                    }
+                });
+            ui.label(
+                RichText::new("własna wartość: komenda `limit 3m`; dotyczy kopiowania i transferów, do końca sesji")
+                    .weak(),
+            );
         });
         ui.separator();
 
@@ -152,6 +180,9 @@ impl BluepaneUi {
 
         for command in commands {
             let _ = self.session.execute(command);
+        }
+        if let Some(line) = limit_line {
+            let _ = self.session.run_line(line);
         }
     }
 }

@@ -417,7 +417,12 @@ pub struct WorkerLost;
 
 impl RunningJob {
     pub fn start(spec: JobSpec) -> RunningJob {
-        let progress = Progress::new();
+        Self::start_limited(spec, Arc::default())
+    }
+
+    /// Starts a job whose speed follows `limit` (bytes per second, 0 = unlimited).
+    pub fn start_limited(spec: JobSpec, limit: Arc<std::sync::atomic::AtomicU64>) -> RunningJob {
+        let progress = Progress::with_limit(limit);
         let (tx, events) = mpsc::channel();
         let worker_spec = spec.clone();
         let worker_progress = progress.clone();

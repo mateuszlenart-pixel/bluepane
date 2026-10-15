@@ -67,7 +67,7 @@ Wiersz poleceń na dole przyjmuje te same komendy: `cd <ścieżka>`, `back`, `fo
 `volume <numer|nazwa>`, `tab <new|open|close [n]|next|prev|n>`, `filter <tekst>`, `mkdir <nazwa>`, `copy`, `move`, `delete`,
 `selmask <maska>`, `unselmask <maska>`, `selectall`, `unselectall`, `invert`,
 `sort <name|ext|size|date> [asc|desc]`, `pack`, `unpack`, `testarchive`, `select <nazwa>`, `cursor <n>`, `rename [nazwa]`, `confirm` / `cancel` (odpowiedź na pytanie), `stop` (przerwij zadanie),
-`chmod`, `sync`, `syncrun`, `syncset`, `syncclose`, `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queuemove`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
+`chmod`, `sync`, `syncrun`, `syncset`, `syncclose`, `scan`, `scanset`, `scanrun`, `scanstop`, `scanclose`, `queue`, `queuepause`, `queueresume`, `queuedel`, `queuemove`, `limit`, `queueretry`, `queueclear`, `queueclose`, `editsend`, `sites`, `siteset`, `sitedel`, `siteclose`, `connect`, `disconnect`, `find`, `findset`, `findrun`, `findstop`, `findgo`, `findview`, `findclose`, `multirename`, `mrset`, `mrname`, `mrrun`, `mrundo`, `mrclose`,
 `overwrite`, `newer` (nadpisz starsze), `skip`, `keepboth` (z końcówką `-all` = dla wszystkich;
 odpowiedzi na „plik już istnieje”), `refresh`.
 
@@ -186,6 +186,8 @@ Kopiowanie, przenoszenie, pakowanie, transfery z serwerów i inne długie zadani
 oczekujące (każde można **usunąć z kolejki** albo **przesunąć**: ▲ wyżej, ▼ niżej, „Na początek”; to samo robi `queuemove <numer> up|down|top`) i ostatnie zakończone (każde można **ponowić**, np. po błędzie). **Wstrzymaj kolejkę** pozwala
 bieżącemu zadaniu się dokończyć, a następne czekają, dopóki ich nie wznowisz; odświeżanie list serwerów i logowanie nie czekają. `stop` przerywa bieżące
 i czyści oczekujące.
+
+**Limit prędkości:** `limit 2m` (albo `500k`, `limit off`, samo `limit` pokazuje stan) albo lista w oknie kolejki ogranicza prędkość kopiowania, przenoszenia, pakowania i transferów z serwerami (średnio, w bajtach na sekundę). Działa od razu także na trwające zadanie; obowiązuje do końca sesji (nie jest zapisywany).
 
 ## Serwery: SFTP, FTP, FTPS (Ctrl+S)
 

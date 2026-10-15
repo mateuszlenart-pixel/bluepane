@@ -129,7 +129,8 @@ Do zrobienia (8b i dalej):
 - [x] Uprawnienia/chmod na serwerze: komenda `chmod <ósemkowo>` na zaznaczeniu, SFTP (setstat) i FTP/FTPS (`SITE CHMOD`); bez rekurencji, bez wyświetlania uprawnień w kolumnie (do zrobienia)
 - [x] Okno kolejki zadań (Ctrl+J): bieżące z postępem, oczekujące (usuwanie), zakończone (ponawianie), pauza kolejki; testy w silniku
 - [x] Kolejka: zmiana kolejności oczekujących zadań (`queuemove`, przyciski w oknie Ctrl+J)
-- [ ] Kolejka: równoległe transfery, ograniczenie prędkości
+- [x] Kolejka: ograniczenie prędkości (`limit`, lista w oknie Ctrl+J)
+- [ ] Kolejka: równoległe transfery (wymaga przebudowy: jedno `current` w sesji, jedno pytanie o konflikt naraz)
 - [ ] ~~Wtyczki~~ pominięte (decyzja właściciela); w zamian ewentualnie osobny etap: skaner sieci IP
 - [x] Hasła w systemowym magazynie (Secret Service / Menedżer poświadczeń) i zapis nowego hasła do Bitwarden (`bw create item`); `sitepassword`; testy na atrapach (bez prawdziwego keyringu i Bitwarden)
 - [ ] Do sprawdzenia ręcznie: prawdziwy keyring (Linux Mint: Gnome Keyring), Windows Credential Manager, `bw` z odblokowanym sejfem

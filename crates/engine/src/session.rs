@@ -253,6 +253,8 @@ pub struct Session {
     pub(crate) remote_edit: Option<RemoteEdit>,
     /// The queue is paused: the running job finishes, the next ones wait.
     pub paused: bool,
+    /// Bytes per second the jobs may move (0 = no limit); shared with running jobs.
+    pub(crate) speed_limit: Arc<std::sync::atomic::AtomicU64>,
     /// Text the front end should put on the system clipboard (taken by `take_clipboard`).
     clipboard: Option<String>,
     /// The queue window is open (Ctrl+J).
@@ -396,6 +398,7 @@ impl Session {
             editor: Editor(std::sync::Arc::new(open_in_editor)),
             remote_edit: None,
             paused: false,
+            speed_limit: Arc::default(),
             clipboard: None,
             queue_open: false,
             finished: VecDeque::new(),
@@ -541,6 +544,7 @@ impl Session {
             Command::QueueResume => self.pause_queue(false),
             Command::QueueDelete(n) => self.queue_delete(n)?,
             Command::QueueMove(n, to) => self.queue_move(n, to)?,
+            Command::Limit(limit) => self.set_speed_limit(limit),
             Command::QueueRetry(n) => self.queue_retry(n)?,
             Command::QueueClear => self.finished.clear(),
             Command::SitePassword(name, password) => self.site_password(&name, password)?,
@@ -1017,7 +1021,7 @@ impl Session {
             self.status = format!("{}…", spec.kind.label());
             self.status_is_error = false;
         }
-        self.current = Some(RunningJob::start(spec));
+        self.current = Some(RunningJob::start_limited(spec, self.speed_limit.clone()));
     }
 
     /// True while a job runs or waits in the queue.

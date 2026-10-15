@@ -1,7 +1,7 @@
 //! The job queue as the user sees it (Ctrl+J): what runs, what waits and can be removed,
 //! what finished and can be run again; the queue can be paused.
 
-use crate::command::QueueMove;
+use crate::command::{QueueMove, SpeedLimit};
 use crate::job::{JobKind, JobSpec, RemoteOp};
 use crate::session::Session;
 use crate::EngineError;
@@ -116,6 +116,34 @@ impl Session {
         let removed = self.remove_queued(index);
         self.status = format!("Usunięto z kolejki: {}", removed.describe());
         Ok(())
+    }
+
+    /// The speed limit in bytes per second, if one is set.
+    pub fn speed_limit(&self) -> Option<u64> {
+        match self.speed_limit.load(std::sync::atomic::Ordering::Relaxed) {
+            0 => None,
+            limit => Some(limit),
+        }
+    }
+
+    /// `limit`: applies to the running job at once and to every later one.
+    pub(crate) fn set_speed_limit(&mut self, limit: SpeedLimit) {
+        match limit {
+            SpeedLimit::Show => {}
+            SpeedLimit::Off => self
+                .speed_limit
+                .store(0, std::sync::atomic::Ordering::Relaxed),
+            SpeedLimit::BytesPerSecond(bytes) => self
+                .speed_limit
+                .store(bytes, std::sync::atomic::Ordering::Relaxed),
+        }
+        self.status = match self.speed_limit() {
+            Some(bytes) => format!(
+                "Limit prędkości: {}/s (kopiowanie i transfery; do końca sesji)",
+                crate::human_size(bytes)
+            ),
+            None => "Bez limitu prędkości".into(),
+        };
     }
 
     /// Moves waiting job `n` (numbered like `queue_delete`) up, down or to the front of the
@@ -316,6 +344,46 @@ mod tests {
             ]
         );
         assert!(tmp.path().join("right/c.txt").exists());
+    }
+
+    #[test]
+    fn the_speed_limit_is_set_shown_and_removed() {
+        let (_tmp, mut s) = session();
+        assert_eq!(s.speed_limit(), None);
+        s.run_line("limit 2m").unwrap();
+        assert_eq!(s.speed_limit(), Some(2 * 1024 * 1024));
+        assert!(s.status.contains("2.0 MB/s"), "{}", s.status);
+        s.run_line("limit 500k/s").unwrap();
+        assert_eq!(s.speed_limit(), Some(500 * 1024));
+        s.run_line("limit").unwrap();
+        assert_eq!(s.speed_limit(), Some(500 * 1024), "showing changes nothing");
+        assert!(s.run_line("limit fast").is_err());
+        s.run_line("limit off").unwrap();
+        assert_eq!(s.speed_limit(), None);
+        assert!(s.status.contains("Bez limitu"), "{}", s.status);
+    }
+
+    #[test]
+    fn a_limited_copy_takes_time() {
+        let (tmp, mut s) = session();
+        fs::write(tmp.path().join("left/big.bin"), vec![7u8; 300_000]).unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("limit 400k").unwrap();
+        s.run_line("select big.bin").unwrap();
+        let start = std::time::Instant::now();
+        s.run_line("copy").unwrap();
+        settle(&mut s);
+        assert!(
+            start.elapsed() >= Duration::from_millis(500),
+            "{:?}",
+            start.elapsed()
+        );
+        assert_eq!(
+            fs::metadata(tmp.path().join("right/big.bin"))
+                .unwrap()
+                .len(),
+            300_000
+        );
     }
 
     #[test]
