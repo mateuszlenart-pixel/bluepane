@@ -34,6 +34,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
 | Ctrl+Shift+1 / 2 / 3 | skopiuj do schowka zaznaczone nazwy: bez rozszerzeń / z rozszerzeniami / pełne ścieżki (po jednej w linii; bez zaznaczenia: element pod kursorem) |
 | Ctrl+N | skaner sieci (urządzenia w zakresie adresów IP, ich porty i usługi) |
+| — | ikony i kolory typów plików: katalogi, archiwa, dokumenty, obrazy, audio/wideo, kod, programy (klasa pliku z nazwy, bez otwierania) |
 | — | motyw kolorów: komenda `theme` (pokazuje dostępne), `theme dark`; wybór zapisuje się w `settings.conf` |
 | Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |
 | Ctrl+Shift+F4 | wyślij na serwer plik edytowany przez F4 |

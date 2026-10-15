@@ -30,6 +30,13 @@ pub struct Theme {
     /// Marked files (Insert, Space).
     pub selected: Color32,
     pub dir: Color32,
+    /// Colours by kind of file (icon and name).
+    pub archive: Color32,
+    pub document: Color32,
+    pub image: Color32,
+    pub media: Color32,
+    pub code: Color32,
+    pub executable: Color32,
     pub accent: Color32,
     pub border: Color32,
     pub warn: Color32,
@@ -59,6 +66,12 @@ impl Theme {
             muted: rgb(0x7c, 0x85, 0x9e),
             selected: rgb(0xff, 0xb8, 0x4d),
             dir: rgb(0x7d, 0xcf, 0xff),
+            archive: rgb(0xc0, 0x9b, 0xf5),
+            document: rgb(0xf0, 0x9a, 0x5a),
+            image: rgb(0xf4, 0x8f, 0xc0),
+            media: rgb(0xe8, 0x7c, 0x9c),
+            code: rgb(0x6e, 0xe0, 0xb4),
+            executable: rgb(0xe8, 0xd0, 0x6c),
             accent: rgb(0x3d, 0x8b, 0xfd),
             border: rgb(0x2c, 0x31, 0x44),
             warn: rgb(0xfb, 0xbf, 0x24),
@@ -71,6 +84,26 @@ impl Theme {
         match name {
             "dark" => Theme::dark(),
             _ => Theme::dark(),
+        }
+    }
+
+    /// The icon and the colour of a kind of file (the colour is for the name too).
+    pub fn look(&self, class: bluepane_engine::FileClass) -> (&'static str, Color32) {
+        use bluepane_engine::FileClass as C;
+        use egui_phosphor::regular as i;
+        match class {
+            C::Parent => (i::ARROW_ELBOW_LEFT_UP, self.muted),
+            C::Dir => (i::FOLDER_SIMPLE, self.dir),
+            C::Symlink => (i::LINK, self.dir),
+            C::Archive => (i::FILE_ZIP, self.archive),
+            C::Document => (i::FILE_TEXT, self.document),
+            C::Image => (i::FILE_IMAGE, self.image),
+            C::Audio => (i::MUSIC_NOTE, self.media),
+            C::Video => (i::FILM_STRIP, self.media),
+            C::Code => (i::FILE_CODE, self.code),
+            C::Text => (i::FILE_TEXT, self.text),
+            C::Executable => (i::GEAR_SIX, self.executable),
+            C::Other => (i::FILE, self.muted),
         }
     }
 
@@ -172,6 +205,12 @@ mod tests {
                     ("text", t.text, 7.0),
                     ("dir", t.dir, 4.5),
                     ("selected", t.selected, 4.5),
+                    ("archive", t.archive, 4.5),
+                    ("document", t.document, 4.5),
+                    ("image", t.image, 4.5),
+                    ("media", t.media, 4.5),
+                    ("code", t.code, 4.5),
+                    ("executable", t.executable, 4.5),
                     ("muted", t.muted, 3.0),
                     ("warn", t.warn, 4.5),
                     ("error", t.error, 4.5),
@@ -183,6 +222,45 @@ mod tests {
                         "{name}: {label} on {background:?} has contrast {ratio:.1}, needs {minimum}"
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn every_class_has_an_icon_and_the_kinds_are_told_apart_by_colour() {
+        use bluepane_engine::FileClass as C;
+        let theme = Theme::dark();
+        let all = [
+            C::Parent,
+            C::Dir,
+            C::Symlink,
+            C::Archive,
+            C::Document,
+            C::Image,
+            C::Audio,
+            C::Video,
+            C::Code,
+            C::Text,
+            C::Executable,
+            C::Other,
+        ];
+        for class in all {
+            let (icon, _) = theme.look(class);
+            assert_eq!(icon.chars().count(), 1, "{class:?} has one glyph");
+        }
+        let colour = |class| theme.look(class).1;
+        // The classes a user needs to tell apart at a glance.
+        let distinct = [
+            C::Dir,
+            C::Archive,
+            C::Document,
+            C::Image,
+            C::Code,
+            C::Executable,
+        ];
+        for (i, a) in distinct.iter().enumerate() {
+            for b in &distinct[i + 1..] {
+                assert_ne!(colour(*a), colour(*b), "{a:?} and {b:?}");
             }
         }
     }
