@@ -41,6 +41,8 @@ pub struct Theme {
     pub border: Color32,
     pub warn: Color32,
     pub error: Color32,
+    /// Something good or new: copy to the right, characters added by a rename.
+    pub ok: Color32,
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color32 {
@@ -76,6 +78,7 @@ impl Theme {
             border: rgb(0x2c, 0x31, 0x44),
             warn: rgb(0xfb, 0xbf, 0x24),
             error: rgb(0xf8, 0x71, 0x71),
+            ok: rgb(0x6e, 0xe7, 0x9a),
         }
     }
 
@@ -214,6 +217,7 @@ mod tests {
                     ("muted", t.muted, 3.0),
                     ("warn", t.warn, 4.5),
                     ("error", t.error, 4.5),
+                    ("ok", t.ok, 4.5),
                     ("accent", t.accent, 3.0),
                 ] {
                     let ratio = contrast(colour, background);

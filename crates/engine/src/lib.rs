@@ -31,8 +31,9 @@ pub use bluepane_netscan::{local_range, Host as ScanHost, ScanSummary, Service a
 pub use bluepane_ops::Resolution;
 pub use bluepane_remote::{bitwarden_available, Protocol, SecretServices, SecretStore, Site};
 pub use bluepane_rename::{
-    CaseMode as RenameCase, Item as RenameItem, Plan as RenamePlan, Row as RenameRow,
-    Settings as RenameSettings, Status as RenameStatus,
+    changed_spans as rename_changed_spans, CaseMode as RenameCase, Item as RenameItem,
+    Plan as RenamePlan, Row as RenameRow, Settings as RenameSettings, Span as RenameSpan,
+    Status as RenameStatus,
 };
 pub use bluepane_search::{
     Encoding as FindEncoding, Hit as FindHit, LineHit as FindLine, Location as FindLocation,

@@ -6,8 +6,10 @@
 //! and rolls back when something fails halfway.
 
 mod apply;
+mod diff;
 mod mask;
 mod plan;
 
 pub use apply::{apply, undo, Renamed};
+pub use diff::{changed_spans, Span};
 pub use plan::{plan, CaseMode, Item, Plan, Row, Settings, Stamp, Status};

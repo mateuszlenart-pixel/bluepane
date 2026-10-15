@@ -4,7 +4,7 @@
 //! new names is the preview, and nothing is renamed before "Start".
 
 use bluepane_engine::{format_modified, human_size, Command, RenameCase, RenameStatus, RenameView};
-use egui::{Align2, Color32, FontId, RichText, Sense};
+use egui::{Align2, FontId, RichText, Sense};
 
 use crate::BluepaneUi;
 
@@ -251,7 +251,7 @@ impl BluepaneUi {
             ));
         });
         if let Some(error) = &view.error {
-            ui.colored_label(Color32::LIGHT_RED, error);
+            ui.colored_label(self.theme.error, error);
         } else if let Some(summary) = &view.summary {
             ui.label(RichText::new(summary).weak());
         } else {
@@ -270,6 +270,7 @@ impl BluepaneUi {
 
     fn rename_rows(&mut self, ui: &mut egui::Ui, view: &RenameView, commands: &mut Vec<Command>) {
         let font = FontId::monospace(13.0);
+        let theme = self.theme.clone();
         let rows = &view.plan.rows;
         let mut finish: Option<(usize, String, bool)> = None;
         egui::ScrollArea::vertical().auto_shrink(false).show_rows(
@@ -286,8 +287,8 @@ impl BluepaneUi {
                     );
                     let w = rect.width();
                     let at = |fraction: f32| rect.left() + w * fraction;
-                    let weak = ui.visuals().weak_text_color();
-                    let normal = ui.visuals().text_color();
+                    let weak = theme.muted;
+                    let normal = theme.text;
                     let painter = ui.painter();
                     painter.text(
                         egui::pos2(at(0.0), rect.center().y),
@@ -305,8 +306,8 @@ impl BluepaneUi {
                     );
                     let (color, hint) = match &row.status {
                         RenameStatus::Unchanged => (weak, None),
-                        RenameStatus::Ready => (Color32::LIGHT_GREEN, None),
-                        RenameStatus::Conflict(why) => (Color32::LIGHT_RED, Some(why.as_str())),
+                        RenameStatus::Ready => (theme.ok, None),
+                        RenameStatus::Conflict(why) => (theme.error, Some(why.as_str())),
                     };
                     let name_rect = egui::Rect::from_min_max(
                         egui::pos2(at(0.36), rect.top()),
@@ -331,11 +332,55 @@ impl BluepaneUi {
                             egui::Id::new(("rename_new_name", index)),
                             Sense::click(),
                         );
+                        // A sign for the state, then the name: for a ready rename only the
+                        // characters that are new are lit; a conflict is all red.
+                        let sign = match &row.status {
+                            RenameStatus::Unchanged => "",
+                            RenameStatus::Ready => egui_phosphor::regular::CHECK,
+                            RenameStatus::Conflict(_) => egui_phosphor::regular::WARNING,
+                        };
                         ui.painter().text(
                             egui::pos2(name_rect.left(), rect.center().y),
                             Align2::LEFT_CENTER,
-                            &row.new_name,
-                            font.clone(),
+                            sign,
+                            FontId::proportional(14.0),
+                            color,
+                        );
+                        let mut job = egui::text::LayoutJob::default();
+                        let plain = egui::TextFormat {
+                            font_id: font.clone(),
+                            color: if matches!(row.status, RenameStatus::Conflict(_)) {
+                                theme.error
+                            } else {
+                                theme.text
+                            },
+                            ..Default::default()
+                        };
+                        if matches!(row.status, RenameStatus::Ready) {
+                            for span in
+                                bluepane_engine::rename_changed_spans(&row.old_name, &row.new_name)
+                            {
+                                let format = if span.changed {
+                                    egui::TextFormat {
+                                        color: theme.ok,
+                                        background: theme.ok.gamma_multiply(0.20),
+                                        ..plain.clone()
+                                    }
+                                } else {
+                                    plain.clone()
+                                };
+                                job.append(&span.text, 0.0, format);
+                            }
+                        } else {
+                            job.append(&row.new_name, 0.0, plain);
+                        }
+                        let galley = ui.painter().layout_job(job);
+                        ui.painter().galley(
+                            egui::pos2(
+                                name_rect.left() + 22.0,
+                                rect.center().y - galley.size().y / 2.0,
+                            ),
+                            galley,
                             color,
                         );
                         let response = match hint {
