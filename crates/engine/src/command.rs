@@ -47,6 +47,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "copynames",
     "theme",
     "dirsize",
+    "quick",
     "scan",
     "scanset",
     "scanrun",
@@ -162,6 +163,14 @@ pub struct UnpackArgs {
     pub password: Option<String>,
     /// `-s`: extract into a subfolder named after the archive.
     pub subfolder: bool,
+}
+
+/// What `quick` does: switch Quick View on or off, scroll its text, or turn its pages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuickAction {
+    Toggle,
+    Scroll(i64),
+    Page(i32),
 }
 
 /// What `limit` was asked to do.
@@ -335,6 +344,8 @@ pub enum Command {
     PageClose,
     /// Copy the names (or paths) of the selected entries, one per line, to the clipboard.
     CopyNames(NameFormat),
+    /// Quick View: show the file under the cursor in the other panel.
+    Quick(QuickAction),
     /// Count the size of the selected folders (or the one under the cursor) in the background.
     DirSize,
     /// Show the colour theme and the available ones, or switch to another.
@@ -440,6 +451,7 @@ impl Command {
             "pageclose" => Ok(Command::PageClose),
             "theme" => Ok(Command::Theme(optional(rest))),
             "dirsize" => Ok(Command::DirSize),
+            "quick" => Command::parse_quick(rest),
             "copynames" => match rest.to_ascii_lowercase().as_str() {
                 "" | "file" | "name" | "ext" => Ok(Command::CopyNames(NameFormat::File)),
                 "stem" | "short" => Ok(Command::CopyNames(NameFormat::Stem)),
