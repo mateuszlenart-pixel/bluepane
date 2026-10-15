@@ -158,6 +158,11 @@ impl Keymap {
         self.viewer_bindings.get(key).map(String::as_str)
     }
 
+    /// Takes a key off: it runs nothing until it is bound again.
+    pub fn unbind(&mut self, key: &str) {
+        self.bindings.remove(key);
+    }
+
     /// Binds (or rebinds) a key.
     pub fn bind(&mut self, key: impl Into<String>, command_line: impl Into<String>) {
         self.bindings.insert(key.into(), command_line.into());

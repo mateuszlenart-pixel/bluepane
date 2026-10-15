@@ -75,7 +75,7 @@ pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, Sha
 pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };
-pub use settings::{DEFAULT_THEME, THEMES};
+pub use settings::{normalize_key, DEFAULT_THEME, THEMES};
 pub use tools::Tool;
 pub use viewer::{Row, ViewMode, Viewer};
 
