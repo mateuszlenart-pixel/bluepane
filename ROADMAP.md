@@ -19,7 +19,12 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 8 | Sieć | 🟡 | SFTP i FTP działają jak katalog lokalny |
 | 8f | Skaner sieci | ✅ | lista urządzeń z usługami, udziałami i akcjami (jak Advanced IP Scanner) |
 | 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
-| 10 | Nowoczesne GUI | ⬜ | okno wygląda jak dopracowane narzędzie, a nie prototyp; logika w `engine` bez zmian |
+| 10 | Nowoczesne GUI | ✅ | okno wygląda jak dopracowane narzędzie, a nie prototyp; logika w `engine` bez zmian |
+| T | Poprawki po testach ręcznych | ⬜ | błędy z `docs/TESTOWANIE.md` (Linux i Windows) naprawione, każdy z testem |
+| 11 | Fundamenty pod dalszy rozwój | ⬜ | nowe narzędzie to jeden moduł; 100 tys. plików bez zacinania; jedna konfiguracja; testy GUI w CI |
+| 12 | Nawigacja i wygoda | ⬜ | każdą funkcję da się znaleźć bez README; mysz jest pełnoprawna obok klawiatury |
+| 13 | Automatyzacja | ⬜ | makra, własne przyciski narzędzi, dziennik operacji z cofaniem |
+| 14 | Funkcje dodatkowe | ⬜ | porządek na dysku, sieć, środowisko pracy, lepszy podgląd |
 
 ## Stan szkieletu (etap 1) i co dalej
 
@@ -163,6 +168,79 @@ Do zrobienia (8b i dalej):
 - [ ] ~~Wtyczki~~ pominięte (decyzja właściciela); w zamian ewentualnie osobny etap: skaner sieci IP
 - [x] Hasła w systemowym magazynie (Secret Service / Menedżer poświadczeń) i zapis nowego hasła do Bitwarden (`bw create item`); `sitepassword`; testy na atrapach (bez prawdziwego keyringu i Bitwarden)
 - [ ] Do sprawdzenia ręcznie: prawdziwy keyring (Linux Mint: Gnome Keyring), Windows Credential Manager, `bw` z odblokowanym sejfem
+
+### Etapy T i 11–14: plan po audycie (2026-10-15)
+
+Źródło: audyt repozytorium „świeżym okiem" i propozycje zaakceptowane przez właściciela do
+wprowadzenia (kolejność: T, 11, 12, 13, 14). Zasady jak dotąd: jeden podetap = jedna gałąź = jeden
+PR, scalanie dopiero po „scalaj" i zielonym CI na obu systemach, `cargo clean` po etapie, GUI
+oglądane na zrzutach i sprawdzane ręcznie przez właściciela. **Każda nowa zależność wymaga zgody
+właściciela** (kandydaci wypisani przy podetapach). Skróty: nowe komendy dostają wolne klawisze
+(wolne dziś m.in. F1, Ctrl+P, Ctrl+G, Ctrl+B, Ctrl+K), istniejących nie zmieniamy bez uzgodnienia.
+
+#### Etap T: poprawki po testach ręcznych
+
+- [ ] Zebrać wyniki z `docs/TESTOWANIE.md` (tabela, opisy błędów, zrzuty) i ułożyć listę według wagi
+- [ ] Naprawiać od najpoważniejszych (utrata danych, zawieszenia, Windows), każdy błąd z testem odtwarzającym
+- [ ] Skróty i drobiazgi z uwag „na później" po decyzji właściciela
+
+#### Etap 11: fundamenty pod dalszy rozwój
+
+Wnioski z audytu: `session.rs` ma ok. 4400 linii i 55 publicznych pól (stan każdego narzędzia
+osobno, UI czyta pola wprost); część danych panelu liczy się w każdej klatce; pięć różnych
+formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
+
+- [ ] 11a Narzędzia jako moduły: wspólny interfejs narzędzia (stan, komendy, klawisze, zamykanie, tytuł zakładki) zamiast osobnych pól i gałęzi w `Session`; dok i obsługa klawiszy biorą listę narzędzi z jednego miejsca. Bez zmian dla użytkownika, wszystkie testy przechodzą bez zmian
+- [ ] 11b Wydajność listy: podsumowanie panelu, największy rozmiar (paski), klasa pliku i okruszki liczone przy zmianie listy, nie w każdej klatce; test na 100 tys. plików (czas klatki, pamięć) jako cel etapu 3
+- [ ] 11c Jedna konfiguracja: `settings.toml` (albo JSON) z wersją formatu i przeniesieniem starych plików (`settings.conf`, `scan_favorites.conf`, układ; `sites.conf` i `known_hosts` zostają osobno lub wchodzą po decyzji); **konfigurowalne skróty** (sekcja `[keys]`, komenda `bind <klawisz> <komenda>`), z walidacją, że komenda istnieje
+- [ ] 11d Testy GUI w CI: `egui_kittest` (zależność do zgody) — scenariusze: start, otwarcie narzędzia w doku, Quick View, zmiana nazw z podświetleniem; porównanie zrzutów z wzorcem
+- [ ] 11e Dług techniczny: łatka `suppaftp` zgłoszona upstream (i usunięcie `vendor/` po wydaniu), wspólna tabela CP1250 (dziś w dwóch crate'ach), na Windows bez okna konsoli w wersji release (z plikiem logów zamiast niej), ikona aplikacji, plik logów (`bluepane.log` w katalogu konfiguracji) do zgłaszania błędów
+- [ ] 11f Dokumentacja: README podzielone na „dla użytkownika" (krótko) i dokumentację funkcji (`docs/`); tabela klawiszy tylko ze skrótami (opisy funkcji osobno); lista komend z opisami generowana z kodu
+
+#### Etap 12: nawigacja i wygoda
+
+- [ ] 12a **Paleta komend** (F1): wyszukiwanie rozmyte po wszystkich komendach z opisem po polsku i skrótem; ostatnio używane na górze; opisy komend w silniku (jedno źródło dla palety, pomocy i README)
+- [ ] 12b **„Skocz do"** (Ctrl+P): katalogi z rankingiem częstość + świeżość (historia zapisywana między uruchomieniami), zakładki, witryny serwerów, udziały ze skanera; Enter przechodzi w aktywnym panelu
+- [ ] 12c **Pasek „Miejsca"** (chowany, Ctrl+B): dyski z zajętością, ulubione katalogi (dodaj/usuń), serwery, udziały sieciowe, ostatnie; zastępuje rozproszone listy (dyski nad panelem, Ctrl+S, Ctrl+N jako punkty wejścia)
+- [ ] 12d **Omnibox** zamiast pola ścieżki: ścieżka, `sftp://użytkownik@host/katalog`, `ftp://`, `smb://`, wnętrze archiwum, `?wzorzec` (szukanie), `>komenda`; podpowiedzi przy pisaniu
+- [ ] 12e Okruszki z rozwijaniem: klik w `›` między segmentami pokazuje katalogi rodzeństwa
+- [ ] 12f **Menu kontekstowe** pod prawym przyciskiem (otwórz w programie, kopiuj ścieżkę/nazwę, spakuj, rozpakuj, porównaj, właściwości, chmod na serwerze, dodaj do ulubionych); pozycje to komendy
+- [ ] 12g **Przeciąganie**: między panelami (kopiuj; z Shift przenieś), upuszczanie plików z pulpitu/menedżera systemu do panelu
+- [ ] 12h **Zmiana nazwy w wierszu** (F2 edytuje nazwę na liście; rozszerzenie nie jest zaznaczane) i **powiadomienia** po skończonych zadaniach (w rogu okna, z przyciskiem „Cofnij", gdzie się da)
+- [ ] 12i **Pasek akcji zależny od zaznaczenia**: archiwum → „Rozpakuj tutaj / do podkatalogu", PDF/dokument → „Podgląd", dwa katalogi → „Porównaj / Synchronizuj", plik na serwerze → „Edytuj"
+- [ ] 12j **Ściąga klawiszy**: przytrzymanie Ctrl (albo `?`) nakłada skróty na przyciski; wyraźny wskaźnik, która zakładka doku ma klawiaturę
+- [ ] 12k **Obrazy**: widok miniatur (przełącznik lista/siatka) i podgląd obrazów w Quick View i F3 (zależność `image` do zgody; tylko popularne formaty)
+- [ ] 12l **Kolumny**: wybór kolumn (uprawnienia, właściciel, data utworzenia, suma SHA-256, status gita), szerokość przeciągana myszą, zapamiętana; gęstość zwarta/wygodna; **jasny motyw** (po decyzji właściciela) 
+- [ ] 12m Dok — poprawki z etapu 10: wąskie panele bez nakładania nagłówków (chowanie kolumn), komendy `layout save`/`layout reset`, Quick View jako zakładka doku (do wyboru zamiast zastępowania panelu), oba panele zawsze widoczne
+
+#### Etap 13: automatyzacja (wykorzystanie modelu komend)
+
+- [ ] 13a **Nagrywanie makr**: zapis wykonanych komend do pliku `.bp`; odtwarzanie skrótem, z palety i z `bluepane-cli run-script`; edycja makra jako tekstu; makra z parametrami (zaznaczenie, katalog drugiego panelu)
+- [ ] 13b **Własne przyciski narzędzi**: zewnętrzne programy z parametrami `%f` (plik), `%d` (katalog), `%s` (zaznaczone), `%o` (drugi panel); w osobnym rzędzie przycisków i w palecie; zastępują wtyczki bez kodu wtyczek
+- [ ] 13c **Dziennik operacji z cofaniem**: każda operacja (kopiuj, przenieś, zmień nazwę, do kosza, synchronizacja) zapisana w historii; cofnięcie jednym kliknięciem, także po restarcie, z ostrzeżeniem, gdy pliki zmieniły się od tego czasu
+- [ ] 13d Harmonogram: makro albo profil synchronizacji uruchamiane o zadanej porze (przez `bluepane-cli` i zadanie systemu: cron / Harmonogram zadań Windows; bluepane tylko je zakłada i pokazuje)
+
+#### Etap 14: funkcje dodatkowe
+
+Porządek na dysku:
+- [ ] 14a **Mapa zajętości** (kafelki jak WizTree) dla katalogu, na bazie `dirsize`; klik w kafelek wchodzi do katalogu
+- [ ] 14b **Duplikaty**: rozmiar → skrót → porównanie bajt po bajcie; zaznaczanie kopii regułą (najnowsza/najstarsza zostaje), usuwanie do kosza
+- [ ] 14c **Porównanie dwóch plików** (tekst obok tekstu z podświetleniem różnic, dla binarnych pierwsza różnica) oraz **sumy kontrolne**: obliczanie i sprawdzanie `.sha256` / `.md5`
+- [ ] 14d Zmiana nazw z danymi z pliku: data **EXIF** zdjęcia (`[EXIF:YMD]`), tagi audio (zależności do zgody)
+
+Sieć:
+- [ ] 14e **Udziały SMB jako katalog w panelu** (`smb://host/udział`) bez montowania w systemie (zależność do zgody albo `smbclient` jako proces)
+- [ ] 14f Skaner: **Wake-on-LAN**, „dodaj jako witrynę" i „otwórz udział w panelu" jednym kliknięciem, historia skanów (nowe urządzenia oznaczone)
+- [ ] 14g Chmury przez **`rclone`** (gdy zainstalowany): WebDAV, S3, Google Drive, OneDrive jako katalogi w panelu
+- [ ] 14h Zapisane **profile synchronizacji** (para katalogów + ustawienia) i uruchamianie z harmonogramu (13d)
+
+Środowisko pracy:
+- [ ] 14i **Przywracanie sesji** (zakładki, katalogi, układ) i nazwane **obszary robocze** („Praca", „Domowy serwer")
+- [ ] 14j **Terminal jako zakładka doku** w bieżącym katalogu (zależność `portable-pty` do zgody)
+- [ ] 14k **Obserwacja katalogów**: lista odświeża się sama po zmianach na dysku (zależność `notify` do zgody)
+- [ ] 14l **Git**: status plików w kolumnie, gałąź w okruszkach, podstawowe akcje (zależność albo `git` jako proces)
+- [ ] 14m **Szukanie z indeksem**: wyniki natychmiast, także po treści PDF/Word/Excel (tekst z crate'a `docs`); zapisane wyszukiwania jako wirtualne katalogi
+- [ ] 14n **Podgląd**: kolorowanie składni kodu, renderowany Markdown, edytor hex (z zapisem przez kopię i potwierdzenie), metadane plików multimedialnych
 
 ### Testy ręczne (przygotowane 2026-10-15)
 
