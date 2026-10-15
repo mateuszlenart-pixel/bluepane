@@ -4,6 +4,7 @@
 //! It contains no file system logic.
 
 mod bottom_ui;
+mod dock_ui;
 mod find_ui;
 mod pages_ui;
 mod queue_ui;
@@ -51,6 +52,13 @@ pub struct BluepaneUi {
     path_edit: [bool; 2],
     /// Speed of the running job, for the bar at the bottom.
     speed: bottom_ui::SpeedMeter,
+    /// The window as a dock of tabs (panels and tools).
+    dock: Option<egui_dock::DockState<dock_ui::Tab>>,
+    /// The tab the user last clicked in; tool keys go to it.
+    focus: dock_ui::Tab,
+    /// The layout text last written and when the file was last looked at.
+    layout_saved: String,
+    layout_saved_at: std::time::Instant,
 }
 
 impl BluepaneUi {
@@ -74,6 +82,10 @@ impl BluepaneUi {
             theme_applied: false,
             path_edit: [false; 2],
             speed: bottom_ui::SpeedMeter::default(),
+            dock: None,
+            focus: dock_ui::Tab::Panel(0),
+            layout_saved: String::new(),
+            layout_saved_at: std::time::Instant::now(),
         }
     }
 
@@ -121,36 +133,7 @@ impl BluepaneUi {
         egui::Panel::bottom("bottom").show(ui, |ui| {
             self.bottom_bar(ui, cmd_id);
         });
-        egui::CentralPanel::default_margins().show(ui, |ui| {
-            if self.session.pages.is_some() {
-                self.pages_ui(ui);
-            } else if self.session.viewer.is_some() {
-                self.viewer_ui(ui);
-            } else if self.session.sync.is_some() {
-                self.sync_ui(ui);
-            } else if self.session.scan.as_ref().is_some_and(|v| v.visible) {
-                self.scan_ui(ui);
-            } else if self.session.queue_open {
-                self.queue_ui(ui);
-            } else if self.session.sites_open {
-                self.sites_ui(ui);
-            } else if self.session.rename.is_some() {
-                self.rename_ui(ui);
-            } else if self.session.find.as_ref().is_some_and(|f| f.visible) {
-                self.find_ui(ui);
-            } else {
-                ui.columns(2, |columns| {
-                    for (index, ui) in columns.iter_mut().enumerate() {
-                        // Quick View takes the place of the panel that does not have the keyboard.
-                        if self.session.quick.is_some() && index != self.session.active {
-                            self.quick_ui(ui, index);
-                        } else {
-                            self.panel_ui(ui, index);
-                        }
-                    }
-                });
-            }
-        });
+        egui::CentralPanel::default_margins().show(ui, |ui| self.dock_ui(ui));
         if !matches!(self.session.pending, Some(Pending::Pack(_))) {
             self.pack_focused = false;
         }
@@ -569,54 +552,58 @@ impl BluepaneUi {
             }
             return;
         }
-        if self.session.pages.is_some() {
-            self.pages_keys(&pressed);
-            return;
-        }
-        if self.session.viewer.is_some() {
-            // The viewer has its own keys; typing must not start the panel filter.
-            for key in pressed {
-                if let Some(line) = self.session.keymap.lookup_viewer(&key).map(str::to_owned) {
-                    self.dispatch(&line);
-                }
+        // A tool tab that has the focus gets the keys; otherwise they are for the panels.
+        match self.focused_tool() {
+            Some(dock_ui::Tab::Pages) => {
+                self.pages_keys(&pressed);
+                return;
             }
-            return;
-        }
-        if self.session.scan.as_ref().is_some_and(|v| v.visible) {
-            self.scan_keys(&pressed);
-            return;
-        }
-        if self.session.queue_open {
-            self.queue_keys(&pressed);
-            return;
-        }
-        if self.session.sites_open {
-            self.sites_keys(&pressed);
-            return;
-        }
-        if self.session.find.as_ref().is_some_and(|f| f.visible) {
-            // Typing in the search window must not start the panel filter.
-            self.find_keys(&pressed);
-            return;
-        }
-        if self.session.rename.is_some() {
-            // Typing in the multi-rename window must not start the panel filter.
-            self.rename_keys(&pressed);
-            return;
-        }
-        if self.session.sync.is_some() {
-            // The synchronization window has few keys; typing must not start the panel filter.
-            let dirty = self.sync_form_is_dirty();
-            for key in pressed {
-                match key.as_str() {
-                    "Escape" => self.dispatch("syncclose"),
-                    // Running needs the settings on screen to be the ones compared.
-                    "F5" if !dirty => self.dispatch("syncrun"),
-                    "F9" => self.sync_compare_now(),
-                    _ => {}
+            Some(dock_ui::Tab::Viewer) => {
+                // The viewer has its own keys; typing must not start the panel filter.
+                for key in pressed {
+                    if let Some(line) = self.session.keymap.lookup_viewer(&key).map(str::to_owned) {
+                        self.dispatch(&line);
+                    }
                 }
+                return;
             }
-            return;
+            Some(dock_ui::Tab::Scan) => {
+                self.scan_keys(&pressed);
+                return;
+            }
+            Some(dock_ui::Tab::Queue) => {
+                self.queue_keys(&pressed);
+                return;
+            }
+            Some(dock_ui::Tab::Sites) => {
+                self.sites_keys(&pressed);
+                return;
+            }
+            Some(dock_ui::Tab::Find) => {
+                // Typing in the search window must not start the panel filter.
+                self.find_keys(&pressed);
+                return;
+            }
+            Some(dock_ui::Tab::Rename) => {
+                // Typing in the multi-rename window must not start the panel filter.
+                self.rename_keys(&pressed);
+                return;
+            }
+            Some(dock_ui::Tab::Sync) => {
+                // The synchronization window has few keys; typing must not start the filter.
+                let dirty = self.sync_form_is_dirty();
+                for key in pressed {
+                    match key.as_str() {
+                        "Escape" => self.dispatch("syncclose"),
+                        // Running needs the settings on screen to be the ones compared.
+                        "F5" if !dirty => self.dispatch("syncrun"),
+                        "F9" => self.sync_compare_now(),
+                        _ => {}
+                    }
+                }
+                return;
+            }
+            Some(dock_ui::Tab::Panel(_)) | None => {}
         }
         for key in pressed {
             // While a filter is being typed, Space is part of the name, not "select".

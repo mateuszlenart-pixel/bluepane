@@ -7,7 +7,7 @@ exclude = ["vendor"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.92"
+rust-version = "1.95"
 license = "MIT OR Apache-2.0"
 publish = false
 
@@ -31,6 +31,10 @@ egui = "0.36"
 egui-phosphor = "0.14"
 # Free and total space of a drive (one safe call on Windows and Linux).
 fs4 = { version = "1", default-features = false }
+# Docking: panels and tools as tabs that can be dragged, split and saved (layout in JSON).
+egui_dock = { version = "0.21", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 eframe = "0.36"
 trash = "5"
 tempfile = "3"
