@@ -130,6 +130,10 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
             }),
         RemoteOp::Mkdir { path } => conn.mkdir(path).map(|()| report.done = 1),
         RemoteOp::Rename { from, to } => conn.rename(from, to).map(|()| report.done = 1),
+        RemoteOp::Chmod { paths, mode } => {
+            progress.set_total(0, paths.len() as u64);
+            chmod_all(&*conn, paths, *mode, progress, &mut report)
+        }
         RemoteOp::Delete { paths } => {
             progress.set_total(0, paths.len() as u64);
             delete_all(&*conn, paths, progress, &mut report)
@@ -210,6 +214,27 @@ fn op_error(error: OpError) -> RemoteError {
 }
 
 // ---- delete ------------------------------------------------------------------------
+
+fn chmod_all(
+    conn: &dyn RemoteFs,
+    paths: &[String],
+    mode: u32,
+    progress: &Progress,
+    report: &mut Report,
+) -> Result<(), RemoteError> {
+    for path in paths {
+        cancelled(progress)?;
+        progress.set_current(remote_name(path));
+        match conn.chmod(path, mode) {
+            Ok(()) => report.done += 1,
+            Err(error) => report
+                .failed
+                .push(format!("{}: {error}", remote_name(path))),
+        }
+        progress.finish_item();
+    }
+    Ok(())
+}
 
 fn delete_all(
     conn: &dyn RemoteFs,

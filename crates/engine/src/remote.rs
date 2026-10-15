@@ -624,6 +624,26 @@ impl Session {
         self.remote_op(side, RemoteOp::Mkdir { path })
     }
 
+    /// `chmod` on a server panel: the selection (or the item under the cursor).
+    pub(crate) fn remote_chmod(&mut self, mode: u32) -> Result<(), EngineError> {
+        let side = self.active;
+        if self.remote_of(side).is_none() {
+            return Err(EngineError(
+                "chmod działa tylko w panelu połączonym z serwerem".into(),
+            ));
+        }
+        let paths: Vec<String> = self.panels[side]
+            .target_entries()
+            .into_iter()
+            .filter(|e| !is_parent_entry(e))
+            .map(|e| path_text(&e.path))
+            .collect();
+        if paths.is_empty() {
+            return Err(EngineError("nic nie zaznaczono".into()));
+        }
+        self.remote_op(side, RemoteOp::Chmod { paths, mode })
+    }
+
     pub(crate) fn remote_rename(&mut self, from: &Path, new_name: &str) -> Result<(), EngineError> {
         let side = self.active;
         let new_name = new_name.trim();
@@ -869,6 +889,7 @@ impl Session {
                     RemoteOp::Relay { .. } => "Skopiowano między serwerami",
                     RemoteOp::Mkdir { .. } => "Utworzono katalog",
                     RemoteOp::Rename { .. } => "Zmieniono nazwę",
+                    RemoteOp::Chmod { .. } => "Zmieniono uprawnienia",
                     RemoteOp::Delete { .. } => "Usunięto z serwera",
                     RemoteOp::Download { .. } => "Pobrano",
                     RemoteOp::Upload { replace: true, .. } => "Wysłano zmiany",
@@ -1179,6 +1200,31 @@ mod tests {
         r.session.run_line("skip").unwrap();
         settle(&mut r.session);
         assert_eq!(fs::read_to_string(root.join("up.txt")).unwrap(), "uploaded");
+    }
+
+    #[test]
+    fn chmod_changes_permissions_of_the_selection_on_the_server_only() {
+        let mut r = rig("local:secret");
+        // A local panel has no such command.
+        assert!(r.session.run_line("chmod 755").is_err());
+        connect(&mut r);
+        assert!(r.session.run_line("chmod 99").is_err());
+        r.session.run_line("select hello.txt").unwrap();
+        r.session.run_line("select docs").unwrap();
+        r.session.run_line("chmod 640").unwrap();
+        settle(&mut r.session);
+        for name in ["hello.txt", "docs"] {
+            assert_eq!(
+                bluepane_remote::testing::last_chmod(r.server.root.join(name)),
+                Some(0o640),
+                "{name}"
+            );
+        }
+        assert!(
+            r.session.status.contains("Zmieniono uprawnienia: 2"),
+            "{}",
+            r.session.status
+        );
     }
 
     #[test]

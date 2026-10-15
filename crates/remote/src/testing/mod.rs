@@ -6,6 +6,24 @@ mod ftp_server;
 mod memory;
 mod sftp_server;
 
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+/// Every permission change a test server was asked for, by local path. The servers only
+/// record it (a real `chmod` would behave differently on Windows), so tests are portable.
+static CHMODS: Mutex<Vec<(PathBuf, u32)>> = Mutex::new(Vec::new());
+
+pub(crate) fn record_chmod(path: PathBuf, mode: u32) {
+    CHMODS.lock().unwrap().push((path, mode));
+}
+
+/// The last mode a test server was told to set on `path`, if any.
+pub fn last_chmod(path: impl AsRef<Path>) -> Option<u32> {
+    let path = path.as_ref();
+    let list = CHMODS.lock().unwrap();
+    list.iter().rev().find(|(p, _)| p == path).map(|(_, m)| *m)
+}
+
 pub use ftp_server::{start_ftp, FtpServer, FtpSettings, Tls};
 pub use memory::{FakeBitwarden, MemoryKeys, MemoryServices};
 pub use sftp_server::{start, write_file, Settings, TestServer};

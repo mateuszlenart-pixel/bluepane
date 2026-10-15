@@ -290,6 +290,20 @@ fn serve(
                 state.cwd = state.remote("..");
                 reply(&mut control, "250 ok");
             }
+            "SITE" => match argument.split_once(' ') {
+                Some((word, rest)) if word.eq_ignore_ascii_case("CHMOD") => {
+                    match rest.split_once(' ').and_then(|(mode, path)| {
+                        u32::from_str_radix(mode, 8).ok().map(|m| (m, path))
+                    }) {
+                        Some((mode, path)) if state.local(path).exists() => {
+                            super::record_chmod(state.local(path), mode);
+                            reply(&mut control, "200 SITE CHMOD ok");
+                        }
+                        _ => reply(&mut control, "550 chmod failed"),
+                    }
+                }
+                _ => reply(&mut control, "500 unknown SITE command"),
+            },
             "MKD" => match fs::create_dir(state.local(&argument)) {
                 Ok(()) => reply(&mut control, &format!("257 \"{}\" created", state.remote(&argument))),
                 Err(_) => reply(&mut control, "550 cannot create"),

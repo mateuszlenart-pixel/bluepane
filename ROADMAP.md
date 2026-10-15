@@ -125,7 +125,7 @@ Do zrobienia (8b i dalej):
 - [ ] FTP: tryb aktywny, ustawianie daty pliku na serwerze, serwery bez SIZE/MDTM (część rzadkich serwerów); sprawdzić ręcznie z prawdziwym serwerem FTP/FTPS
 - [x] F6 (przenoszenie w każdą stronę, także w obrębie serwera), podgląd F3 pliku z serwera (plik tymczasowy), kopiowanie serwer -> serwer (przez katalog tymczasowy)
 - [x] F4 pliku z serwera (kopia w edytorze, odesłanie `editsend`), zakładki i historia (Alt+Lewo/Prawo) na serwerze
-- [ ] Uprawnienia/chmod na serwerze
+- [x] Uprawnienia/chmod na serwerze: komenda `chmod <ósemkowo>` na zaznaczeniu, SFTP (setstat) i FTP/FTPS (`SITE CHMOD`); bez rekurencji, bez wyświetlania uprawnień w kolumnie (do zrobienia)
 - [x] Okno kolejki zadań (Ctrl+J): bieżące z postępem, oczekujące (usuwanie), zakończone (ponawianie), pauza kolejki; testy w silniku
 - [ ] Kolejka: zmiana kolejności zadań, równoległe transfery, ograniczenie prędkości
 - [ ] ~~Wtyczki~~ pominięte (decyzja właściciela); w zamian ewentualnie osobny etap: skaner sieci IP
