@@ -9,6 +9,7 @@ use bluepane_engine::{
 };
 use egui::{Align2, Color32, FontId, RichText, Sense};
 
+use crate::theme::Theme;
 use crate::BluepaneUi;
 
 const ROW_HEIGHT: f32 = 20.0;
@@ -93,14 +94,17 @@ fn next_direction(op: &SyncOp) -> &'static str {
     }
 }
 
-fn symbol(op: &SyncOp) -> (&'static str, Color32) {
+/// The sign of an operation and its colour: green to the right, blue to the left, red for
+/// deleting and for conflicts, grey for "same".
+fn symbol(op: &SyncOp, theme: &Theme) -> (String, Color32) {
+    use egui_phosphor::regular as icon;
     match op {
-        SyncOp::CopyToRight => ("->", Color32::LIGHT_GREEN),
-        SyncOp::CopyToLeft => ("<-", Color32::LIGHT_GREEN),
-        SyncOp::DeleteRight => ("x>", Color32::LIGHT_RED),
-        SyncOp::DeleteLeft => ("<x", Color32::LIGHT_RED),
-        SyncOp::Skip => ("==", Color32::GRAY),
-        SyncOp::Conflict(_) => ("!!", Color32::YELLOW),
+        SyncOp::CopyToRight => (icon::ARROW_RIGHT.to_string(), theme.ok),
+        SyncOp::CopyToLeft => (icon::ARROW_LEFT.to_string(), theme.accent),
+        SyncOp::DeleteRight => (format!("{}{}", icon::TRASH, icon::ARROW_RIGHT), theme.error),
+        SyncOp::DeleteLeft => (format!("{}{}", icon::ARROW_LEFT, icon::TRASH), theme.error),
+        SyncOp::Skip => (icon::EQUALS.to_string(), theme.muted),
+        SyncOp::Conflict(_) => (icon::WARNING.to_string(), theme.error),
     }
 }
 
@@ -271,7 +275,7 @@ impl BluepaneUi {
                 }
                 ui.label(
                     RichText::new(
-                        "-> kopiuj w prawo · <- kopiuj w lewo · x> / <x usuń po prawej / lewej · == pomiń · !! konflikt (nic nie zrobi się samo). Klik w symbol zmienia kierunek.",
+                        "Zielona strzałka: kopiuj w prawo · niebieska: kopiuj w lewo · czerwony kosz: usuń po tej stronie, którą wskazuje strzałka · znak równości: pomiń · ostrzeżenie: konflikt (nic nie zrobi się samo). Klik w wiersz zmienia kierunek.",
                     )
                     .weak(),
                 );
@@ -298,6 +302,7 @@ impl BluepaneUi {
     ) {
         let actions = &preview.plan.actions;
         let font = FontId::monospace(13.0);
+        let theme = self.theme.clone();
         egui::ScrollArea::vertical().auto_shrink(false).show_rows(
             ui,
             ROW_HEIGHT,
@@ -313,8 +318,12 @@ impl BluepaneUi {
                     let at =
                         |fraction: f32| egui::pos2(rect.left() + w * fraction, rect.center().y);
                     let painter = ui.painter();
-                    let weak = ui.visuals().weak_text_color();
-                    let text = ui.visuals().text_color();
+                    let (weak, text) = (theme.muted, theme.text);
+                    let (sign, sign_color) = symbol(&action.op, &theme);
+                    // A faint wash in the colour of the operation; "same" rows stay plain.
+                    if !matches!(action.op, SyncOp::Skip) {
+                        painter.rect_filled(rect, 2.0, sign_color.gamma_multiply(0.10));
+                    }
                     painter.text(
                         at(0.0),
                         Align2::LEFT_CENTER,
@@ -336,8 +345,13 @@ impl BluepaneUi {
                         font.clone(),
                         text,
                     );
-                    let (label, color) = symbol(&action.op);
-                    painter.text(at(0.72), Align2::LEFT_CENTER, label, font.clone(), color);
+                    painter.text(
+                        at(0.72),
+                        Align2::LEFT_CENTER,
+                        sign,
+                        FontId::proportional(15.0),
+                        sign_color,
+                    );
                     painter.text(
                         at(0.77),
                         Align2::LEFT_CENTER,
