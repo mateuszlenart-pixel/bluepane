@@ -19,6 +19,7 @@ mod remote;
 mod remote_job;
 mod scan;
 mod session;
+mod settings;
 mod viewer;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
@@ -64,6 +65,7 @@ pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, Sha
 pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };
+pub use settings::{DEFAULT_THEME, THEMES};
 pub use viewer::{Row, ViewMode, Viewer};
 
 use std::fmt;

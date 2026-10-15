@@ -37,7 +37,7 @@ fn path_text(path: &Path) -> String {
 
 impl Session {
     /// Reads the saved sites and remembered server keys from the config directory (once).
-    pub(crate) fn load_config(&mut self) {
+    pub fn load_config(&mut self) {
         if self.config_loaded {
             return;
         }
@@ -52,6 +52,9 @@ impl Session {
     pub fn use_config_dir(&mut self, dir: &Path) {
         self.config_loaded = true;
         self.config_dir = Some(dir.to_path_buf());
+        if let Some(theme) = crate::settings::load_theme(&dir.join("settings.conf")) {
+            self.theme = theme;
+        }
         match Sites::load(&dir.join("sites.conf")) {
             Ok(sites) => self.sites = sites,
             Err(e) => {
