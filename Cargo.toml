@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "apps/*", "xtask"]
+# Third-party code with a local fix is not linted or formatted as ours.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -68,3 +70,9 @@ all = { level = "warn", priority = -1 }
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# suppaftp 12.2.0 with one fix: in active mode an accepted data socket must be made blocking
+# again (on Windows it inherits the non-blocking mode of the listener). Drop this patch when
+# the upstream release has the fix.
+[patch.crates-io]
+suppaftp = { path = "vendor/suppaftp" }
