@@ -115,6 +115,13 @@ impl Session {
                 site.key = Some(PathBuf::from(value.trim())).filter(|p| !p.as_os_str().is_empty())
             }
             "start" => site.start_dir = value.trim().to_string(),
+            "mode" => {
+                site.active = match value.trim().to_ascii_lowercase().as_str() {
+                    "active" | "aktywny" => true,
+                    "passive" | "pasywny" => false,
+                    _ => return Err(EngineError("siteset mode: passive albo active".into())),
+                };
+            }
             "secret" => {
                 site.secret = if let Some(secret) = value.strip_prefix("local:") {
                     SecretStore::Local(secret.to_string())
@@ -1560,6 +1567,12 @@ mod tests {
         assert!(s.run_line("siteset A protocol gopher").is_err());
         s.run_line("siteset A protocol ftp").unwrap();
         assert!(s.run_line("siteset A key /k").is_err(), "keys are SSH only");
+        assert!(!s.sites.get("A").unwrap().active);
+        s.run_line("siteset A mode active").unwrap();
+        assert!(s.sites.get("A").unwrap().active);
+        s.run_line("siteset A mode passive").unwrap();
+        assert!(!s.sites.get("A").unwrap().active);
+        assert!(s.run_line("siteset A mode sideways").is_err());
     }
 
     #[test]

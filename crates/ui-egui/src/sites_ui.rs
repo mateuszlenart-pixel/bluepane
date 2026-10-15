@@ -18,6 +18,8 @@ pub(crate) struct SiteForm {
     user: String,
     key: String,
     start: String,
+    /// FTP / FTPS only: active instead of passive data connections.
+    active: bool,
     /// 0 = ask every time, 1 = store here, 2 = Bitwarden.
     /// 0 = ask every time, 1 = the sites file, 2 = the system password store, 3 = Bitwarden.
     secret_kind: u8,
@@ -56,6 +58,7 @@ impl SiteForm {
                 .map(|k| k.display().to_string())
                 .unwrap_or_default(),
             start: site.start_dir.clone(),
+            active: site.active,
             secret_kind,
             secret,
             bw_item,
@@ -91,6 +94,14 @@ impl SiteForm {
                 },
             ),
             set("start", &self.start),
+            set(
+                "mode",
+                if self.protocol != Protocol::Sftp && self.active {
+                    "active"
+                } else {
+                    "passive"
+                },
+            ),
             set("secret", &secret),
         ];
         // A password typed for the system store or Bitwarden is saved there (in the
@@ -199,6 +210,15 @@ impl BluepaneUi {
                     field(ui, "Katalog startowy:", &mut form.start, "puste = katalog domowy");
                 });
                 ui.add_space(6.0);
+                if form.protocol != Protocol::Sftp {
+                    ui.checkbox(
+                        &mut form.active,
+                        "Tryb aktywny (serwer łączy się do Ciebie; domyślnie pasywny)",
+                    )
+                    .on_hover_text(
+                        "Aktywny wymaga, żeby serwer mógł nawiązać połączenie z tym komputerem (bez NAT-a i zapory). Zwykle zostaw pasywny.",
+                    );
+                }
                 if form.protocol == Protocol::Ftp {
                     ui.colored_label(
                         Color32::YELLOW,

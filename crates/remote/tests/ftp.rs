@@ -356,3 +356,60 @@ fn chmod_sends_site_chmod_and_reports_a_refusal() {
     );
     assert!(conn.chmod("/missing.txt", 0o644).is_err());
 }
+
+fn active_site(fx: &Fixture) -> Site {
+    let mut site = site(fx);
+    site.active = true;
+    site
+}
+
+fn transfers_in_active_mode(tls: Tls) {
+    let fx = fixture_with(tls, false);
+    let conn = active_site(&fx)
+        .connect(
+            Some("secret".into()),
+            &KnownHosts::in_memory(),
+            fx.server.fingerprint.as_deref(),
+        )
+        .unwrap();
+    let names: Vec<String> = conn
+        .list("/")
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    assert!(names.contains(&"hello.txt".to_string()), "{names:?}");
+    let local = fx._tmp.path().join("got.txt");
+    conn.download(
+        "/hello.txt",
+        &local,
+        &Progress::new(),
+        TransferOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(fs::read_to_string(&local).unwrap(), "hello world");
+    write_file(fx._tmp.path().join("up.txt"), "sent");
+    conn.upload(
+        &fx._tmp.path().join("up.txt"),
+        "/up.txt",
+        &Progress::new(),
+        TransferOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("up.txt")).unwrap(),
+        "sent"
+    );
+    // The server really connected back to us for each of the four data transfers.
+    assert!(bluepane_remote::testing::active_transfers(&fx.server.root) >= 3);
+}
+
+#[test]
+fn active_mode_lists_downloads_and_uploads() {
+    transfers_in_active_mode(Tls::None);
+}
+
+#[test]
+fn active_mode_works_over_ftps_too() {
+    transfers_in_active_mode(Tls::Explicit);
+}
