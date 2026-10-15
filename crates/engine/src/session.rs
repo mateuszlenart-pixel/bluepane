@@ -540,6 +540,7 @@ impl Session {
             Command::QueuePause => self.pause_queue(true),
             Command::QueueResume => self.pause_queue(false),
             Command::QueueDelete(n) => self.queue_delete(n)?,
+            Command::QueueMove(n, to) => self.queue_move(n, to)?,
             Command::QueueRetry(n) => self.queue_retry(n)?,
             Command::QueueClear => self.finished.clear(),
             Command::SitePassword(name, password) => self.site_password(&name, password)?,
@@ -976,6 +977,13 @@ impl Session {
 
     pub(crate) fn queue_specs(&self) -> impl Iterator<Item = &JobSpec> {
         self.queue.iter()
+    }
+
+    /// Takes the job at `from` out of the queue and puts it where `to` was.
+    pub(crate) fn move_queued(&mut self, from: usize, to: usize) {
+        if let Some(spec) = self.queue.remove(from) {
+            self.queue.insert(to, spec);
+        }
     }
 
     pub(crate) fn remove_queued(&mut self, index: usize) -> JobSpec {

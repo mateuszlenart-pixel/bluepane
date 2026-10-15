@@ -1,7 +1,7 @@
 //! The queue window (Ctrl+J): the running job, the waiting ones and the finished ones.
 //! It only shows the engine's state and sends commands (`queuepause`, `queuedel`, ...).
 
-use bluepane_engine::{human_size, Command};
+use bluepane_engine::{human_size, Command, QueueMove};
 use egui::{Color32, RichText};
 
 use crate::BluepaneUi;
@@ -91,6 +91,29 @@ impl BluepaneUi {
                     }
                 } else {
                     ui.label(&line.title);
+                    let first_waiting = index == usize::from(lines[0].running);
+                    let last = index + 1 == lines.len();
+                    if ui
+                        .add_enabled(!first_waiting, egui::Button::new("▲").small())
+                        .on_hover_text("wyżej w kolejce")
+                        .clicked()
+                    {
+                        commands.push(Command::QueueMove(index + 1, QueueMove::Up));
+                    }
+                    if ui
+                        .add_enabled(!last, egui::Button::new("▼").small())
+                        .on_hover_text("niżej w kolejce")
+                        .clicked()
+                    {
+                        commands.push(Command::QueueMove(index + 1, QueueMove::Down));
+                    }
+                    if ui
+                        .add_enabled(!first_waiting, egui::Button::new("Na początek").small())
+                        .on_hover_text("jako następne po bieżącym")
+                        .clicked()
+                    {
+                        commands.push(Command::QueueMove(index + 1, QueueMove::Top));
+                    }
                     if ui.small_button("Usuń z kolejki").clicked() {
                         commands.push(Command::QueueDelete(index + 1));
                     }

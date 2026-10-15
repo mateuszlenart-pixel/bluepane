@@ -42,8 +42,8 @@ pub use bluepane_sync::{
 };
 pub use bluepane_vfs::{Share, ShareKind};
 pub use command::{
-    parse_size, Command, NameFormat, PackArgs, SyncArgs, TabAction, UnpackArgs, ViewerAction,
-    COMMAND_NAMES,
+    parse_size, Command, NameFormat, PackArgs, QueueMove, SyncArgs, TabAction, UnpackArgs,
+    ViewerAction, COMMAND_NAMES,
 };
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};
