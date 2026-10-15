@@ -3,6 +3,7 @@
 //! The UI only translates input into command lines and draws the engine's state.
 //! It contains no file system logic.
 
+mod bottom_ui;
 mod find_ui;
 mod pages_ui;
 mod queue_ui;
@@ -21,26 +22,6 @@ use bluepane_engine::{
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
 const CMD_LINE_ID: &str = "bluepane-command-line";
-
-/// F-key bar: (key, label, command line). Same bindings as the default key map.
-const FKEYS: &[(&str, &str, &str)] = &[
-    ("F2", "Zmień nazwę", "rename"),
-    ("F3", "Podgląd", "view"),
-    ("F4", "Edycja", "edit"),
-    ("F5", "Kopiuj", "copy"),
-    ("F6", "Przenieś", "move"),
-    ("F7", "Nowy katalog", "mkdir"),
-    ("F8", "Do kosza", "delete"),
-    ("Alt+F5", "Pakuj", "pack"),
-    ("Alt+F9", "Rozpakuj", "unpack"),
-    ("Alt+S", "Synchronizuj", "sync"),
-    ("Ctrl+F2", "Zmień nazwy", "multirename"),
-    ("Ctrl+F", "Szukaj", "find"),
-    ("Ctrl+S", "Serwery", "sites"),
-    ("Ctrl+J", "Kolejka", "queue"),
-    ("Ctrl+N", "Skaner", "scan"),
-    ("F9", "Odśwież", "refresh"),
-];
 
 pub struct BluepaneUi {
     session: Session,
@@ -67,6 +48,8 @@ pub struct BluepaneUi {
     theme_applied: bool,
     /// Set when a click on the empty part of a path bar asked to edit the path.
     path_edit: [bool; 2],
+    /// Speed of the running job, for the bar at the bottom.
+    speed: bottom_ui::SpeedMeter,
 }
 
 impl BluepaneUi {
@@ -89,6 +72,7 @@ impl BluepaneUi {
             theme: theme::Theme::by_name(&theme_name),
             theme_applied: false,
             path_edit: [false; 2],
+            speed: bottom_ui::SpeedMeter::default(),
         }
     }
 
@@ -533,46 +517,6 @@ impl BluepaneUi {
         }
     }
 
-    /// Progress of the running job with a cancel button.
-    fn progress_ui(&mut self, ui: &mut egui::Ui) {
-        let Some(job) = self.session.job_status() else {
-            return;
-        };
-        ui.horizontal(|ui| {
-            // The cancel button comes first so a long file name can never push it away.
-            if ui.button("Anuluj").clicked() {
-                self.dispatch("stop");
-            }
-            let queued = if job.queued > 0 {
-                format!(" (w kolejce: {})", job.queued)
-            } else {
-                String::new()
-            };
-            ui.label(format!("{}{queued}", job.label));
-            let bar = match job.fraction() {
-                Some(fraction) => egui::ProgressBar::new(fraction)
-                    .desired_width(240.0)
-                    .show_percentage(),
-                None => egui::ProgressBar::new(0.0)
-                    .desired_width(240.0)
-                    .animate(true)
-                    .text("liczenie…"),
-            };
-            ui.add(bar);
-            if job.bytes_total > 0 {
-                ui.label(format!(
-                    "{} / {}",
-                    human_size(job.bytes_done),
-                    human_size(job.bytes_total)
-                ));
-            }
-            if job.waiting_for_answer {
-                ui.label(RichText::new("czeka na decyzję").color(Color32::YELLOW));
-            }
-            ui.add(egui::Label::new(RichText::new(&job.current).weak()).truncate());
-        });
-    }
-
     fn handle_keys(&mut self, ctx: &egui::Context) {
         let (pressed, typed) = ctx.input(|i| {
             let mut pressed = Vec::new();
@@ -698,7 +642,7 @@ impl BluepaneUi {
         } else {
             self.theme.muted
         };
-        self.progress_ui(ui);
+        self.job_bar(ui);
         // Conflicts and name dialogs have their own window; only yes/no questions use the bar.
         let simple_question = matches!(
             self.session.pending,
@@ -744,13 +688,7 @@ impl BluepaneUi {
             }
         });
 
-        ui.horizontal(|ui| {
-            for (key, label, line) in FKEYS {
-                if ui.button(format!("{key} {label}")).clicked() {
-                    self.dispatch(line);
-                }
-            }
-        });
+        self.fkey_bar(ui);
     }
 
     /// The tab row above a panel: click to switch, × or middle-click to close, + for a new tab.
@@ -905,9 +843,23 @@ impl BluepaneUi {
         } else {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                // A long path shows its tail; the part cut off is one click away.
-                const SHOWN: usize = 6;
-                let hidden = crumbs.len().saturating_sub(SHOWN);
+                // A long path shows its tail; the part cut off is one click away. How many
+                // segments fit is worked out from the width of a monospace character.
+                let char_width = ui
+                    .painter()
+                    .layout_no_wrap("M".to_string(), FontId::monospace(13.0), Color32::WHITE)
+                    .size()
+                    .x;
+                let budget = ui.available_width() - 40.0;
+                let mut used = 0.0;
+                let mut hidden = crumbs.len() - 1;
+                for (i, crumb) in crumbs.iter().enumerate().rev() {
+                    used += crumb.label.chars().count() as f32 * char_width + 22.0;
+                    if used > budget && i + 1 < crumbs.len() {
+                        break;
+                    }
+                    hidden = i;
+                }
                 if hidden > 0
                     && ui
                         .add(egui::Button::new("…").frame(false))

@@ -122,7 +122,7 @@ Decyzje właściciela (2026-10-15):
 - [x] 10b Ikony i kolory typów plików (klasa pliku liczona w silniku: `class_of`; czcionka ikon Phosphor): ikona przy nazwie (katalog, archiwum, dokument, serwer, plik wykonywalny), kolory semantyczne (katalogi, archiwa, dokumenty, ukryte), zaznaczenie (Insert/Spacja) odróżnione od kursora
 - [x] 10c Lista plików: nagłówki kolumn z kierunkiem sortowania i kursor/zaznaczenie rysowane osobno były już w 10a; dodane: pasek rozmiaru w komórce rozmiaru, komenda `dirsize` (rozmiary katalogów w tle na życzenie, Alt+Shift+Enter) i podsumowanie zaznaczenia pod listą
 - [x] 10d Nawigacja (nowa zależność `fs4` do wolnego miejsca; wolne miejsce pytane w tle, nie blokuje okna): ścieżka jako klikalne segmenty (breadcrumbs), edycja ścieżki po kliknięciu pustego miejsca (jak `cd`), pasek napędów z zajętością i wolnym miejscem, odznaka aktywnego filtra
-- [ ] 10e Dolny pasek: klawisze funkcyjne jako dwukolorowe przyciski (skrót + nazwa), mini-pasek bieżącego zadania z prędkością i postępem oraz skrótem do okna kolejki (Ctrl+J)
+- [x] 10e Dolny pasek (dwa rzędy przycisków, nic się nie ucina; pasek zadania z prędkością i czasem do końca; długa ścieżka okruszków mieści się w panelu): klawisze funkcyjne jako dwukolorowe przyciski (skrót + nazwa), mini-pasek bieżącego zadania z prędkością i postępem oraz skrótem do okna kolejki (Ctrl+J)
 - [ ] 10f Narzędzia jak jeden kombajn: Quick View w drugim panelu (strony/tekst/archiwum bez osobnego okna; skrót do uzgodnienia), podświetlenie zmienionych znaków i kolizji w zmianie nazw, kolory kierunków i konfliktów w synchronizacji
 - [ ] 10g Dokowanie: panele plików, podgląd i kolejka jako zakładki układane przez użytkownika (zapamiętany układ); największy podetap, na końcu
 
