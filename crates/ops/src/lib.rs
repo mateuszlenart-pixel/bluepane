@@ -12,7 +12,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 /// Size of one read/write step when copying. Progress and cancellation are checked after
 /// every chunk, so even a huge file can be stopped within a fraction of a second.
@@ -62,11 +62,36 @@ pub struct Progress {
     items_done: Arc<AtomicU64>,
     items_total: Arc<AtomicU64>,
     current: Arc<Mutex<String>>,
+    /// Bytes per second the operation may move; 0 means no limit. Shared, so changing it
+    /// affects an operation that is already running.
+    limit: Arc<AtomicU64>,
+    pace: Arc<Mutex<Pace>>,
+}
+
+/// The stretch of time over which the speed limit is measured.
+#[derive(Debug, Default)]
+struct Pace {
+    since: Option<Instant>,
+    bytes: u64,
+    limit: u64,
 }
 
 impl Progress {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A progress whose speed limit is the shared `limit` (bytes per second, 0 = none).
+    pub fn with_limit(limit: Arc<AtomicU64>) -> Self {
+        Self {
+            limit,
+            ..Self::default()
+        }
+    }
+
+    /// Sets the speed limit in bytes per second (0 removes it).
+    pub fn set_limit(&self, bytes_per_second: u64) {
+        self.limit.store(bytes_per_second, Ordering::Relaxed);
     }
 
     pub fn cancel(&self) {
@@ -114,8 +139,51 @@ impl Progress {
     }
 
     /// Counts bytes as processed (for operations implemented outside this crate).
+    ///
+    /// With a speed limit set this also waits, so that on average no more than the limit
+    /// passes; the wait ends early when the operation is cancelled.
     pub fn add(&self, bytes: u64) {
         self.bytes_done.fetch_add(bytes, Ordering::Relaxed);
+        let limit = self.limit.load(Ordering::Relaxed);
+        if limit > 0 {
+            self.throttle(bytes, limit);
+        }
+    }
+
+    fn throttle(&self, bytes: u64, limit: u64) {
+        let wait = {
+            let mut pace = self.pace.lock().unwrap_or_else(|e| e.into_inner());
+            let now = Instant::now();
+            let since = match pace.since {
+                Some(since) if pace.limit == limit => since,
+                // First bytes, or the limit was changed: measure afresh.
+                _ => {
+                    pace.since = Some(now);
+                    pace.bytes = 0;
+                    pace.limit = limit;
+                    now
+                }
+            };
+            pace.bytes += bytes;
+            let allowed = Duration::from_secs_f64(pace.bytes as f64 / limit as f64);
+            let elapsed = now.duration_since(since);
+            if elapsed > allowed + Duration::from_secs(1) {
+                // Idle for a while: do not let the unused time pay for a later burst.
+                pace.since = Some(now);
+                pace.bytes = 0;
+                Duration::ZERO
+            } else {
+                allowed.saturating_sub(elapsed)
+            }
+        };
+        let deadline = Instant::now() + wait;
+        while !self.is_cancelled() {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                break;
+            }
+            std::thread::sleep(left.min(Duration::from_millis(50)));
+        }
     }
 
     pub fn finish_item(&self) {
@@ -799,6 +867,33 @@ pub fn delete_to_trash(path: &Path) -> Result<(), OpError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_speed_limit_slows_counting_and_a_cancel_ends_the_wait() {
+        let progress = Progress::new();
+        progress.set_limit(20_000);
+        let start = Instant::now();
+        progress.add(10_000);
+        let waited = start.elapsed();
+        assert!(waited >= Duration::from_millis(400), "{waited:?}");
+        assert!(waited < Duration::from_secs(3), "{waited:?}");
+        assert_eq!(progress.bytes_done(), 10_000);
+        // Without a limit nothing waits.
+        progress.set_limit(0);
+        let start = Instant::now();
+        progress.add(1_000_000);
+        assert!(start.elapsed() < Duration::from_millis(200));
+        // A cancel stops a long wait at once.
+        progress.set_limit(1_000);
+        let helper = progress.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            helper.cancel();
+        });
+        let start = Instant::now();
+        progress.add(60_000);
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
     use super::*;
 
     #[test]

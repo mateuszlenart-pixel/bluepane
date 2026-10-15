@@ -64,6 +64,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "queueresume",
     "queuedel",
     "queuemove",
+    "limit",
     "queueretry",
     "queueclear",
     "sitepassword",
@@ -159,6 +160,14 @@ pub struct UnpackArgs {
     pub password: Option<String>,
     /// `-s`: extract into a subfolder named after the archive.
     pub subfolder: bool,
+}
+
+/// What `limit` was asked to do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpeedLimit {
+    Show,
+    Off,
+    BytesPerSecond(u64),
 }
 
 /// Where `queuemove` puts a waiting job.
@@ -308,6 +317,8 @@ pub enum Command {
     QueueResume,
     /// Drop queued job n (1-based, in the order shown) before it starts.
     QueueDelete(usize),
+    /// Limit the speed of copying and transfers, or show the current limit.
+    Limit(SpeedLimit),
     /// Move queued job n (1-based, in the order shown) up, down or to the front.
     QueueMove(usize, QueueMove),
     /// Queue a finished job (n = 1 is the newest) once more.
@@ -472,6 +483,7 @@ impl Command {
             "queueresume" => Ok(Command::QueueResume),
             "queuedel" => parse_row("queuedel", rest).map(Command::QueueDelete),
             "queuemove" => parse_queue_move(rest),
+            "limit" => parse_limit(rest).map(Command::Limit),
             "queueretry" => parse_row("queueretry", rest).map(Command::QueueRetry),
             "queueclear" => Ok(Command::QueueClear),
             "siteset" => parse_siteset(rest),
@@ -849,6 +861,22 @@ fn parse_ip(text: &str) -> Result<std::net::Ipv4Addr, EngineError> {
     text.trim()
         .parse()
         .map_err(|_| EngineError(format!("niepoprawny adres IP: {}", text.trim())))
+}
+
+fn parse_limit(args: &str) -> Result<SpeedLimit, EngineError> {
+    let args = args.trim();
+    match args.to_ascii_lowercase().as_str() {
+        "" => Ok(SpeedLimit::Show),
+        "off" | "none" | "brak" | "0" => Ok(SpeedLimit::Off),
+        _ => parse_size(args.trim_end_matches("/s"))
+            .map(SpeedLimit::BytesPerSecond)
+            .map_err(|_| {
+                EngineError(
+                    "limit: podaj prędkość na sekundę, np. limit 2m, limit 500k albo limit off"
+                        .into(),
+                )
+            }),
+    }
 }
 
 fn parse_queue_move(args: &str) -> Result<Command, EngineError> {
