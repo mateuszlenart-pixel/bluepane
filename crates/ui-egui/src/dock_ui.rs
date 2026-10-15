@@ -7,6 +7,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use bluepane_engine::Tool;
 use egui::{Id, RichText, Ui, WidgetText};
 use egui_dock::tab_viewer::OnCloseResponse;
 use egui_dock::{DockArea, DockState, NodeIndex, NodePath, SurfaceIndex, TabViewer};
@@ -14,80 +15,27 @@ use serde::{Deserialize, Serialize};
 
 use crate::BluepaneUi;
 
-/// One tab of the dock.
+/// One tab of the dock: a file panel or a tool.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub(crate) enum Tab {
     /// A file panel (0 = left, 1 = right).
     Panel(u8),
-    Pages,
-    Viewer,
-    Sync,
-    Scan,
-    Queue,
-    Sites,
-    Rename,
-    Find,
+    /// Tools are closed at start, so they are never saved with the layout.
+    #[serde(skip)]
+    Tool(Tool),
 }
 
 impl Tab {
-    pub(crate) const TOOLS: [Tab; 8] = [
-        Tab::Pages,
-        Tab::Viewer,
-        Tab::Sync,
-        Tab::Scan,
-        Tab::Queue,
-        Tab::Sites,
-        Tab::Rename,
-        Tab::Find,
-    ];
-
     pub(crate) fn is_tool(self) -> bool {
-        !matches!(self, Tab::Panel(_))
-    }
-
-    /// The command that closes the tool (what the tab's × sends).
-    fn close_line(self) -> &'static str {
-        match self {
-            Tab::Panel(_) => "",
-            Tab::Pages => "pageclose",
-            Tab::Viewer => "viewer close",
-            Tab::Sync => "syncclose",
-            Tab::Scan => "scanclose",
-            Tab::Queue => "queueclose",
-            Tab::Sites => "siteclose",
-            Tab::Rename => "mrclose",
-            Tab::Find => "findclose",
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Tab::Panel(0) => "Lewy panel",
-            Tab::Panel(_) => "Prawy panel",
-            Tab::Pages => "Strony",
-            Tab::Viewer => "Podgląd",
-            Tab::Sync => "Synchronizacja",
-            Tab::Scan => "Skaner sieci",
-            Tab::Queue => "Kolejka",
-            Tab::Sites => "Serwery",
-            Tab::Rename => "Zmiana nazw",
-            Tab::Find => "Szukanie",
-        }
+        matches!(self, Tab::Tool(_))
     }
 }
 
-/// True while the session has this tool open.
-pub(crate) fn tool_is_open(session: &bluepane_engine::Session, tab: Tab) -> bool {
+/// True while the session has this tab's content (panels always).
+fn is_open(session: &bluepane_engine::Session, tab: Tab) -> bool {
     match tab {
         Tab::Panel(_) => true,
-        Tab::Pages => session.pages.is_some(),
-        Tab::Viewer => session.viewer.is_some(),
-        Tab::Sync => session.sync.is_some(),
-        Tab::Scan => session.scan.as_ref().is_some_and(|v| v.visible),
-        Tab::Queue => session.queue_open,
-        Tab::Sites => session.sites_open,
-        Tab::Rename => session.rename.is_some(),
-        Tab::Find => session.find.as_ref().is_some_and(|f| f.visible),
+        Tab::Tool(tool) => tool.is_open(session),
     }
 }
 
@@ -105,10 +53,9 @@ const PANELS_SHARE: f32 = 0.58;
 /// Gives every open tool a tab and takes the tab of every closed one away. A new tab joins
 /// the other tool tabs, or opens on the right of the panels, and gets the focus.
 pub(crate) fn sync_tools(dock: &mut DockState<Tab>, session: &bluepane_engine::Session) {
-    for tab in Tab::TOOLS {
-        let open = tool_is_open(session, tab);
-        let present = dock.find_tab(&tab);
-        match (open, present) {
+    for tool in Tool::ALL {
+        let tab = Tab::Tool(tool);
+        match (tool.is_open(session), dock.find_tab(&tab)) {
             (true, None) => add_tool(dock, tab),
             (false, Some(_)) => {
                 while let Some(path) = dock.find_tab(&tab) {
@@ -190,9 +137,10 @@ impl TabViewer for DockViewer<'_> {
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| panel.location().display().to_string());
-                RichText::new(format!("{}: {place}", tab.name())).into()
+                let side = if i == 0 { "Lewy panel" } else { "Prawy panel" };
+                RichText::new(format!("{side}: {place}")).into()
             }
-            other => RichText::new(other.name()).into(),
+            Tab::Tool(tool) => RichText::new(tool.label()).into(),
         }
     }
 
@@ -208,14 +156,7 @@ impl TabViewer for DockViewer<'_> {
                     app.panel_ui(ui, index);
                 }
             }
-            Tab::Pages => app.pages_ui(ui),
-            Tab::Viewer => app.viewer_ui(ui),
-            Tab::Sync => app.sync_ui(ui),
-            Tab::Scan => app.scan_ui(ui),
-            Tab::Queue => app.queue_ui(ui),
-            Tab::Sites => app.sites_ui(ui),
-            Tab::Rename => app.rename_ui(ui),
-            Tab::Find => app.find_ui(ui),
+            Tab::Tool(tool) => app.tool_ui(ui, tool),
         }
     }
 
@@ -262,7 +203,9 @@ impl BluepaneUi {
             .show_inside(ui, &mut viewer);
         let closed = std::mem::take(&mut viewer.closed);
         for tab in closed {
-            self.dispatch(tab.close_line());
+            if let Tab::Tool(tool) = tab {
+                self.dispatch(tool.close_line());
+            }
         }
         // The tab the user last clicked in decides where the keys go.
         if let Some((_, tab)) = dock.find_active_focused() {
@@ -273,8 +216,56 @@ impl BluepaneUi {
     }
 
     /// The tool that has the keyboard, if the focused tab is an open tool.
-    pub(crate) fn focused_tool(&self) -> Option<Tab> {
-        (self.focus.is_tool() && tool_is_open(&self.session, self.focus)).then_some(self.focus)
+    pub(crate) fn focused_tool(&self) -> Option<Tool> {
+        match self.focus {
+            Tab::Tool(tool) if is_open(&self.session, self.focus) => Some(tool),
+            _ => None,
+        }
+    }
+
+    /// Draws a tool in its tab.
+    fn tool_ui(&mut self, ui: &mut Ui, tool: Tool) {
+        match tool {
+            Tool::Pages => self.pages_ui(ui),
+            Tool::Viewer => self.viewer_ui(ui),
+            Tool::Sync => self.sync_ui(ui),
+            Tool::Scan => self.scan_ui(ui),
+            Tool::Queue => self.queue_ui(ui),
+            Tool::Sites => self.sites_ui(ui),
+            Tool::Rename => self.rename_ui(ui),
+            Tool::Find => self.find_ui(ui),
+        }
+    }
+
+    /// The keys of the tool whose tab has the focus. Typing never reaches the panel filter.
+    pub(crate) fn tool_keys(&mut self, tool: Tool, pressed: &[String]) {
+        match tool {
+            Tool::Pages => self.pages_keys(pressed),
+            Tool::Viewer => {
+                for key in pressed {
+                    if let Some(line) = self.session.keymap.lookup_viewer(key).map(str::to_owned) {
+                        self.dispatch(&line);
+                    }
+                }
+            }
+            Tool::Scan => self.scan_keys(pressed),
+            Tool::Queue => self.queue_keys(pressed),
+            Tool::Sites => self.sites_keys(pressed),
+            Tool::Find => self.find_keys(pressed),
+            Tool::Rename => self.rename_keys(pressed),
+            Tool::Sync => {
+                let dirty = self.sync_form_is_dirty();
+                for key in pressed {
+                    match key.as_str() {
+                        "Escape" => self.dispatch("syncclose"),
+                        // Running needs the settings on screen to be the ones compared.
+                        "F5" if !dirty => self.dispatch("syncrun"),
+                        "F9" => self.sync_compare_now(),
+                        _ => {}
+                    }
+                }
+            }
+        }
     }
 
     fn save_layout(&mut self, dock: &DockState<Tab>) {
@@ -325,7 +316,7 @@ mod tests {
         s.run_line("sites").unwrap();
         sync_tools(&mut dock, &s);
         let all = tabs(&dock);
-        assert!(all.contains(&Tab::Queue) && all.contains(&Tab::Sites));
+        assert!(all.contains(&Tab::Tool(Tool::Queue)) && all.contains(&Tab::Tool(Tool::Sites)));
         // Both tools share one leaf; the panels are in others.
         let tool_leaves = dock
             .iter_leaves()
@@ -339,21 +330,10 @@ mod tests {
         s.run_line("queueclose").unwrap();
         sync_tools(&mut dock, &s);
         let all = tabs(&dock);
-        assert!(!all.contains(&Tab::Queue) && all.contains(&Tab::Sites));
+        assert!(!all.contains(&Tab::Tool(Tool::Queue)) && all.contains(&Tab::Tool(Tool::Sites)));
         s.run_line("siteclose").unwrap();
         sync_tools(&mut dock, &s);
         assert_eq!(tabs(&dock).len(), 2);
-    }
-
-    #[test]
-    fn every_tool_names_a_command_that_exists() {
-        for tab in Tab::TOOLS {
-            assert!(
-                bluepane_engine::Command::parse(tab.close_line()).is_ok(),
-                "{tab:?} -> {}",
-                tab.close_line()
-            );
-        }
     }
 
     #[test]
@@ -361,12 +341,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("layout.json");
         let mut dock = default_layout();
-        dock.push_to_first_leaf(Tab::Queue);
+        dock.push_to_first_leaf(Tab::Tool(Tool::Queue));
         std::fs::write(&path, layout_text(&dock)).unwrap();
         let loaded = load_layout(&path).expect("a sound file loads");
         let all = tabs(&loaded);
         assert!(all.contains(&Tab::Panel(0)) && all.contains(&Tab::Panel(1)));
-        assert!(!all.contains(&Tab::Queue), "tools are not restored");
+        assert!(
+            !all.contains(&Tab::Tool(Tool::Queue)),
+            "tools are not restored"
+        );
 
         std::fs::write(&path, "not json").unwrap();
         assert!(load_layout(&path).is_none());

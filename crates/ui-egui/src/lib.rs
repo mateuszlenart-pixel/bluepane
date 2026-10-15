@@ -553,57 +553,9 @@ impl BluepaneUi {
             return;
         }
         // A tool tab that has the focus gets the keys; otherwise they are for the panels.
-        match self.focused_tool() {
-            Some(dock_ui::Tab::Pages) => {
-                self.pages_keys(&pressed);
-                return;
-            }
-            Some(dock_ui::Tab::Viewer) => {
-                // The viewer has its own keys; typing must not start the panel filter.
-                for key in pressed {
-                    if let Some(line) = self.session.keymap.lookup_viewer(&key).map(str::to_owned) {
-                        self.dispatch(&line);
-                    }
-                }
-                return;
-            }
-            Some(dock_ui::Tab::Scan) => {
-                self.scan_keys(&pressed);
-                return;
-            }
-            Some(dock_ui::Tab::Queue) => {
-                self.queue_keys(&pressed);
-                return;
-            }
-            Some(dock_ui::Tab::Sites) => {
-                self.sites_keys(&pressed);
-                return;
-            }
-            Some(dock_ui::Tab::Find) => {
-                // Typing in the search window must not start the panel filter.
-                self.find_keys(&pressed);
-                return;
-            }
-            Some(dock_ui::Tab::Rename) => {
-                // Typing in the multi-rename window must not start the panel filter.
-                self.rename_keys(&pressed);
-                return;
-            }
-            Some(dock_ui::Tab::Sync) => {
-                // The synchronization window has few keys; typing must not start the filter.
-                let dirty = self.sync_form_is_dirty();
-                for key in pressed {
-                    match key.as_str() {
-                        "Escape" => self.dispatch("syncclose"),
-                        // Running needs the settings on screen to be the ones compared.
-                        "F5" if !dirty => self.dispatch("syncrun"),
-                        "F9" => self.sync_compare_now(),
-                        _ => {}
-                    }
-                }
-                return;
-            }
-            Some(dock_ui::Tab::Panel(_)) | None => {}
+        if let Some(tool) = self.focused_tool() {
+            self.tool_keys(tool, &pressed);
+            return;
         }
         for key in pressed {
             // While a filter is being typed, Space is part of the name, not "select".
