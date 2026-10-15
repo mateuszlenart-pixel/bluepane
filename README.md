@@ -36,6 +36,7 @@ sudo apt install libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3
 | Ctrl+N | skaner sieci (urządzenia w zakresie adresów IP, ich porty i usługi) |
 | Alt+Shift+Enter | `dirsize`: policz w tle rozmiar zaznaczonych katalogów (albo tego pod kursorem); wynik pojawia się w kolumnie Rozmiar i w podsumowaniu pod listą (odświeżenie F9 i operacje na plikach czyszczą policzone rozmiary) |
 | — | pasek rozmiaru za kolumną Rozmiar (długość względem największego pliku lub policzonego katalogu) i podsumowanie pod listą: „Zaznaczono: 2 pliki (48.2 KB) z 10 elementów” albo suma katalogu |
+| — | nad panelem: lista dysków z paskiem zajętości i „wolne z”, ścieżka jako klikalne segmenty (kliknięcie = `cd` do tego miejsca; kliknięcie pustego miejsca paska zamienia ścieżkę w pole do wpisania), a aktywny filtr jako odznaka z ✕ |
 | — | ikony i kolory typów plików: katalogi, archiwa, dokumenty, obrazy, audio/wideo, kod, programy (klasa pliku z nazwy, bez otwierania) |
 | — | motyw kolorów: komenda `theme` (pokazuje dostępne), `theme dark`; wybór zapisuje się w `settings.conf` |
 | Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |

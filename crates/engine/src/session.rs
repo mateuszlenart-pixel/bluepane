@@ -248,6 +248,8 @@ pub struct Session {
     pub(crate) theme: String,
     /// Folder sizes counted on request.
     pub dir_sizes: crate::DirSizes,
+    /// Free space of the drives shown above the panels (asked in the background).
+    pub disk_usage: crate::DiskUsage,
     /// Saved SFTP sites (the site manager) and the server keys the user has trusted.
     pub sites: bluepane_remote::Sites,
     pub known_hosts: bluepane_remote::KnownHosts,
@@ -400,6 +402,7 @@ impl Session {
             config_dir: None,
             theme: crate::settings::DEFAULT_THEME.to_string(),
             dir_sizes: crate::DirSizes::default(),
+            disk_usage: crate::DiskUsage::default(),
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),

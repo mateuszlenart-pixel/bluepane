@@ -65,6 +65,8 @@ pub struct BluepaneUi {
     /// The palette in use and the name of the theme egui was last given.
     theme: theme::Theme,
     theme_applied: bool,
+    /// Set when a click on the empty part of a path bar asked to edit the path.
+    path_edit: [bool; 2],
 }
 
 impl BluepaneUi {
@@ -86,6 +88,7 @@ impl BluepaneUi {
             site_form: None,
             theme: theme::Theme::by_name(&theme_name),
             theme_applied: false,
+            path_edit: [false; 2],
         }
     }
 
@@ -116,7 +119,8 @@ impl BluepaneUi {
         self.session.poll();
         let searching = self.session.find.as_ref().is_some_and(|f| f.is_running())
             || self.session.scan.as_ref().is_some_and(|v| v.is_running())
-            || self.session.dir_sizes.is_running();
+            || self.session.dir_sizes.is_running()
+            || self.session.disk_usage.is_asking();
         if self.session.is_busy() || searching {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
@@ -805,13 +809,17 @@ impl BluepaneUi {
         }
     }
 
-    /// Volume picker and editable path bar of one panel.
+    /// Volume picker with the drive's free space, and the path bar of one panel: clickable
+    /// segments, or an editable text after a click on the empty part of the bar.
     fn header_ui(&mut self, ui: &mut egui::Ui, index: usize) {
+        use egui_phosphor::regular as icon;
         let is_active = self.session.active == index;
         let current_volume = self.session.volume_of(index);
         let mut chosen = None;
+        let mut go_to: Option<std::path::PathBuf> = None;
         let path_id = egui::Id::new(("path-bar", index));
-        let editing = ui.ctx().memory(|m| m.has_focus(path_id));
+        let focused = ui.ctx().memory(|m| m.has_focus(path_id));
+        let editing = focused || self.path_edit[index];
         if !editing {
             let panel = &self.session.panels[index];
             self.path_text[index] = match &panel.virtual_list {
@@ -819,6 +827,8 @@ impl BluepaneUi {
                 None => panel.location().display().to_string(),
             };
         }
+        let theme = self.theme.clone();
+        let space = self.session.volume_space(index);
 
         ui.horizontal(|ui| {
             let selected_text = current_volume
@@ -837,15 +847,53 @@ impl BluepaneUi {
                         }
                     }
                 });
+            // How full the drive is: a thin bar and the numbers.
+            if let Some(space) = space {
+                let used = space.used_fraction();
+                let fill = if used >= 0.95 {
+                    theme.error
+                } else if used >= 0.85 {
+                    theme.warn
+                } else {
+                    theme.accent
+                };
+                ui.add(
+                    egui::ProgressBar::new(used)
+                        .desired_width(70.0)
+                        .desired_height(8.0)
+                        .fill(fill),
+                );
+                ui.label(
+                    RichText::new(format!(
+                        "{} wolne z {}",
+                        human_size(space.free),
+                        human_size(space.total)
+                    ))
+                    .color(theme.muted)
+                    .small(),
+                );
+            }
+        });
 
+        let crumbs = if editing {
+            Vec::new()
+        } else {
+            self.session.panel_crumbs(index)
+        };
+        if crumbs.is_empty() {
+            // An archive, a result list, or an edit in progress: the path as text.
             let mut edit = egui::TextEdit::singleline(&mut self.path_text[index])
                 .id(path_id)
                 .font(egui::TextStyle::Monospace)
                 .desired_width(f32::INFINITY);
             if is_active {
-                edit = edit.text_color(self.theme.accent);
+                edit = edit.text_color(theme.accent);
             }
             let response = ui.add(edit);
+            if self.path_edit[index] {
+                response.request_focus();
+                self.path_edit[index] = false;
+            }
             if response.gained_focus() {
                 self.session.active = index;
             }
@@ -854,11 +902,62 @@ impl BluepaneUi {
                 let line = format!("cd {}", self.path_text[index]);
                 let _ = self.session.run_line(&line);
             }
-        });
+        } else {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                // A long path shows its tail; the part cut off is one click away.
+                const SHOWN: usize = 6;
+                let hidden = crumbs.len().saturating_sub(SHOWN);
+                if hidden > 0
+                    && ui
+                        .add(egui::Button::new("…").frame(false))
+                        .on_hover_text(crumbs[hidden - 1].path.display().to_string())
+                        .clicked()
+                {
+                    go_to = Some(crumbs[hidden - 1].path.clone());
+                }
+                for (i, crumb) in crumbs.iter().enumerate().skip(hidden) {
+                    if i > hidden || hidden > 0 {
+                        ui.label(RichText::new(icon::CARET_RIGHT).color(theme.muted));
+                    }
+                    let last = i + 1 == crumbs.len();
+                    let color = if last && is_active {
+                        theme.accent
+                    } else if last {
+                        theme.text
+                    } else {
+                        theme.dir
+                    };
+                    let text = RichText::new(&crumb.label).monospace().color(color);
+                    let text = if last { text.strong() } else { text };
+                    if ui
+                        .add(egui::Button::new(text).frame(false))
+                        .on_hover_text(crumb.path.display().to_string())
+                        .clicked()
+                    {
+                        go_to = Some(crumb.path.clone());
+                    }
+                }
+                // The empty rest of the bar: a click turns the path into text to edit.
+                let rest = egui::vec2(ui.available_width().max(12.0), ui.spacing().interact_size.y);
+                let (_, response) = ui.allocate_exact_size(rest, egui::Sense::click());
+                if response
+                    .on_hover_text("Kliknij, żeby wpisać ścieżkę")
+                    .clicked()
+                {
+                    self.path_edit[index] = true;
+                    self.session.active = index;
+                }
+            });
+        }
 
         if let Some(i) = chosen {
             self.session.active = index;
             let _ = self.session.execute(Command::Volume((i + 1).to_string()));
+        }
+        if let Some(path) = go_to {
+            self.session.active = index;
+            let _ = self.session.run_line(&format!("cd {}", path.display()));
         }
     }
 
@@ -889,11 +988,36 @@ impl BluepaneUi {
         if let Some(err) = &panel.error {
             ui.colored_label(self.theme.error, err);
         }
+        let mut clear_filter = false;
         if !panel.filter.is_empty() {
-            ui.label(
-                RichText::new(format!("Filtr: {}  (Esc czyści)", panel.filter))
-                    .color(self.theme.warn),
-            );
+            egui::Frame::new()
+                .fill(self.theme.header)
+                .stroke(egui::Stroke::new(1.0, self.theme.warn))
+                .corner_radius(10)
+                .inner_margin(egui::Margin::symmetric(8, 1))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "{} Filtr: {}",
+                                egui_phosphor::regular::MAGNIFYING_GLASS,
+                                panel.filter
+                            ))
+                            .color(self.theme.warn),
+                        );
+                        if ui
+                            .add(
+                                egui::Button::new(egui_phosphor::regular::X)
+                                    .frame(false)
+                                    .small(),
+                            )
+                            .on_hover_text("Wyczyść filtr (Esc)")
+                            .clicked()
+                        {
+                            clear_filter = true;
+                        }
+                    });
+                });
         }
         ui.separator();
 
@@ -1117,6 +1241,10 @@ impl BluepaneUi {
         ui.separator();
         ui.label(RichText::new(summary).color(theme.muted));
 
+        if clear_filter {
+            self.session.active = index;
+            let _ = self.session.run_line("filter");
+        }
         if let Some(row) = entered {
             self.session.active = index;
             self.session.panels[index].cursor = row;

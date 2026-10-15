@@ -14,6 +14,7 @@ mod job;
 mod keymap;
 mod mask;
 mod multirename;
+mod navbar;
 mod pageview;
 mod panel;
 mod queue;
@@ -59,6 +60,7 @@ pub use job::{
 pub use keymap::Keymap;
 pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};
+pub use navbar::{crumbs, Crumb, DiskUsage};
 pub use pageview::{PageMove, PageState, PageViewer, PageZoom, RenderedPage, ZoomChange};
 pub use panel::{
     is_parent_entry, ArchiveView, ClickMode, Panel, RemoteView, Sort, SortKey, VirtualList,
