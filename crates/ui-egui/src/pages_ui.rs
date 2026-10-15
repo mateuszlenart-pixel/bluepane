@@ -80,7 +80,7 @@ impl BluepaneUi {
             }
         });
         ui.label(
-            RichText::new("PgUp/PgDn lub strzałki ←/→: strony · Home/End: pierwsza/ostatnia · +/−/0: powiększenie · Esc/Q: zamknij")
+            RichText::new("PgUp/PgDn lub strzałki ←/→: strony · Home/End: pierwsza/ostatnia · +/−/0: powiększenie · przesuwanie: przeciągnij myszą, paski przewijania lub Shift+kółko · Esc/Q: zamknij")
                 .weak(),
         );
         ui.separator();
@@ -143,10 +143,19 @@ impl BluepaneUi {
         // Until the sharper picture is ready the old one is stretched to the wanted size.
         let aspect = image.height as f32 / image.width as f32;
         let size = egui::vec2(wanted_points, wanted_points * aspect);
-        egui::ScrollArea::both().auto_shrink(false).show(ui, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add(egui::Image::new((texture.id(), size)));
+        let fits = size.x <= ui.available_width();
+        egui::ScrollArea::both()
+            .auto_shrink(false)
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+            .show(ui, |ui| {
+                // A page wider than the window is not centred, or its left edge would be cut off.
+                if fits {
+                    ui.vertical_centered(|ui| {
+                        ui.add(egui::Image::new((texture.id(), size)));
+                    });
+                } else {
+                    ui.add(egui::Image::new((texture.id(), size)));
+                }
             });
-        });
     }
 }

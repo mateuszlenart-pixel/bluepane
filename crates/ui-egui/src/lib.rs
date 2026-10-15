@@ -512,6 +512,10 @@ impl BluepaneUi {
             return;
         };
         ui.horizontal(|ui| {
+            // The cancel button comes first so a long file name can never push it away.
+            if ui.button("Anuluj").clicked() {
+                self.dispatch("stop");
+            }
             let queued = if job.queued > 0 {
                 format!(" (w kolejce: {})", job.queued)
             } else {
@@ -535,13 +539,10 @@ impl BluepaneUi {
                     human_size(job.bytes_total)
                 ));
             }
-            ui.label(RichText::new(&job.current).weak());
             if job.waiting_for_answer {
                 ui.label(RichText::new("czeka na decyzję").color(Color32::YELLOW));
             }
-            if ui.button("Anuluj").clicked() {
-                self.dispatch("stop");
-            }
+            ui.add(egui::Label::new(RichText::new(&job.current).weak()).truncate());
         });
     }
 

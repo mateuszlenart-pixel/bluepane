@@ -224,6 +224,9 @@ impl BluepaneUi {
             {
                 commands.push("syncrun".into());
             }
+            if busy && ui.button("Zatrzymaj").clicked() {
+                commands.push("stop".into());
+            }
             if ui.button("Zamknij (Esc)").clicked() {
                 commands.push("syncclose".into());
             }
