@@ -171,3 +171,28 @@ fn jump_to_lists_visited_folders_and_goes_to_the_chosen_one() {
         .cwd
         .ends_with("dokumenty"));
 }
+
+#[test]
+fn the_places_bar_lists_favorites_and_a_click_goes_there() {
+    let (tmp, mut harness) = window();
+    std::fs::create_dir_all(tmp.path().join("left/ulubiony")).unwrap();
+    harness.run_steps(2);
+    command(&mut harness, "fav ulubiony");
+    assert!(
+        harness.query_by_label("Ulubione").is_none(),
+        "the bar is hidden by default"
+    );
+    command(&mut harness, "places");
+    harness.get_by_label("Ulubione");
+    harness.get_by_label("Dyski");
+    harness.get_by_label("ulubiony").click();
+    harness.run_steps(4);
+    assert!(harness
+        .state_mut()
+        .session_mut()
+        .active_panel()
+        .cwd
+        .ends_with("ulubiony"));
+    command(&mut harness, "places");
+    assert!(harness.query_by_label("Ulubione").is_none());
+}

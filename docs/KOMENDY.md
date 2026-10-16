@@ -22,6 +22,8 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `select <nazwa>` | ustawia kursor na pozycji o tej nazwie i zaznacza ją |
 | `filter [tekst]` | zawęża listę do nazw zawierających tekst; bez tekstu czyści filtr (Esc) |
 | `dirsize` | liczy w tle rozmiar zaznaczonych katalogów albo tego pod kursorem (Alt+Shift+Enter) |
+| `places` | pokazuje lub chowa pasek „Miejsca”: dyski z wolnym miejscem, ulubione, serwery i ostatnie katalogi (Ctrl+B) |
+| `fav [ścieżka]\|del <ścieżka>` | dodaje katalog (domyślnie bieżący) do ulubionych albo go z nich usuwa; `fav del` usuwa po ścieżce |
 
 ## Zaznaczanie i sortowanie
 

@@ -22,6 +22,17 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Pasek „Miejsca” (Ctrl+B)
+
+Chowany pasek po lewej stronie okna zbiera punkty wejścia w jednym miejscu; klik w wiersz przechodzi tam w aktywnym panelu, a wiersz miejsca, w którym panel jest teraz, jest podświetlony:
+
+- **Dyski** z paskiem zajętości i wolnym miejscem (to samo co `volume`; ostrzeżenie kolorem od 85% i 95% zajętości),
+- **Ulubione**: katalogi, które sam dodałeś (`fav` dodaje bieżący katalog albo go usuwa, `fav <ścieżka>` robi to samo dla podanej ścieżki, `fav del <ścieżka>` usuwa; przy wierszu jest też przycisk ✕); zapisane w `favorites.conf` w katalogu konfiguracji; tylko katalogi na dysku,
+- **Serwery**: zapisane witryny SFTP/FTP/FTPS (klik łączy aktywny panel),
+- **Ostatnie**: osiem ostatnio odwiedzonych katalogów (bez ulubionych i takich, których już nie ma).
+
+Sekcje bez wierszy są ukryte. Komendy: `places` (pokazuje i chowa pasek), `fav`. Udziałów sieciowych ze skanera (Ctrl+N) w pasku jeszcze nie ma.
+
 ## „Skocz do” (Ctrl+P)
 
 Jedno pole szukania nad miejscami, do których chodzisz najczęściej. Lista składa się z:

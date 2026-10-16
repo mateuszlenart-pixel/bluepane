@@ -89,6 +89,16 @@ impl Visits {
         all
     }
 
+    /// The `count` folders visited last, newest first.
+    pub fn latest(&self, count: usize) -> Vec<PathBuf> {
+        let mut all: Vec<(&PathBuf, u64)> = self.map.iter().map(|(p, v)| (p, v.1)).collect();
+        all.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+        all.into_iter()
+            .take(count)
+            .map(|(p, _)| p.clone())
+            .collect()
+    }
+
     pub fn len(&self) -> usize {
         self.map.len()
     }

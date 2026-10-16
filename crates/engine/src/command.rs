@@ -77,6 +77,8 @@ pub const COMMAND_NAMES: &[&str] = &[
     "testarchive",
     "palette",
     "jump",
+    "places",
+    "fav",
     "queue",
     "queueclose",
     "queuepause",
@@ -307,6 +309,10 @@ pub enum Command {
     Palette(PaletteAction),
     /// Control the "jump to" list (Ctrl+P); it takes the same actions as the palette.
     Jump(PaletteAction),
+    /// Show or hide the Places bar (Ctrl+B).
+    Places,
+    /// Add a folder to the favorites or remove it.
+    Favorite(crate::FavoriteAction),
     /// Rename the entry under the cursor (F2). Without a name a dialog asks for it.
     Rename(Option<String>),
     /// Move the selection to the trash (F8), after a confirmation.
@@ -581,6 +587,8 @@ impl Command {
             "viewer" => parse_viewer(rest).map(Command::Viewer),
             "palette" => parse_palette(rest).map(Command::Palette),
             "jump" => parse_palette(rest).map(Command::Jump),
+            "places" => Ok(Command::Places),
+            "fav" => Ok(Command::Favorite(parse_favorite(rest))),
             "tab" => parse_tab(rest).map(Command::Tab),
             "pack" => parse_pack(rest),
             "unpack" => parse_unpack(rest).map(Command::Unpack),
@@ -729,6 +737,18 @@ fn parse_tab(args: &str) -> Result<TabAction, EngineError> {
         return Err(usage());
     }
     Ok(action)
+}
+
+fn parse_favorite(rest: &str) -> crate::FavoriteAction {
+    use crate::FavoriteAction;
+    let rest = rest.trim();
+    match rest.split_once(char::is_whitespace) {
+        Some(("del", path)) if !path.trim().is_empty() => {
+            FavoriteAction::Remove(PathBuf::from(path.trim()))
+        }
+        _ if rest.is_empty() => FavoriteAction::Toggle(None),
+        _ => FavoriteAction::Toggle(Some(PathBuf::from(rest))),
+    }
 }
 
 fn parse_palette(rest: &str) -> Result<PaletteAction, EngineError> {

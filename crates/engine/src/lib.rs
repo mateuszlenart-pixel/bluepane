@@ -20,6 +20,7 @@ mod navbar;
 mod pageview;
 mod palette;
 mod panel;
+mod places;
 mod queue;
 mod quickview;
 mod remote;
@@ -75,6 +76,7 @@ pub use panel::{
     is_parent_entry, ArchiveView, ClickMode, Panel, RemoteView, Sort, SortKey, VirtualList,
     PARENT_NAME,
 };
+pub use places::{FavoriteAction, Favorites, Place, PlaceSection};
 pub use queue::{FinishedJob, QueueLine};
 pub use quickview::{QuickContent, QuickKey, QuickView, QUICK_DELAY};
 pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, ShareList};
