@@ -93,6 +93,11 @@ impl BluepaneUi {
         &self.session
     }
 
+    /// The session, for driving the window from outside (tests, scripts).
+    pub fn session_mut(&mut self) -> &mut Session {
+        &mut self.session
+    }
+
     /// Draws one frame. Call this from `eframe::App::ui`.
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();

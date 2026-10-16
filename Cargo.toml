@@ -27,6 +27,8 @@ bluepane-ui-egui = { path = "crates/ui-egui" }
 
 # External.
 egui = "0.36"
+# Headless GUI tests (the widget tree, clicks); no snapshots, so no GPU is needed in CI.
+egui_kittest = "0.36"
 # Icon font built into the program (file type icons in the panels).
 egui-phosphor = "0.14"
 # Free and total space of a drive (one safe call on Windows and Linux).
