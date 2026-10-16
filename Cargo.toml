@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "apps/*", "xtask"]
-# Third-party code with a local fix is not linted or formatted as ours.
-exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -21,6 +19,7 @@ bluepane-rename = { path = "crates/rename" }
 bluepane-search = { path = "crates/search" }
 bluepane-remote = { path = "crates/remote" }
 bluepane-docs = { path = "crates/docs" }
+bluepane-text = { path = "crates/text" }
 bluepane-netscan = { path = "crates/netscan" }
 bluepane-engine = { path = "crates/engine" }
 bluepane-ui-egui = { path = "crates/ui-egui" }
@@ -55,7 +54,7 @@ russh-sftp = "3"
 rand = "0.10"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "net", "time", "io-util", "sync", "macros"] }
 # FTP and FTPS (TLS through rustls with ring, no C library to install).
-suppaftp = { version = "12", default-features = false, features = ["rustls-ring", "deprecated"] }
+suppaftp = { version = "12.2.1", default-features = false, features = ["rustls-ring", "deprecated"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 sha2 = "0.10"
 rcgen = "0.14"
@@ -80,9 +79,3 @@ all = { level = "warn", priority = -1 }
 lto = "thin"
 codegen-units = 1
 strip = true
-
-# suppaftp 12.2.0 with one fix: in active mode an accepted data socket must be made blocking
-# again (on Windows it inherits the non-blocking mode of the listener). Drop this patch when
-# the upstream release has the fix.
-[patch.crates-io]
-suppaftp = { path = "vendor/suppaftp" }

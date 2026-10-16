@@ -719,6 +719,7 @@ dependencies = [
  "bluepane-engine",
  "bluepane-ui-egui",
  "eframe",
+ "tempfile",
 ]
 
 [[package]]
@@ -746,6 +747,7 @@ dependencies = [
 name = "bluepane-docs"
 version = "0.1.0"
 dependencies = [
+ "bluepane-text",
  "hayro",
  "pdf-extract",
  "tempfile",
@@ -821,6 +823,7 @@ version = "0.1.0"
 dependencies = [
  "bluepane-archive",
  "bluepane-ops",
+ "bluepane-text",
  "bluepane-vfs",
  "regex",
  "tempfile",
@@ -833,6 +836,10 @@ dependencies = [
  "bluepane-ops",
  "tempfile",
 ]
+
+[[package]]
+name = "bluepane-text"
+version = "0.1.0"
 
 [[package]]
 name = "bluepane-ui-egui"
@@ -5393,7 +5400,9 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "suppaftp"
-version = "12.2.0"
+version = "12.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b58fcf921745cca6f0127c9f822069947da8c6dbeff52e9004750bcc448171f"
 dependencies = [
  "chrono",
  "lazy-regex",

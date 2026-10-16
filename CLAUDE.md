@@ -13,7 +13,15 @@ skrótów, ale nie kopiujemy kodu, zasobów ani nazwy Total Commandera.
 
 ```
 crates/vfs        system plików: listowanie, wolumeny, kod specyficzny dla platformy
-crates/ops        kopiuj / przenieś / mkdir / do kosza, postęp i anulowanie
+crates/ops        kopiuj / przenieś / mkdir / do kosza, postęp, anulowanie, limit prędkości
+crates/archive    zip, 7z, tar: czytanie, pakowanie, zmiany w archiwum
+crates/sync       porównanie i synchronizacja katalogów
+crates/rename     zmiana nazw wielu plików z podglądem
+crates/search     szukanie po nazwie i treści (pliki, archiwa, wiele dysków)
+crates/remote     SFTP, FTP, FTPS, witryny, hasła (keyring, Bitwarden)
+crates/netscan    skaner sieci: hosty, porty, usługi
+crates/docs       tekst i strony dokumentów (PDF, Word, Excel, OpenDocument, RTF, PowerPoint)
+crates/text       wspólne tabele kodowań (używają docs i search)
 crates/engine     panele, zaznaczenie, Command, Keymap, Session (bez egui, bez OS-u)
 crates/ui-egui    front egui: rysuje stan silnika, zamienia klawisze na komendy
 apps/bluepane     aplikacja okienkowa
@@ -23,8 +31,11 @@ xtask             `cargo xtask ci`
 
 ## Zasady warstw (egzekwuje `cargo xtask ci`)
 
-- `vfs` i `ops` nie zależą od żadnego crate'a workspace.
-- `engine` zależy tylko od `vfs` i `ops`.
+Dokładna tabela jest w `ALLOWED` w `xtask/src/main.rs`; w skrócie:
+
+- `vfs`, `ops` i `text` nie zależą od żadnego crate'a workspace; `archive`, `sync`, `rename`,
+  `remote`, `netscan`, `search` i `docs` zależą tylko od tych trzech i `archive` (search).
+- `engine` zależy od wszystkich crate'ów z logiką, nigdy od `ui-egui` ani aplikacji.
 - `ui-egui` zależy tylko od `engine`. Nie ma w nim logiki plików, tylko rysowanie i mapowanie klawiszy.
 - `bluepane` (app) zależy od `engine` i `ui-egui`; `bluepane-cli` od `engine` i `vfs`.
 - Nowy crate trzeba dopisać do `ALLOWED` w `xtask/src/main.rs`, razem z jego dozwolonymi zależnościami.
@@ -35,7 +46,9 @@ xtask             `cargo xtask ci`
    poleceń. Nowa funkcja = nowa komenda + wpis w `Keymap`, jeśli ma skrót. UI nie wywołuje `ops`
    bezpośrednio.
 2. **Różnice Windows/Linux tylko w `vfs`** (`crates/vfs/src/platform/`). Poza `vfs` żadnych
-   `#[cfg(windows)]` ani `#[cfg(unix)]`. Różnica zachowania = trait lub funkcja w `platform`.
+   `#[cfg(windows)]` ani `#[cfg(unix)]`. Jedyny wyjątek: atrybut `windows_subsystem` na początku
+   `apps/bluepane/src/main.rs` (wersja release na Windows bez okna konsoli; zbudowana z
+   `--features console` konsolę zachowuje). Różnica zachowania = trait lub funkcja w `platform`.
 3. **Bezpieczeństwo danych:** usuwanie idzie do kosza (`ops::delete_to_trash`), nigdy twardo, dopóki
    użytkownik tego jawnie nie zażąda. Kopiowanie nie nadpisuje bez decyzji użytkownika. Operacje na
    plikach testujemy wyłącznie w katalogach z `tempfile`.
