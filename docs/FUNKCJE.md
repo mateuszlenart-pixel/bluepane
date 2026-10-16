@@ -22,6 +22,18 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## „Skocz do” (Ctrl+P)
+
+Jedno pole szukania nad miejscami, do których chodzisz najczęściej. Lista składa się z:
+
+- **katalogów** z historii odwiedzin: im częściej i im niedawniej byłeś w katalogu, tym wyżej (ostatnia godzina liczy się czterokrotnie, ostatnia doba podwójnie, ostatni tydzień pojedynczo, starsze za pół); katalogi, których już nie ma, są pomijane; historia (do 500 katalogów) jest zapisana w `visits.conf` w katalogu konfiguracji,
+- **zakładek** aktywnego panelu (poza bieżącą),
+- **zapisanych serwerów** (Enter łączy aktywny panel).
+
+Wpisane słowa muszą wszystkie pasować do ścieżki (polskie litery można pomijać); katalog, którego nazwa zaczyna się od pierwszego słowa, jest wyżej. Strzałki ↑↓ zmieniają wybór, Enter przechodzi, Esc zamyka, klik w wiersz przechodzi od razu. Odwiedziny liczą się w katalogach lokalnych (nie w archiwach, na serwerach ani na listach wyników szukania).
+
+Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jump close`. Udziałów sieciowych ze skanera na tej liście jeszcze nie ma.
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

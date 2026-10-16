@@ -149,6 +149,7 @@ impl BluepaneUi {
             self.pack_focused = false;
         }
         self.palette_dialog(&ctx);
+        self.jump_dialog(&ctx);
         match &self.session.pending {
             Some(Pending::Input { .. }) => self.input_dialog(&ctx),
             Some(Pending::Conflict(_)) => self.conflict_dialog(&ctx),

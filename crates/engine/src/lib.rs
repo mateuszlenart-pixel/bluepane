@@ -12,6 +12,7 @@ mod fileclass;
 mod find;
 mod format;
 mod job;
+mod jump;
 mod keymap;
 mod mask;
 mod multirename;
@@ -63,6 +64,7 @@ pub use job::{
     Answer, ArchiveJob, Event, HostPrompt, JobKind, JobSpec, PackOptions, PasswordProblem,
     RemoteJob, RemoteOp, Report, RunningJob, SyncJob,
 };
+pub use jump::{JumpEntry, Visits};
 pub use keymap::Keymap;
 pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};

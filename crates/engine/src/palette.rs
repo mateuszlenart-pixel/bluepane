@@ -26,7 +26,7 @@ pub struct PaletteEntry {
 }
 
 /// Lowercase without Polish diacritics, so `sciezka` finds `ścieżka`.
-fn fold(text: &str) -> String {
+pub(crate) fn fold(text: &str) -> String {
     text.to_lowercase()
         .chars()
         .map(|c| match c {
@@ -123,6 +123,7 @@ impl Session {
     }
 
     pub(crate) fn palette_open(&mut self, query: String) {
+        self.jump = None;
         self.palette = Some(Palette { query, selected: 0 });
     }
 

@@ -53,6 +53,7 @@ impl Session {
         self.config_loaded = true;
         self.config_dir = Some(dir.to_path_buf());
         self.load_recent_commands(dir);
+        self.load_visits(dir);
         let (settings, warnings) = crate::settings::load(&dir.join("settings.conf"));
         self.use_settings(settings);
         if !warnings.is_empty() {

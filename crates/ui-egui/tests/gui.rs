@@ -151,3 +151,23 @@ fn a_command_with_an_argument_chosen_in_the_palette_fills_the_command_line() {
         "taken by the window"
     );
 }
+
+#[test]
+fn jump_to_lists_visited_folders_and_goes_to_the_chosen_one() {
+    let (tmp, mut harness) = window();
+    std::fs::create_dir_all(tmp.path().join("left/dokumenty")).unwrap();
+    harness.run_steps(2);
+    command(&mut harness, "cd dokumenty");
+    command(&mut harness, "cd ..");
+    command(&mut harness, "jump");
+    harness.get_by_label_contains("dokumenty");
+    command(&mut harness, "jump query dokumenty");
+    command(&mut harness, "jump run");
+    assert!(harness.state_mut().session_mut().jump.is_none());
+    assert!(harness
+        .state_mut()
+        .session_mut()
+        .active_panel()
+        .cwd
+        .ends_with("dokumenty"));
+}

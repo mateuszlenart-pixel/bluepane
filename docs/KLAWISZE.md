@@ -21,6 +21,7 @@ są na razie stałe.
 | Alt+Shift+Enter | `dirsize`: policz w tle rozmiar zaznaczonych katalogów (albo tego pod kursorem); wynik pojawia się w kolumnie Rozmiar i w podsumowaniu pod listą (odświeżenie F9 i operacje na plikach czyszczą policzone rozmiary) |
 | Ctrl+Q | Quick View: drugi panel pokazuje na żywo plik pod kursorem aktywnego (tekst/hex, strona PDF, tekst dokumentów); kółko przewija, Ctrl+Q zamyka; opis w [FUNKCJE.md](FUNKCJE.md) |
 | F1 | paleta komend: wyszukiwarka wszystkich komend z opisem (↑↓ wybór, Enter uruchamia, Esc zamyka); opis w [FUNKCJE.md](FUNKCJE.md) |
+| Ctrl+P | „Skocz do”: katalogi według częstości i świeżości odwiedzin, zakładki i serwery w jednym polu szukania (Enter przechodzi w aktywnym panelu); opis w [FUNKCJE.md](FUNKCJE.md) |
 | Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |
 | Ctrl+Shift+F4 | wyślij na serwer plik edytowany przez F4 |
 | Ctrl+S | serwery SFTP / FTP / FTPS (zapisane połączenia) |
