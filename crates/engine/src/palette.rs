@@ -229,7 +229,7 @@ mod tests {
     fn a_recent_command_wins_a_tie() {
         let plain = rank("kolejk", &[]);
         let last = plain.last().unwrap().help.name.to_string();
-        let boosted = rank("kolejk", &[last.clone()]);
+        let boosted = rank("kolejk", std::slice::from_ref(&last));
         assert_eq!(boosted[0].help.name, last);
     }
 
@@ -246,7 +246,7 @@ mod tests {
     fn session(tmp: &std::path::Path) -> Session {
         std::fs::create_dir_all(tmp.join("left")).unwrap();
         std::fs::create_dir_all(tmp.join("right")).unwrap();
-        let mut s = Session::new(&tmp.join("left"), tmp.join("right"));
+        let mut s = Session::new(tmp.join("left"), tmp.join("right"));
         s.use_config_dir(&tmp.join("config"));
         s
     }
