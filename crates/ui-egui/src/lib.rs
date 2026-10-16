@@ -38,6 +38,8 @@ pub struct BluepaneUi {
     pack_focused: bool,
     /// Editable text of each panel's path bar (resynced from the panel while not focused).
     path_text: [String; 2],
+    /// The folders listed in the open breadcrumb menu, with the folder they are inside of.
+    crumb_menu: Option<(std::path::PathBuf, Vec<bluepane_engine::Crumb>)>,
     /// Settings being edited in the synchronization window.
     sync_form: Option<sync_ui::SyncForm>,
     /// The multi-rename row whose new name is being typed by hand, and the text so far.
@@ -76,6 +78,7 @@ impl BluepaneUi {
             apply_to_all: false,
             pack_focused: false,
             path_text: [String::new(), String::new()],
+            crumb_menu: None,
             sync_form: None,
             rename_edit: None,
             find_selected: 0,
@@ -838,7 +841,37 @@ impl BluepaneUi {
                 }
                 for (i, crumb) in crumbs.iter().enumerate().skip(hidden) {
                     if i > hidden || hidden > 0 {
-                        ui.label(RichText::new(icon::CARET_RIGHT).color(theme.muted));
+                        // The separator opens the folders inside the segment before it.
+                        let caret = ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new(icon::CARET_RIGHT).color(theme.muted),
+                                )
+                                .frame(false),
+                            )
+                            .on_hover_text("Pokaż katalogi w środku");
+                        let parent = crumbs[i - 1].path.clone();
+                        if caret.clicked() {
+                            let items = self.session.crumb_subfolders(index, &parent);
+                            self.crumb_menu = Some((parent.clone(), items));
+                        }
+                        let items = match &self.crumb_menu {
+                            Some((menu_parent, items)) if *menu_parent == parent => items.clone(),
+                            _ => Vec::new(),
+                        };
+                        egui::Popup::menu(&caret).show(|ui| {
+                            ui.set_max_height(360.0);
+                            egui::ScrollArea::vertical().show(ui, |ui| {
+                                if items.is_empty() {
+                                    ui.label(RichText::new("Brak katalogów").color(theme.muted));
+                                }
+                                for folder in &items {
+                                    if ui.button(&folder.label).clicked() {
+                                        go_to = Some(folder.path.clone());
+                                    }
+                                }
+                            });
+                        });
                     }
                     let last = i + 1 == crumbs.len();
                     let color = if last && is_active {

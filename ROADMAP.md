@@ -203,7 +203,7 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 - [x] 12b **„Skocz do"** (Ctrl+P): katalogi z rankingiem częstość + świeżość (historia zapisywana między uruchomieniami), zakładki, witryny serwerów, udziały ze skanera; Enter przechodzi w aktywnym panelu
 - [x] 12c **Pasek „Miejsca"** (chowany, Ctrl+B): dyski z zajętością, ulubione katalogi (dodaj/usuń), serwery, udziały sieciowe, ostatnie; zastępuje rozproszone listy (dyski nad panelem, Ctrl+S, Ctrl+N jako punkty wejścia)
 - [x] 12d **Omnibox** zamiast pola ścieżki: ścieżka, `sftp://użytkownik@host/katalog`, `ftp://`, `smb://`, wnętrze archiwum, `?wzorzec` (szukanie), `>komenda`; podpowiedzi przy pisaniu
-- [ ] 12e Okruszki z rozwijaniem: klik w `›` między segmentami pokazuje katalogi rodzeństwa
+- [x] 12e Okruszki z rozwijaniem: klik w `›` między segmentami pokazuje katalogi rodzeństwa
 - [ ] 12f **Menu kontekstowe** pod prawym przyciskiem (otwórz w programie, kopiuj ścieżkę/nazwę, spakuj, rozpakuj, porównaj, właściwości, chmod na serwerze, dodaj do ulubionych); pozycje to komendy
 - [ ] 12g **Przeciąganie**: między panelami (kopiuj; z Shift przenieś), upuszczanie plików z pulpitu/menedżera systemu do panelu
 - [ ] 12h **Zmiana nazwy w wierszu** (F2 edytuje nazwę na liście; rozszerzenie nie jest zaznaczane) i **powiadomienia** po skończonych zadaniach (w rogu okna, z przyciskiem „Cofnij", gdzie się da)
