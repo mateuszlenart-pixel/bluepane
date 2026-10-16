@@ -279,6 +279,8 @@ pub struct Session {
     pub queue_open: bool,
     /// The command palette, while it is open (F1).
     pub palette: Option<crate::Palette>,
+    /// A folder to open once the connection to the named site is up (`go sftp://host/dir`).
+    pub(crate) after_connect: Option<(String, String)>,
     /// The Places bar is shown (Ctrl+B).
     pub places_open: bool,
     /// The favorite folders (`fav`).
@@ -444,6 +446,7 @@ impl Session {
             queue_open: false,
             palette: None,
             jump: None,
+            after_connect: None,
             places_open: false,
             favorites: crate::Favorites::default(),
             visits: crate::Visits::default(),
@@ -600,6 +603,7 @@ impl Session {
                 crate::PaletteAction::Move(by) => self.jump_move(by),
                 crate::PaletteAction::Run => self.jump_run()?,
             },
+            Command::Go(text) => self.omnibox(&text)?,
             Command::Places => self.places_open = !self.places_open,
             Command::Favorite(action) => self.favorite_action(action)?,
             Command::Queue => self.queue_open = true,

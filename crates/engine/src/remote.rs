@@ -736,6 +736,11 @@ impl Session {
                             history_index: 0,
                         });
                         panel.show_remote(path.clone(), remote_entries(path, list));
+                        if let Some((name, dir)) = self.after_connect.take() {
+                            if name == site.name {
+                                let _ = self.remote_goto(side, dir);
+                            }
+                        }
                         (format!("Połączono z {}", site.label()), false)
                     }
                     _ => (
