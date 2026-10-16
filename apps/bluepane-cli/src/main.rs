@@ -10,7 +10,7 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use bluepane_engine::{Resolution, Session, COMMAND_NAMES};
+use bluepane_engine::{command_help, Resolution, Session, COMMAND_NAMES};
 
 const USAGE: &str = "użycie:\n  bluepane-cli commands\n  bluepane-cli ls <katalog>\n  bluepane-cli run <lewy> <prawy> <komenda>...";
 
@@ -19,7 +19,10 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("commands") => {
             for name in COMMAND_NAMES {
-                println!("{name}");
+                match command_help(name) {
+                    Some(help) => println!("{name}\t{}", help.description),
+                    None => println!("{name}"),
+                }
             }
             ExitCode::SUCCESS
         }
