@@ -135,6 +135,34 @@ impl Session {
     }
 }
 
+/// How many sub-folders the breadcrumb menu lists at most.
+const SUBFOLDERS_MAX: usize = 300;
+
+impl Session {
+    /// The folders inside `parent` for the menu behind a breadcrumb separator, sorted by
+    /// name. Only local folders (a server listing is not read here); empty when the folder
+    /// cannot be read.
+    pub fn crumb_subfolders(&self, side: usize, parent: &Path) -> Vec<Crumb> {
+        if self.panels[side].remote.is_some() {
+            return Vec::new();
+        }
+        let Ok(read) = std::fs::read_dir(parent) else {
+            return Vec::new();
+        };
+        let mut folders: Vec<Crumb> = read
+            .flatten()
+            .filter(|entry| entry.path().is_dir())
+            .map(|entry| Crumb {
+                label: entry.file_name().to_string_lossy().into_owned(),
+                path: entry.path(),
+            })
+            .collect();
+        folders.sort_by_key(|c| crate::palette::fold(&c.label));
+        folders.truncate(SUBFOLDERS_MAX);
+        folders
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,5 +217,28 @@ mod tests {
         });
         assert!(s.panel_crumbs(0).is_empty());
         assert!(s.volume_space(0).is_none());
+    }
+
+    #[test]
+    fn the_menu_behind_a_separator_lists_the_folders_inside_sorted_by_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        for name in ["beta", "Alfa", "żaba", "gamma"] {
+            std::fs::create_dir_all(tmp.path().join(name)).unwrap();
+        }
+        std::fs::write(tmp.path().join("plik.txt"), "x").unwrap();
+        let s = Session::new(tmp.path(), tmp.path());
+        let labels: Vec<String> = s
+            .crumb_subfolders(0, tmp.path())
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(
+            labels,
+            ["Alfa", "beta", "gamma", "żaba"],
+            "files are not listed"
+        );
+        let first = &s.crumb_subfolders(0, tmp.path())[0];
+        assert_eq!(first.path, tmp.path().join("Alfa"));
+        assert!(s.crumb_subfolders(0, &tmp.path().join("nie-ma")).is_empty());
     }
 }

@@ -22,6 +22,10 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Okruszki z rozwijaniem
+
+Strzałka `›` między segmentami ścieżki nad panelem otwiera menu z katalogami leżącymi w segmencie po jej lewej stronie (posortowane po nazwie, bez plików; do 300 pozycji); klik w katalog przechodzi do niego w tym panelu. Dzięki temu do katalogu obok można przejść bez wchodzenia wyżej. Menu działa dla katalogów na dysku (dla serwerów strzałka nic nie wyświetla).
+
 ## Pole ścieżki (omnibox)
 
 Klik w puste miejsce za okruszkami nad panelem zamienia je w pole tekstowe; Enter robi to, co oznacza wpisany tekst (komenda `go <adres>`):

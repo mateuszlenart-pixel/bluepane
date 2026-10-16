@@ -216,3 +216,21 @@ fn the_path_bar_text_runs_commands_and_offers_completions() {
     assert_eq!(hints.len(), 1);
     assert_eq!(hints[0].label, "dokumenty");
 }
+
+#[test]
+fn the_breadcrumb_menu_lists_the_folders_beside_the_current_one() {
+    let (tmp, mut harness) = window();
+    std::fs::create_dir_all(tmp.path().join("left/a/glebokie")).unwrap();
+    std::fs::create_dir_all(tmp.path().join("left/b")).unwrap();
+    harness.run_steps(2);
+    command(&mut harness, "cd a/glebokie");
+    // The window draws the deeper path with its separators without panicking.
+    harness.get_by_label_contains("0 elementów");
+    let session = harness.state_mut().session_mut();
+    let beside: Vec<String> = session
+        .crumb_subfolders(0, &tmp.path().join("left"))
+        .into_iter()
+        .map(|c| c.label)
+        .collect();
+    assert_eq!(beside, ["a", "b"]);
+}
