@@ -27,6 +27,20 @@ fn window() -> (tempfile::TempDir, Harness<'static, BluepaneUi>) {
     (tmp, harness)
 }
 
+/// Runs frames until the free space of the drives has arrived. It comes from a background
+/// thread and adds a line under a drive, which moves what is below it: a click aimed at the
+/// position of an earlier frame would land on the wrong row.
+fn settle(harness: &mut Harness<'_, BluepaneUi>) {
+    for _ in 0..300 {
+        harness.run_steps(2);
+        if !harness.state_mut().session_mut().disk_usage.is_asking() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    harness.run_steps(2);
+}
+
 fn command(harness: &mut Harness<'_, BluepaneUi>, line: &str) {
     harness.state_mut().session_mut().run_line(line).unwrap();
     harness.run_steps(4);
@@ -185,14 +199,16 @@ fn the_places_bar_lists_favorites_and_a_click_goes_there() {
     command(&mut harness, "places");
     harness.get_by_label("Ulubione");
     harness.get_by_label("Dyski");
+    settle(&mut harness);
     harness.get_by_label("ulubiony").click();
     harness.run_steps(4);
-    assert!(harness
-        .state_mut()
-        .session_mut()
-        .active_panel()
-        .cwd
-        .ends_with("ulubiony"));
+    let session = harness.state_mut().session_mut();
+    assert!(
+        session.active_panel().cwd.ends_with("ulubiony"),
+        "cwd {:?}, status: {}",
+        session.active_panel().cwd,
+        session.status
+    );
     command(&mut harness, "places");
     assert!(harness.query_by_label("Ulubione").is_none());
 }
