@@ -215,7 +215,8 @@ mod tests {
     /// that a command added to the parser but not to the lists fails here).
     #[test]
     fn every_command_the_parser_accepts_is_listed() {
-        let source = include_str!("command.rs");
+        // Checkouts on Windows may use CRLF line endings.
+        let source = include_str!("command.rs").replace("\r\n", "\n");
         let start = source.find("pub fn parse(").expect("parse exists");
         let end = start + source[start..].find("\n    }\n").expect("parse ends");
         let mut unlisted = Vec::new();
@@ -239,7 +240,9 @@ mod tests {
         if std::env::var_os("BLUEPANE_UPDATE_DOCS").is_some() {
             std::fs::write(&path, &wanted).unwrap();
         }
-        let current = std::fs::read_to_string(&path).unwrap_or_default();
+        let current = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
         assert_eq!(
             current, wanted,
             "docs/KOMENDY.md is out of date: run `BLUEPANE_UPDATE_DOCS=1 cargo test -p bluepane-engine command_help`"
