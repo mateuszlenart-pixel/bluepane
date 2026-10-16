@@ -212,12 +212,17 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 - [ ] 12k **Obrazy**: widok miniatur (przełącznik lista/siatka) i podgląd obrazów w Quick View i F3 (zależność `image` do zgody; tylko popularne formaty)
 - [ ] 12l **Kolumny**: wybór kolumn (uprawnienia, właściciel, data utworzenia, suma SHA-256, status gita), szerokość przeciągana myszą, zapamiętana; gęstość zwarta/wygodna; **jasny motyw** (po decyzji właściciela) 
 - [ ] 12m Dok — poprawki z etapu 10 (wąskie panele: zrobione w 11b): komendy `layout save`/`layout reset`, Quick View jako zakładka doku (do wyboru zamiast zastępowania panelu), oba panele zawsze widoczne
+- [ ] 12n **Ctrl+K: jedna skrzynka** (decyzja 2026-10-16, opcja 2): grupy Komendy (ranking z palety), Miejsca (z „Skocz do”: katalogi, zakładki, serwery) i Pliki w bieżącym katalogu (filtr po liście, bez skanowania); `?` uruchamia głębokie szukanie (okno `find`, z anulowaniem). F1 i Ctrl+P zostają jako skróty otwierające skrzynkę w trybie komend / miejsc. Wyniki mają jawne źródło i przejście do lokalizacji (Enter, otwórz katalog nadrzędny, pokaż w drugim panelu, kopiuj ścieżkę). Bez niejawnego skanowania dysków; grupa „obszary robocze” po 12s
+- [ ] 12o **Szukanie plików bez diakrytyki**: opcja w oknie `find` (nazwy i treść), domyślnie włączona dla nazw; dokładne dopasowania nadal wyżej, nazwy plików się nie zmieniają; ten sam sposób składania liter co w palecie i „Skocz do”
+- [ ] 12p **Wygląd**: motyw systemowy (jasny/ciemny według ustawienia systemu, jeśli da się to wiarygodnie wykryć bez nowych zależności), rozmiar tekstu, wysokość wiersza i kolor akcentu w `settings.conf`; tokeny odstępów i typografii obok tokenów kolorów; widoczny fokus klawiatury. Jasny motyw nadal czeka na decyzję właściciela (patrz 12l)
+- [ ] 12q **Filtr katalogu**: oprócz nazwy także typ, rozszerzenie, rozmiar, data, tylko katalogi / tylko pliki; licznik „widoczne z wszystkich” i czyszczenie filtrów jednym działaniem; presety dopiero po ustaleniu zapisu między sesjami
+- [ ] 12s **Obszary robocze i przywracanie sesji** (przeniesione z 14i, decyzja 2026-10-16): zapis katalogów obu paneli, zakładek, aktywnego panelu, układu doku i widoczności pasków; odtwarzanie przy starcie (domyślnie włączone, wyłączane w ustawieniach); nazwane obszary („Praca", „Domowy serwer"): zapisz, nazwij, duplikuj, przywróć, usuń; przed przywróceniem sprawdzenie dostępności katalogów i serwerów z czytelnym zastępstwem; wersja formatu zapisu, bez nadpisywania istniejącej konfiguracji
 
 #### Etap 13: automatyzacja (wykorzystanie modelu komend)
 
 - [ ] 13a **Nagrywanie makr**: zapis wykonanych komend do pliku `.bp`; odtwarzanie skrótem, z palety i z `bluepane-cli run-script`; edycja makra jako tekstu; makra z parametrami (zaznaczenie, katalog drugiego panelu)
 - [ ] 13b **Własne przyciski narzędzi**: zewnętrzne programy z parametrami `%f` (plik), `%d` (katalog), `%s` (zaznaczone), `%o` (drugi panel); w osobnym rzędzie przycisków i w palecie; zastępują wtyczki bez kodu wtyczek
-- [ ] 13c **Dziennik operacji z cofaniem**: każda operacja (kopiuj, przenieś, zmień nazwę, do kosza, synchronizacja) zapisana w historii; cofnięcie jednym kliknięciem, także po restarcie, z ostrzeżeniem, gdy pliki zmieniły się od tego czasu
+- [x] 13c ~~Dziennik operacji z cofaniem~~ — **odrzucone przez właściciela (2026-10-16)**; zostaje tylko `mrundo` dla zmiany nazw
 - [ ] 13d Harmonogram: makro albo profil synchronizacji uruchamiane o zadanej porze (przez `bluepane-cli` i zadanie systemu: cron / Harmonogram zadań Windows; bluepane tylko je zakłada i pokazuje)
 
 #### Etap 14: funkcje dodatkowe
@@ -235,7 +240,7 @@ Sieć:
 - [ ] 14h Zapisane **profile synchronizacji** (para katalogów + ustawienia) i uruchamianie z harmonogramu (13d)
 
 Środowisko pracy:
-- [ ] 14i **Przywracanie sesji** (zakładki, katalogi, układ) i nazwane **obszary robocze** („Praca", „Domowy serwer")
+- [x] 14i przeniesione do 12s (obszary robocze i przywracanie sesji, tuż po etapie 12)
 - [ ] 14j **Terminal jako zakładka doku** w bieżącym katalogu (zależność `portable-pty` do zgody)
 - [ ] 14k **Obserwacja katalogów**: lista odświeża się sama po zmianach na dysku (zależność `notify` do zgody)
 - [ ] 14l **Git**: status plików w kolumnie, gałąź w okruszkach, podstawowe akcje (zależność albo `git` jako proces)

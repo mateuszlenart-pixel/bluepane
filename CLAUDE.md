@@ -73,3 +73,14 @@ dopóki obie platformy są zielone.
 - Najpierw logika w `engine`/`ops`/`vfs` z testami, dopiero potem UI.
 - GUI ma testy bezokienkowe (`crates/ui-egui/tests/gui.rs`, `egui_kittest`: ramki, szukanie widżetów po napisie, kliki, stan silnika; bez porównywania zrzutów). Wygląd i wygoda nadal wymagają ręcznego sprawdzenia na Windows i Linuksie: napisz w PR, co kliknięto. Napisy rysowane „ręcznie” (wiersze list, przyciski klawiszy funkcyjnych, tytuły zakładek doku) nie są widżetami i testy ich nie widzą.
 - Nie dodawaj zależności bez potrzeby; każda trafia do `[workspace.dependencies]`.
+- Nie skanuj dysków ani treści plików w tle bez jawnej zgody użytkownika; szybkie podpowiedzi
+  (lista bieżącego katalogu, historia) oddzielaj od kosztownego szukania, które da się anulować.
+- Nowe wyszukiwanie ma korzystać z istniejących mechanizmów (`rank`, `jump_entries`, `find`,
+  `omnibox`) zamiast budować równoległy silnik; nazwy plików nigdy nie są zmieniane przez
+  dopasowanie bez diakrytyki.
+- Testuj Unicode i polskie znaki w nazwach oraz przypadki brzegowe (puste wyniki, brak uprawnień,
+  niedostępny serwer, anulowanie).
+- Po scaleniu sprawdź także CI na `main`, nie tylko na PR; niestabilny test (zwłaszcza GUI na
+  Windows) naprawiaj od razu, nie scalaj kolejnych zmian na czerwonym `main`.
+- Raport końcowy etapu (opis PR): zmienione pliki i zachowanie przed/po, testy i ich wynik,
+  znane ograniczenia, następny krok z `ROADMAP.md`.
