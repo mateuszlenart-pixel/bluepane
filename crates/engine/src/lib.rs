@@ -17,6 +17,7 @@ mod mask;
 mod multirename;
 mod navbar;
 mod pageview;
+mod palette;
 mod panel;
 mod queue;
 mod quickview;
@@ -50,8 +51,8 @@ pub use bluepane_sync::{
 };
 pub use bluepane_vfs::{Share, ShareKind};
 pub use command::{
-    parse_size, Command, NameFormat, PackArgs, QueueMove, QuickAction, SpeedLimit, SyncArgs,
-    TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
+    parse_size, Command, NameFormat, PackArgs, PaletteAction, QueueMove, QuickAction, SpeedLimit,
+    SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
 pub use command_help::{command_help, commands_markdown, CommandHelp, COMMAND_HELP};
 pub use dirsize::{DirSizes, PanelStats};
@@ -67,6 +68,7 @@ pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};
 pub use navbar::{crumbs, Crumb, DiskUsage};
 pub use pageview::{PageMove, PageState, PageViewer, PageZoom, RenderedPage, ZoomChange};
+pub use palette::{rank as rank_commands, Palette, PaletteEntry};
 pub use panel::{
     is_parent_entry, ArchiveView, ClickMode, Panel, RemoteView, Sort, SortKey, VirtualList,
     PARENT_NAME,

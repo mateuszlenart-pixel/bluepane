@@ -40,6 +40,7 @@ impl Default for Keymap {
             ("Ctrl+F2", "multirename"),
             ("Ctrl+S", "sites"),
             ("Ctrl+J", "queue"),
+            ("F1", "palette"),
             ("Ctrl+Shift+Num1", "copynames stem"),
             ("Ctrl+Shift+Num2", "copynames file"),
             ("Ctrl+Shift+Num3", "copynames path"),

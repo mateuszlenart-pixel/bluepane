@@ -14,6 +14,14 @@ lista kontrolna do testów: [TESTOWANIE.md](TESTOWANIE.md).
 - motyw kolorów: komenda `theme` (pokazuje dostępne), `theme dark`; wybór zapisuje się w `settings.conf`
 - **własne skróty**: `bind ctrl+k sort name` (przypisz), `bind ctrl+k` (pokaż), `bind ctrl+k default` (przywróć domyślny), `unbind f9` (wyłącz), samo `bind` (lista zmian); zapisują się w tym samym `settings.conf` (wiersze `key Ctrl+K = sort name`, `key F9 =` wyłącza klawisz); błędny wiersz jest pomijany z ostrzeżeniem w pasku stanu. Dotyczy skrótów paneli; klawisze okien (podgląd, strony) są na razie stałe
 
+## Paleta komend (F1)
+
+F1 otwiera okno z polem szukania nad wszystkimi komendami. Pisz fragment nazwy albo opisu (polskie litery można pomijać: `sciezka` znajdzie `cd`); wszystkie wpisane słowa muszą pasować. Strzałki ↑↓ zmieniają wybór, Enter uruchamia komendę, Esc zamyka okno, klik w wiersz uruchamia ten wiersz. Wiersz pokazuje składnię i opis; skrót klawiszowy jest w nawiasie na końcu opisu.
+
+Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają remisy; lista jest zapamiętana między uruchomieniami (plik `recent_commands.txt` w katalogu konfiguracji). Komenda, która wymaga argumentu (np. `cd`, `selmask`), nie uruchamia się od razu: trafia do wiersza poleceń z końcową spacją, żeby dokończyć ją z klawiatury.
+
+Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

@@ -75,6 +75,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "pack",
     "unpack",
     "testarchive",
+    "palette",
     "queue",
     "queueclose",
     "queuepause",
@@ -113,6 +114,18 @@ pub enum NameFormat {
     File,
     /// The full path (`/home/me/docs/report.txt`).
     Path,
+}
+
+/// What the command palette should do.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaletteAction {
+    /// Open it (or change the text when it is open).
+    Query(String),
+    Close,
+    /// Move the highlight by this many rows.
+    Move(i32),
+    /// Run the highlighted command.
+    Run,
 }
 
 /// What the open file viewer should do.
@@ -289,6 +302,8 @@ pub enum Command {
     Edit,
     /// Control the open viewer (keys while it is open).
     Viewer(ViewerAction),
+    /// Control the command palette (F1).
+    Palette(PaletteAction),
     /// Rename the entry under the cursor (F2). Without a name a dialog asks for it.
     Rename(Option<String>),
     /// Move the selection to the trash (F8), after a confirmation.
@@ -561,6 +576,7 @@ impl Command {
             "view" | "f3" => Ok(Command::View),
             "edit" => Ok(Command::Edit),
             "viewer" => parse_viewer(rest).map(Command::Viewer),
+            "palette" => parse_palette(rest).map(Command::Palette),
             "tab" => parse_tab(rest).map(Command::Tab),
             "pack" => parse_pack(rest),
             "unpack" => parse_unpack(rest).map(Command::Unpack),
@@ -709,6 +725,21 @@ fn parse_tab(args: &str) -> Result<TabAction, EngineError> {
         return Err(usage());
     }
     Ok(action)
+}
+
+fn parse_palette(rest: &str) -> Result<PaletteAction, EngineError> {
+    let (word, tail) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+    let tail = tail.trim();
+    match word {
+        "close" => Ok(PaletteAction::Close),
+        "run" => Ok(PaletteAction::Run),
+        "move" => tail
+            .parse()
+            .map(PaletteAction::Move)
+            .map_err(|_| EngineError("palette: użycie: palette move <n>".into())),
+        "query" => Ok(PaletteAction::Query(tail.to_string())),
+        _ => Ok(PaletteAction::Query(rest.trim().to_string())),
+    }
 }
 
 fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {

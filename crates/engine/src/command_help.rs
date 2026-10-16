@@ -39,6 +39,7 @@ const REN: &str = "Zmiana nazw";
 const SERVERS: &str = "Serwery";
 const SCAN: &str = "Skaner sieci";
 const LOOK: &str = "Wygląd i skróty";
+const PAL: &str = "Paleta komend";
 
 /// Every command, in the order of the docs.
 pub const COMMAND_HELP: &[CommandHelp] = &[
@@ -134,6 +135,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(LOOK, "theme", "theme [nazwa]", "pokazuje dostępne motywy kolorów albo przełącza motyw"),
     h(LOOK, "bind", "bind [<klawisz> [<komenda>|default]]", "przypisuje klawisz do komendy, pokazuje przypisanie albo przywraca domyślne; zapisuje się w `settings.conf`"),
     h(LOOK, "unbind", "unbind <klawisz>", "wyłącza klawisz"),
+    h(PAL, "palette", "palette [tekst]|query <tekst>|move <n>|run|close", "paleta komend: szukanie wśród wszystkich komend z opisem; Enter uruchamia zaznaczoną, a taką, która wymaga argumentu, wpisuje do wiersza poleceń (F1)"),
 ];
 
 /// Help for one command.

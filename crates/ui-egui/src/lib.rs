@@ -7,6 +7,7 @@ mod bottom_ui;
 mod dock_ui;
 mod find_ui;
 mod pages_ui;
+mod palette_ui;
 mod queue_ui;
 mod quick_ui;
 mod rename_ui;
@@ -119,6 +120,11 @@ impl BluepaneUi {
         if let Some(text) = self.session.take_clipboard() {
             ctx.copy_text(text);
         }
+        // A command chosen in the palette that still needs its argument.
+        if let Some(line) = self.session.command_prefill.take() {
+            self.command_line = line;
+            self.focus_command_line = true;
+        }
         // Collect what the background job reported; keep redrawing while it runs.
         self.session.poll();
         let searching = self.session.find.as_ref().is_some_and(|f| f.is_running())
@@ -142,6 +148,7 @@ impl BluepaneUi {
         if !matches!(self.session.pending, Some(Pending::Pack(_))) {
             self.pack_focused = false;
         }
+        self.palette_dialog(&ctx);
         match &self.session.pending {
             Some(Pending::Input { .. }) => self.input_dialog(&ctx),
             Some(Pending::Conflict(_)) => self.conflict_dialog(&ctx),
