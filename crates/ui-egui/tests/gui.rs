@@ -124,3 +124,30 @@ fn every_tool_draws_without_panicking() {
     }
     assert_eq!(harness.state().session().open_tools().len(), 6);
 }
+
+#[test]
+fn the_command_palette_filters_and_runs_a_command() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "palette");
+    // The field and the list are on screen; typing narrows the list.
+    command(&mut harness, "palette query kolejka");
+    harness.get_by_label_contains("queuepause");
+    assert!(harness.query_by_label_contains("sortuje listę").is_none());
+    command(&mut harness, "palette query queue");
+    command(&mut harness, "palette run");
+    harness.get_by_label("Kolejka zadań");
+    assert!(harness.state_mut().session_mut().palette.is_none());
+}
+
+#[test]
+fn a_command_with_an_argument_chosen_in_the_palette_fills_the_command_line() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "palette selmask");
+    command(&mut harness, "palette run");
+    assert!(
+        harness.state_mut().session_mut().command_prefill.is_none(),
+        "taken by the window"
+    );
+}

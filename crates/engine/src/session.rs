@@ -277,6 +277,12 @@ pub struct Session {
     clipboard: Option<String>,
     /// The queue window is open (Ctrl+J).
     pub queue_open: bool,
+    /// The command palette, while it is open (F1).
+    pub palette: Option<crate::Palette>,
+    /// Commands chosen in the palette, newest first.
+    pub recent_commands: Vec<String>,
+    /// Text the front end should put in the command line (taken with `take`).
+    pub command_prefill: Option<String>,
     /// The last finished jobs, newest first (for "retry" in the queue window).
     pub finished: VecDeque<crate::FinishedJob>,
     /// The site manager window is open.
@@ -427,6 +433,9 @@ impl Session {
             speed_limit: Arc::default(),
             clipboard: None,
             queue_open: false,
+            palette: None,
+            recent_commands: Vec::new(),
+            command_prefill: None,
             finished: VecDeque::new(),
             sites_open: false,
             config_loaded: false,
@@ -564,6 +573,12 @@ impl Session {
             Command::ScanShare(ip, name) => self.scan_share(ip, &name)?,
             Command::ScanOpen(ip, port) => self.scan_open(ip, port)?,
             Command::ScanSite(ip, protocol) => self.scan_site(ip, protocol)?,
+            Command::Palette(action) => match action {
+                crate::PaletteAction::Query(text) => self.palette_set_query(text),
+                crate::PaletteAction::Close => self.palette = None,
+                crate::PaletteAction::Move(by) => self.palette_move(by),
+                crate::PaletteAction::Run => self.palette_run()?,
+            },
             Command::Queue => self.queue_open = true,
             Command::QueueClose => self.queue_open = false,
             Command::QueuePause => self.pause_queue(true),

@@ -155,3 +155,9 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `theme [nazwa]` | pokazuje dostępne motywy kolorów albo przełącza motyw |
 | `bind [<klawisz> [<komenda>\|default]]` | przypisuje klawisz do komendy, pokazuje przypisanie albo przywraca domyślne; zapisuje się w `settings.conf` |
 | `unbind <klawisz>` | wyłącza klawisz |
+
+## Paleta komend
+
+| Komenda | Opis |
+| --- | --- |
+| `palette [tekst]\|query <tekst>\|move <n>\|run\|close` | paleta komend: szukanie wśród wszystkich komend z opisem; Enter uruchamia zaznaczoną, a taką, która wymaga argumentu, wpisuje do wiersza poleceń (F1) |
