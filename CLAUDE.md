@@ -43,7 +43,7 @@ Dokładna tabela jest w `ALLOWED` w `xtask/src/main.rs`; w skrócie:
 ## Zasady kodu
 
 1. **Każda akcja użytkownika to `Command`** (`crates/engine/src/command.rs`) z nazwą parsowaną z linii
-   poleceń. Nowa funkcja = nowa komenda + wpis w `Keymap`, jeśli ma skrót. UI nie wywołuje `ops`
+   poleceń. Nowa funkcja = nowa komenda + wpis w `COMMAND_NAMES` i `COMMAND_HELP` (`command_help.rs`; testy sprawdzają zgodność z parserem) + wpis w `Keymap`, jeśli ma skrót; potem `BLUEPANE_UPDATE_DOCS=1 cargo test -p bluepane-engine command_help` odświeża `docs/KOMENDY.md`. UI nie wywołuje `ops`
    bezpośrednio.
 2. **Różnice Windows/Linux tylko w `vfs`** (`crates/vfs/src/platform/`). Poza `vfs` żadnych
    `#[cfg(windows)]` ani `#[cfg(unix)]`. Jedyny wyjątek: atrybut `windows_subsystem` na początku

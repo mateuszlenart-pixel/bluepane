@@ -61,6 +61,7 @@ jobs:
           cp target/release/bluepane target/release/bluepane-cli dist/bluepane/
           cp -r tools testdata dist/bluepane/
           cp README.md ROADMAP.md dist/bluepane/
+          cp -r docs dist/bluepane/
           cp docs/TESTOWANIE.md dist/bluepane/
           echo "commit: $(git rev-parse --short HEAD)" > dist/bluepane/WERSJA.txt
           tar -czf bluepane-linux.tar.gz -C dist bluepane
@@ -72,6 +73,7 @@ jobs:
           Copy-Item target/release/bluepane.exe, target/release/bluepane-cli.exe dist/bluepane/
           Copy-Item -Recurse tools, testdata dist/bluepane/
           Copy-Item README.md, ROADMAP.md, docs/TESTOWANIE.md dist/bluepane/
+          Copy-Item -Recurse docs dist/bluepane/
           "commit: $(git rev-parse --short HEAD)" | Out-File -Encoding utf8 dist/bluepane/WERSJA.txt
           Compress-Archive -Path dist/bluepane -DestinationPath bluepane-windows.zip
       - uses: actions/upload-artifact@v4
