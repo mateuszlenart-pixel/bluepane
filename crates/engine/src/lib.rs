@@ -17,6 +17,7 @@ mod keymap;
 mod mask;
 mod multirename;
 mod navbar;
+mod omnibox;
 mod pageview;
 mod palette;
 mod panel;
@@ -70,6 +71,7 @@ pub use keymap::Keymap;
 pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};
 pub use navbar::{crumbs, Crumb, DiskUsage};
+pub use omnibox::{classify as classify_address, Hint, Target};
 pub use pageview::{PageMove, PageState, PageViewer, PageZoom, RenderedPage, ZoomChange};
 pub use palette::{rank as rank_commands, Palette, PaletteEntry};
 pub use panel::{

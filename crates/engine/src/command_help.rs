@@ -47,6 +47,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(NAV, "up", "up", "wychodzi do katalogu nadrzędnego (Backspace)"),
     h(NAV, "enter", "enter", "wchodzi do katalogu, archiwum albo serwera pod kursorem (Enter)"),
     h(NAV, "cd", "cd <ścieżka>", "przechodzi do katalogu; obsługuje też ścieżki serwera i wnętrza archiwum"),
+    h(NAV, "go", "go <adres>", "to, co robi pole ścieżki: ścieżka, `sftp://użytkownik@host:port/katalog` (też ftp://, ftps://), `smb://komputer/udział`, `?maska` szuka plików w katalogu, `>komenda` ją uruchamia"),
     h(NAV, "back", "back", "wraca do poprzedniego katalogu z historii panelu (Alt+←)"),
     h(NAV, "forward", "forward", "idzie naprzód w historii katalogów panelu (Alt+→)"),
     h(NAV, "volume", "volume <numer|nazwa>", "przechodzi na dysk (alias: drive); numery jak w liście dysków (Alt+1…9)"),

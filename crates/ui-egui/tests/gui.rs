@@ -196,3 +196,23 @@ fn the_places_bar_lists_favorites_and_a_click_goes_there() {
     command(&mut harness, "places");
     assert!(harness.query_by_label("Ulubione").is_none());
 }
+
+#[test]
+fn the_path_bar_text_runs_commands_and_offers_completions() {
+    let (tmp, mut harness) = window();
+    std::fs::create_dir_all(tmp.path().join("left/dokumenty")).unwrap();
+    harness.run_steps(2);
+    command(&mut harness, "go >queue");
+    harness.get_by_label("Kolejka zadań");
+    command(&mut harness, "go dokumenty");
+    assert!(harness
+        .state_mut()
+        .session_mut()
+        .active_panel()
+        .cwd
+        .ends_with("dokumenty"));
+    command(&mut harness, "go ..");
+    let hints = harness.state_mut().session_mut().omnibox_hints("dok");
+    assert_eq!(hints.len(), 1);
+    assert_eq!(hints[0].label, "dokumenty");
+}

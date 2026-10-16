@@ -77,6 +77,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "testarchive",
     "palette",
     "jump",
+    "go",
     "places",
     "fav",
     "queue",
@@ -309,6 +310,8 @@ pub enum Command {
     Palette(PaletteAction),
     /// Control the "jump to" list (Ctrl+P); it takes the same actions as the palette.
     Jump(PaletteAction),
+    /// What the path bar does with its text: go to a path or server, search, run a command.
+    Go(String),
     /// Show or hide the Places bar (Ctrl+B).
     Places,
     /// Add a folder to the favorites or remove it.
@@ -587,6 +590,7 @@ impl Command {
             "viewer" => parse_viewer(rest).map(Command::Viewer),
             "palette" => parse_palette(rest).map(Command::Palette),
             "jump" => parse_palette(rest).map(Command::Jump),
+            "go" => need_arg("adres").map(Command::Go),
             "places" => Ok(Command::Places),
             "fav" => Ok(Command::Favorite(parse_favorite(rest))),
             "tab" => parse_tab(rest).map(Command::Tab),

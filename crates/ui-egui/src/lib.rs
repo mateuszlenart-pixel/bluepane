@@ -6,6 +6,7 @@
 mod bottom_ui;
 mod dock_ui;
 mod find_ui;
+mod omnibox_ui;
 mod pages_ui;
 mod palette_ui;
 mod places_ui;
@@ -802,8 +803,10 @@ impl BluepaneUi {
             }
             if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 self.session.active = index;
-                let line = format!("cd {}", self.path_text[index]);
+                let line = format!("go {}", self.path_text[index]);
                 let _ = self.session.run_line(&line);
+            } else if response.has_focus() || response.lost_focus() {
+                self.omnibox_hints_popup(ui.ctx(), index, &response);
             }
         } else {
             ui.horizontal(|ui| {

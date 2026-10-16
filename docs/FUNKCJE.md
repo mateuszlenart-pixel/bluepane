@@ -22,6 +22,18 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Pole ścieżki (omnibox)
+
+Klik w puste miejsce za okruszkami nad panelem zamienia je w pole tekstowe; Enter robi to, co oznacza wpisany tekst (komenda `go <adres>`):
+
+- **ścieżka** (też względna, wnętrze archiwum, katalog na serwerze) – przejście tam,
+- **`sftp://użytkownik@host:port/katalog`** (też `ftp://`, `ftps://`) – połączenie z serwerem i przejście do katalogu. Znaną witrynę (ten sam host, protokół, port i użytkownik) program wykorzysta, nieznaną zapisze jako `użytkownik@host` (hasło pyta przy łączeniu; dla FTP bez użytkownika jest `anonymous`; dla SFTP użytkownik jest wymagany),
+- **`smb://komputer/udział`** – otwiera udział w menedżerze plików systemu; `smb://komputer` pokazuje udziały komputera (adres IP, jak w skanerze),
+- **`?maska`** – szuka plików o tej nazwie w bieżącym katalogu (otwiera okno szukania z wynikami),
+- **`>komenda`** – uruchamia komendę, np. `>sort size`.
+
+Podczas pisania pod polem pojawiają się podpowiedzi: podkatalogi (od trzech znaków, albo po separatorze), komendy po `>` (z palety komend) i zapisane serwery po `sftp://`; klik w podpowiedź wstawia ją do pola.
+
 ## Pasek „Miejsca” (Ctrl+B)
 
 Chowany pasek po lewej stronie okna zbiera punkty wejścia w jednym miejscu; klik w wiersz przechodzi tam w aktywnym panelu, a wiersz miejsca, w którym panel jest teraz, jest podświetlony:
