@@ -48,6 +48,8 @@ pub const COMMAND_NAMES: &[&str] = &[
     "theme",
     "dirsize",
     "quick",
+    "bind",
+    "unbind",
     "scan",
     "scanset",
     "scanrun",
@@ -344,6 +346,10 @@ pub enum Command {
     PageClose,
     /// Copy the names (or paths) of the selected entries, one per line, to the clipboard.
     CopyNames(NameFormat),
+    /// Bind a key to a command line, show a key, or list the changes (no arguments).
+    Bind(Option<(String, Option<String>)>),
+    /// Take a key off.
+    Unbind(String),
     /// Quick View: show the file under the cursor in the other panel.
     Quick(QuickAction),
     /// Count the size of the selected folders (or the one under the cursor) in the background.
@@ -452,6 +458,12 @@ impl Command {
             "theme" => Ok(Command::Theme(optional(rest))),
             "dirsize" => Ok(Command::DirSize),
             "quick" => Command::parse_quick(rest),
+            "bind" => Ok(Command::Bind(match rest.split_once(char::is_whitespace) {
+                None if rest.is_empty() => None,
+                None => Some((rest.to_string(), None)),
+                Some((key, line)) => Some((key.to_string(), Some(line.trim().to_string()))),
+            })),
+            "unbind" => need_arg("klawisz").map(Command::Unbind),
             "copynames" => match rest.to_ascii_lowercase().as_str() {
                 "" | "file" | "name" | "ext" => Ok(Command::CopyNames(NameFormat::File)),
                 "stem" | "short" => Ok(Command::CopyNames(NameFormat::Stem)),

@@ -127,6 +127,7 @@ Wygląd (czytelność, kolory, rozmiary) też zgłaszaj, nawet jeśli „działa
 - [ ] Komenda `theme` w wierszu poleceń pokazuje motyw `dark`; `theme jasny` daje czytelny
       błąd po polsku.
 - [ ] **W:** czy okno wygląda dobrze przy skalowaniu ekranu 125% i 150%?
+- [ ] Własne skróty: `bind ctrl+k sort name` w wierszu poleceń, Ctrl+K sortuje po nazwie; `unbind f9` wyłącza F9; `bind f9 default` przywraca; po restarcie zmiany zostają (plik `settings.conf` w katalogu ustawień; błędny wiersz w nim daje ostrzeżenie w pasku stanu, a program startuje).
 
 ### 4.2 Nawigacja i zaznaczanie (L W)
 

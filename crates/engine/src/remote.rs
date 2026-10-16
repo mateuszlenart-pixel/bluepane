@@ -52,8 +52,11 @@ impl Session {
     pub fn use_config_dir(&mut self, dir: &Path) {
         self.config_loaded = true;
         self.config_dir = Some(dir.to_path_buf());
-        if let Some(theme) = crate::settings::load_theme(&dir.join("settings.conf")) {
-            self.theme = theme;
+        let (settings, warnings) = crate::settings::load(&dir.join("settings.conf"));
+        self.use_settings(settings);
+        if !warnings.is_empty() {
+            self.status = format!("settings.conf: {}", warnings.join("; "));
+            self.status_is_error = true;
         }
         match Sites::load(&dir.join("sites.conf")) {
             Ok(sites) => self.sites = sites,

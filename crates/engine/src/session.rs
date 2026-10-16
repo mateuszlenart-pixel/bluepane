@@ -246,6 +246,8 @@ pub struct Session {
     pub(crate) config_dir: Option<PathBuf>,
     /// The colour theme (a name from `THEMES`).
     pub(crate) theme: String,
+    /// What `settings.conf` holds (theme and changed keys); written back on every change.
+    pub(crate) settings: crate::settings::Settings,
     /// Folder sizes counted on request.
     pub dir_sizes: crate::DirSizes,
     /// Cached footer text and bar scale of each panel (see `panel_stats`).
@@ -409,6 +411,7 @@ impl Session {
             scan_services: crate::ScanServices::default(),
             config_dir: None,
             theme: crate::settings::DEFAULT_THEME.to_string(),
+            settings: crate::settings::Settings::default(),
             dir_sizes: crate::DirSizes::default(),
             stats_cache: std::sync::Mutex::default(),
             disk_usage: crate::DiskUsage::default(),
@@ -571,6 +574,8 @@ impl Session {
             Command::Theme(name) => self.set_theme(name)?,
             Command::DirSize => self.count_dir_sizes()?,
             Command::Quick(action) => self.quick_action(action)?,
+            Command::Bind(args) => self.bind_key(args)?,
+            Command::Unbind(key) => self.unbind_key(&key)?,
             Command::QueueRetry(n) => self.queue_retry(n)?,
             Command::QueueClear => self.finished.clear(),
             Command::SitePassword(name, password) => self.site_password(&name, password)?,
