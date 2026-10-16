@@ -279,6 +279,11 @@ pub struct Session {
     pub queue_open: bool,
     /// The command palette, while it is open (F1).
     pub palette: Option<crate::Palette>,
+    /// The "jump to" list, while it is open (Ctrl+P).
+    pub jump: Option<crate::Palette>,
+    /// The folders visited so far (for the "jump to" ranking).
+    pub visits: crate::Visits,
+    pub(crate) last_visit: [Option<PathBuf>; 2],
     /// Commands chosen in the palette, newest first.
     pub recent_commands: Vec<String>,
     /// Text the front end should put in the command line (taken with `take`).
@@ -434,6 +439,9 @@ impl Session {
             clipboard: None,
             queue_open: false,
             palette: None,
+            jump: None,
+            visits: crate::Visits::default(),
+            last_visit: [None, None],
             recent_commands: Vec::new(),
             command_prefill: None,
             finished: VecDeque::new(),
@@ -518,6 +526,7 @@ impl Session {
     /// [`poll`]: Session::poll
     pub fn execute(&mut self, command: Command) -> Result<(), EngineError> {
         let result = self.execute_inner(command);
+        self.note_visits();
         match &result {
             Ok(()) => self.status_is_error = false,
             Err(err) => {
@@ -578,6 +587,12 @@ impl Session {
                 crate::PaletteAction::Close => self.palette = None,
                 crate::PaletteAction::Move(by) => self.palette_move(by),
                 crate::PaletteAction::Run => self.palette_run()?,
+            },
+            Command::Jump(action) => match action {
+                crate::PaletteAction::Query(text) => self.jump_set_query(text),
+                crate::PaletteAction::Close => self.jump = None,
+                crate::PaletteAction::Move(by) => self.jump_move(by),
+                crate::PaletteAction::Run => self.jump_run()?,
             },
             Command::Queue => self.queue_open = true,
             Command::QueueClose => self.queue_open = false,

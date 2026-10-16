@@ -76,6 +76,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "unpack",
     "testarchive",
     "palette",
+    "jump",
     "queue",
     "queueclose",
     "queuepause",
@@ -304,6 +305,8 @@ pub enum Command {
     Viewer(ViewerAction),
     /// Control the command palette (F1).
     Palette(PaletteAction),
+    /// Control the "jump to" list (Ctrl+P); it takes the same actions as the palette.
+    Jump(PaletteAction),
     /// Rename the entry under the cursor (F2). Without a name a dialog asks for it.
     Rename(Option<String>),
     /// Move the selection to the trash (F8), after a confirmation.
@@ -577,6 +580,7 @@ impl Command {
             "edit" => Ok(Command::Edit),
             "viewer" => parse_viewer(rest).map(Command::Viewer),
             "palette" => parse_palette(rest).map(Command::Palette),
+            "jump" => parse_palette(rest).map(Command::Jump),
             "tab" => parse_tab(rest).map(Command::Tab),
             "pack" => parse_pack(rest),
             "unpack" => parse_unpack(rest).map(Command::Unpack),
