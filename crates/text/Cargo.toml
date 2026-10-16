@@ -1,0 +1,13 @@
+[package]
+name = "bluepane-text"
+description = "Text encodings used by several crates: Windows-1250 and Windows-1252 tables"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

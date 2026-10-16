@@ -12,5 +12,12 @@ bluepane-engine.workspace = true
 bluepane-ui-egui.workspace = true
 eframe.workspace = true
 
+[features]
+# Keeps the console window of the Windows release build (used by the test builds).
+console = []
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

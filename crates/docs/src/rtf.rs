@@ -202,33 +202,11 @@ fn tidy(text: &str) -> String {
     out.trim_start_matches('\n').trim_end().to_string() + "\n"
 }
 
-const CP1250_HIGH: [char; 128] = [
-    '€', '\u{FFFD}', '‚', '\u{FFFD}', '„', '…', '†', '‡', '\u{FFFD}', '‰', 'Š', '‹', 'Ś', 'Ť', 'Ž',
-    'Ź', '\u{FFFD}', '‘', '’', '“', '”', '•', '–', '—', '\u{FFFD}', '™', 'š', '›', 'ś', 'ť', 'ž',
-    'ź', '\u{A0}', 'ˇ', '˘', 'Ł', '¤', 'Ą', '¦', '§', '¨', '©', 'Ş', '«', '¬', '\u{AD}', '®', 'Ż',
-    '°', '±', '˛', 'ł', '´', 'µ', '¶', '·', '¸', 'ą', 'ş', '»', 'Ľ', '˝', 'ľ', 'ż', 'Ŕ', 'Á', 'Â',
-    'Ă', 'Ä', 'Ĺ', 'Ć', 'Ç', 'Č', 'É', 'Ę', 'Ë', 'Ě', 'Í', 'Î', 'Ď', 'Đ', 'Ń', 'Ň', 'Ó', 'Ô', 'Ő',
-    'Ö', '×', 'Ř', 'Ů', 'Ú', 'Ű', 'Ü', 'Ý', 'Ţ', 'ß', 'ŕ', 'á', 'â', 'ă', 'ä', 'ĺ', 'ć', 'ç', 'č',
-    'é', 'ę', 'ë', 'ě', 'í', 'î', 'ď', 'đ', 'ń', 'ň', 'ó', 'ô', 'ő', 'ö', '÷', 'ř', 'ů', 'ú', 'ű',
-    'ü', 'ý', 'ţ', '˙',
-];
-
-/// The characters of Windows-1252 in 0x80..0xA0 that differ from Latin-1.
-const CP1252_C1: [char; 32] = [
-    '€', '\u{FFFD}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{FFFD}', 'Ž',
-    '\u{FFFD}', '\u{FFFD}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{FFFD}',
-    'ž', 'Ÿ',
-];
-
 fn decode(byte: u8, codepage: i64) -> char {
-    if byte < 0x80 {
-        return char::from(byte);
-    }
     match codepage {
-        1250 => CP1250_HIGH[usize::from(byte - 0x80)],
+        1250 => bluepane_text::cp1250_char(byte),
         // Latin-1 range for everything else (Western European, the usual default).
-        _ if (0x80..0xA0).contains(&byte) => CP1252_C1[usize::from(byte - 0x80)],
-        _ => char::from(byte),
+        _ => bluepane_text::cp1252_char(byte),
     }
 }
 

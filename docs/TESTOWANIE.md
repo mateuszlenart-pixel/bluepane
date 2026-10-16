@@ -44,7 +44,7 @@ cd bluepane
 
 Windows może pokazać ekran „System Windows chronił ten komputer" (SmartScreen), bo plik nie
 jest podpisany: *Więcej informacji* → *Uruchom mimo to*. Za oknem programu otwiera się
-też okno konsoli: **zostaw je**, tam trafiają komunikaty o błędach.
+też okno konsoli (w buildach testowych): **zostaw je**, tam trafiają komunikaty o błędach. Awarie (panic) trafiają dodatkowo do pliku `bluepane.log` w katalogu ustawień (Linux `~/.config/bluepane`, Windows `%APPDATA%\bluepane`); dołącz go do zgłoszenia błędu.
 
 ### Wariant B: budowanie ze źródeł
 
@@ -318,7 +318,8 @@ lokalnie:
 
 ### 4.15 Sprawy tylko dla Windows (W)
 
-- [ ] Okno konsoli za programem nie przeszkadza; zamknięcie okna programu kończy proces.
+- [ ] Okno konsoli za programem nie przeszkadza; zamknięcie okna programu kończy proces. Ikona programu (dwa panele) widoczna w pasku zadań i w nagłówku okna.
+- [ ] `bluepane.log` w `%APPDATA%\bluepane` ma wiersz „start bluepane …” z każdego uruchomienia.
 - [ ] Ścieżki UNC (`\\serwer\udział`) w `cd` i na pasku ścieżki.
 - [ ] Kosz: pliki z dysku D: i z pendrive'a (na nośnikach wymiennych kosza może nie być:
       komunikat zamiast cichego twardego usunięcia).
