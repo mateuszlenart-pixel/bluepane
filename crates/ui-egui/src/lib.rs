@@ -8,6 +8,7 @@ mod dock_ui;
 mod find_ui;
 mod pages_ui;
 mod palette_ui;
+mod places_ui;
 mod queue_ui;
 mod quick_ui;
 mod rename_ui;
@@ -144,6 +145,9 @@ impl BluepaneUi {
         egui::Panel::bottom("bottom").show(ui, |ui| {
             self.bottom_bar(ui, cmd_id);
         });
+        if self.session.places_open {
+            self.places_bar(ui);
+        }
         egui::CentralPanel::default_margins().show(ui, |ui| self.dock_ui(ui));
         if !matches!(self.session.pending, Some(Pending::Pack(_))) {
             self.pack_focused = false;

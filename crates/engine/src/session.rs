@@ -181,7 +181,7 @@ pub struct TabStrip {
 
 /// Resolves `.` and `..` components lexically, like `cd` in a shell (symlinks are not
 /// followed), so `a/b/..` becomes `a` and the panel never shows a path containing `..`.
-fn normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     use std::path::Component;
     let mut out = PathBuf::new();
     for component in path.components() {
@@ -279,6 +279,10 @@ pub struct Session {
     pub queue_open: bool,
     /// The command palette, while it is open (F1).
     pub palette: Option<crate::Palette>,
+    /// The Places bar is shown (Ctrl+B).
+    pub places_open: bool,
+    /// The favorite folders (`fav`).
+    pub favorites: crate::Favorites,
     /// The "jump to" list, while it is open (Ctrl+P).
     pub jump: Option<crate::Palette>,
     /// The folders visited so far (for the "jump to" ranking).
@@ -440,6 +444,8 @@ impl Session {
             queue_open: false,
             palette: None,
             jump: None,
+            places_open: false,
+            favorites: crate::Favorites::default(),
             visits: crate::Visits::default(),
             last_visit: [None, None],
             recent_commands: Vec::new(),
@@ -594,6 +600,8 @@ impl Session {
                 crate::PaletteAction::Move(by) => self.jump_move(by),
                 crate::PaletteAction::Run => self.jump_run()?,
             },
+            Command::Places => self.places_open = !self.places_open,
+            Command::Favorite(action) => self.favorite_action(action)?,
             Command::Queue => self.queue_open = true,
             Command::QueueClose => self.queue_open = false,
             Command::QueuePause => self.pause_queue(true),

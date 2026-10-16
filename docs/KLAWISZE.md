@@ -22,6 +22,7 @@ są na razie stałe.
 | Ctrl+Q | Quick View: drugi panel pokazuje na żywo plik pod kursorem aktywnego (tekst/hex, strona PDF, tekst dokumentów); kółko przewija, Ctrl+Q zamyka; opis w [FUNKCJE.md](FUNKCJE.md) |
 | F1 | paleta komend: wyszukiwarka wszystkich komend z opisem (↑↓ wybór, Enter uruchamia, Esc zamyka); opis w [FUNKCJE.md](FUNKCJE.md) |
 | Ctrl+P | „Skocz do”: katalogi według częstości i świeżości odwiedzin, zakładki i serwery w jednym polu szukania (Enter przechodzi w aktywnym panelu); opis w [FUNKCJE.md](FUNKCJE.md) |
+| Ctrl+B | pasek „Miejsca”: dyski z wolnym miejscem, ulubione katalogi, serwery i ostatnie katalogi (klik przechodzi w aktywnym panelu); opis w [FUNKCJE.md](FUNKCJE.md) |
 | Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |
 | Ctrl+Shift+F4 | wyślij na serwer plik edytowany przez F4 |
 | Ctrl+S | serwery SFTP / FTP / FTPS (zapisane połączenia) |

@@ -42,6 +42,7 @@ impl Default for Keymap {
             ("Ctrl+J", "queue"),
             ("F1", "palette"),
             ("Ctrl+P", "jump"),
+            ("Ctrl+B", "places"),
             ("Ctrl+Shift+Num1", "copynames stem"),
             ("Ctrl+Shift+Num2", "copynames file"),
             ("Ctrl+Shift+Num3", "copynames path"),
