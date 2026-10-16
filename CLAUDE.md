@@ -58,5 +58,5 @@ dopóki obie platformy są zielone.
 - Jeden etap z `ROADMAP.md` = jedna gałąź = jeden PR. Małe kroki, każdy z testami.
 - Zaktualizuj `ROADMAP.md` (status etapu) w tym samym PR, który kończy etap.
 - Najpierw logika w `engine`/`ops`/`vfs` z testami, dopiero potem UI.
-- GUI nie ma testów automatycznych: sprawdź ręcznie na Windows i Linuksie i napisz w PR, co kliknięto.
+- GUI ma testy bezokienkowe (`crates/ui-egui/tests/gui.rs`, `egui_kittest`: ramki, szukanie widżetów po napisie, kliki, stan silnika; bez porównywania zrzutów). Wygląd i wygoda nadal wymagają ręcznego sprawdzenia na Windows i Linuksie: napisz w PR, co kliknięto. Napisy rysowane „ręcznie” (wiersze list, przyciski klawiszy funkcyjnych, tytuły zakładek doku) nie są widżetami i testy ich nie widzą.
 - Nie dodawaj zależności bez potrzeby; każda trafia do `[workspace.dependencies]`.
