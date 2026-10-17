@@ -78,6 +78,9 @@ pub const COMMAND_NAMES: &[&str] = &[
     "palette",
     "jump",
     "go",
+    "menu",
+    "open",
+    "info",
     "places",
     "fav",
     "queue",
@@ -312,6 +315,12 @@ pub enum Command {
     Jump(PaletteAction),
     /// What the path bar does with its text: go to a path or server, search, run a command.
     Go(String),
+    /// Open the context menu of the active panel (Shift+F10).
+    Menu,
+    /// Open the file under the cursor in the system's default application.
+    Open,
+    /// Describe the entry under the cursor or the marked ones in the status line.
+    Info,
     /// Show or hide the Places bar (Ctrl+B).
     Places,
     /// Add a folder to the favorites or remove it.
@@ -591,6 +600,9 @@ impl Command {
             "palette" => parse_palette(rest).map(Command::Palette),
             "jump" => parse_palette(rest).map(Command::Jump),
             "go" => need_arg("adres").map(Command::Go),
+            "menu" => Ok(Command::Menu),
+            "open" => Ok(Command::Open),
+            "info" => Ok(Command::Info),
             "places" => Ok(Command::Places),
             "fav" => Ok(Command::Favorite(parse_favorite(rest))),
             "tab" => parse_tab(rest).map(Command::Tab),

@@ -47,6 +47,9 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `move` | przenosi zaznaczone do drugiego panelu (alias: mv; F6) |
 | `mkdir [nazwa]` | tworzy katalog; bez nazwy pyta o nią (F7) |
 | `rename [nazwa]` | zmienia nazwę pozycji pod kursorem; bez nazwy pyta o nią (F2) |
+| `open` | otwiera plik pod kursorem w domyślnym programie systemu (menu kontekstowe; F4 używa edytora z `BLUEPANE_EDITOR`) |
+| `info` | pokazuje w pasku stanu, czym jest pozycja pod kursorem (rodzaj, rozmiar, data, ścieżka) albo podsumowanie zaznaczonych |
+| `menu` | otwiera menu kontekstowe pozycji pod kursorem (Shift+F10; myszą: prawy przycisk) |
 | `delete` | przenosi zaznaczone do kosza po potwierdzeniu; na serwerze usuwa trwale (alias: rm; F8) |
 | `chmod <ósemkowo>` | ustawia uprawnienia zaznaczonych na serwerze, np. `chmod 755` |
 | `confirm` | potwierdza pytanie (alias: yes; Enter) |

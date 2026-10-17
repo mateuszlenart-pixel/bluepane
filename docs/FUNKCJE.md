@@ -22,6 +22,18 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Menu kontekstowe
+
+Prawy przycisk myszy (albo Shift+F10 z klawiatury) otwiera menu dla pozycji pod kursorem. Prawy klik na wierszu przesuwa na niego kursor (jeśli wiersz jest zaznaczony, zaznaczenie zostaje i menu dotyczy całego zaznaczenia); na pustym miejscu listy menu dotyczy katalogu. Każda pozycja to zwykła komenda (obok jest skrót klawiszowy, jeśli jakiś jest), więc robi dokładnie to samo co skrót, paleta czy wiersz poleceń:
+
+- **katalog**: Otwórz, Otwórz w nowej zakładce, Dodaj do ulubionych,
+- **archiwum**: Otwórz archiwum, Rozpakuj do drugiego panelu, Sprawdź archiwum,
+- **plik**: Otwórz w programie (domyślny program systemu, komenda `open`), Podgląd, Edytuj,
+- **dla wszystkich**: Kopiuj / Przenieś do drugiego panelu, Zmień nazwę (jeden element) albo Zmień nazwy zbiorowo (kilka), Spakuj, Usuń, Kopiuj ścieżkę / nazwę, Uprawnienia (chmod) na serwerze, Właściwości (komenda `info`: rodzaj, rozmiar, data i ścieżka w pasku stanu albo podsumowanie zaznaczonych),
+- **puste miejsce**: Nowy katalog, Odśwież, Zaznacz wszystko, Odwróć zaznaczenie, Szukaj plików, Synchronizuj katalogi, Nowa zakładka, Dodaj ten katalog do ulubionych.
+
+W archiwach menu nie ma pozycji, które zmieniałyby archiwum (przenoszenie, zmiana nazwy, usuwanie). Esc albo klik poza menu zamyka je.
+
 ## Okruszki z rozwijaniem
 
 Strzałka `›` między segmentami ścieżki nad panelem otwiera menu z katalogami leżącymi w segmencie po jej lewej stronie (posortowane po nazwie, bez plików; do 300 pozycji); klik w katalog przechodzi do niego w tym panelu. Dzięki temu do katalogu obok można przejść bez wchodzenia wyżej. Menu działa dla katalogów na dysku (dla serwerów strzałka nic nie wyświetla).

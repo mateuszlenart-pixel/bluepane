@@ -6,6 +6,7 @@
 
 mod command;
 mod command_help;
+mod context_menu;
 mod dirsize;
 mod documents;
 mod fileclass;
@@ -58,6 +59,7 @@ pub use command::{
     SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
 pub use command_help::{command_help, commands_markdown, CommandHelp, COMMAND_HELP};
+pub use context_menu::MenuItem;
 pub use dirsize::{DirSizes, PanelStats};
 pub use fileclass::{class_of, class_of_name, FileClass};
 pub use find::{FindForm, FindView, SearchData};

@@ -4,6 +4,7 @@
 //! It contains no file system logic.
 
 mod bottom_ui;
+mod context_ui;
 mod dock_ui;
 mod find_ui;
 mod omnibox_ui;
@@ -38,6 +39,10 @@ pub struct BluepaneUi {
     pack_focused: bool,
     /// Editable text of each panel's path bar (resynced from the panel while not focused).
     path_text: [String; 2],
+    /// The open right-click menu: where it is and what it offers.
+    context_menu: Option<ContextMenu>,
+    /// Counts frames (to tell the frame a menu was opened in).
+    frame: u64,
     /// The folders listed in the open breadcrumb menu, with the folder they are inside of.
     crumb_menu: Option<(std::path::PathBuf, Vec<bluepane_engine::Crumb>)>,
     /// Settings being edited in the synchronization window.
@@ -78,6 +83,8 @@ impl BluepaneUi {
             apply_to_all: false,
             pack_focused: false,
             path_text: [String::new(), String::new()],
+            context_menu: None,
+            frame: 0,
             crumb_menu: None,
             sync_form: None,
             rename_edit: None,
@@ -107,6 +114,7 @@ impl BluepaneUi {
     /// Draws one frame. Call this from `eframe::App::ui`.
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        self.frame += 1;
         // The colours follow the session's theme (`theme` command, saved settings).
         if !self.theme_applied {
             // Icon font: Phosphor symbols become available in every proportional text.
@@ -156,6 +164,13 @@ impl BluepaneUi {
         if !matches!(self.session.pending, Some(Pending::Pack(_))) {
             self.pack_focused = false;
         }
+        if std::mem::take(&mut self.session.menu_requested) {
+            let pos = ctx
+                .pointer_latest_pos()
+                .unwrap_or(ctx.content_rect().center());
+            self.open_context_menu(pos, true);
+        }
+        self.context_menu_popup(&ctx);
         self.palette_dialog(&ctx);
         self.jump_dialog(&ctx);
         match &self.session.pending {
@@ -1039,6 +1054,20 @@ impl BluepaneUi {
 
         // The line under the list (marked files, totals) keeps its own room.
         let footer_height = row_height + 6.0;
+        // Behind the rows: a right click on the empty part of the list lands here.
+        let list_rect = Rect::from_min_size(
+            ui.cursor().min,
+            egui::vec2(
+                ui.available_width(),
+                (ui.available_height() - footer_height).max(row_height * 3.0),
+            ),
+        );
+        let backdrop = ui.interact(
+            list_rect,
+            ui.id().with(("list-backdrop", index)),
+            egui::Sense::click(),
+        );
+        let mut right_clicked: Option<usize> = None;
         egui::ScrollArea::vertical()
             .id_salt(("panel", index))
             .auto_shrink([false, false])
@@ -1188,6 +1217,9 @@ impl BluepaneUi {
                     if response.double_clicked() {
                         entered = Some(row);
                     }
+                    if response.secondary_clicked() {
+                        right_clicked = Some(row);
+                    }
                 }
             });
 
@@ -1197,6 +1229,26 @@ impl BluepaneUi {
         if clear_filter {
             self.session.active = index;
             let _ = self.session.run_line("filter");
+        }
+        let pointer = ui.ctx().pointer_latest_pos().unwrap_or(list_rect.center());
+        if let Some(row) = right_clicked {
+            // A click on a marked row keeps the marks; on any other row it moves the cursor.
+            self.session.active = index;
+            let marked = self.session.panels[index]
+                .entries
+                .get(row)
+                .is_some_and(|e| self.session.panels[index].selected.contains(&e.path));
+            if marked {
+                self.session.panels[index].cursor = row;
+            } else {
+                let _ = self
+                    .session
+                    .execute(Command::Click(row + 1, ClickMode::Plain));
+            }
+            self.open_context_menu(pointer, true);
+        } else if backdrop.secondary_clicked() {
+            self.session.active = index;
+            self.open_context_menu(pointer, false);
         }
         if let Some(row) = entered {
             self.session.active = index;
@@ -1222,6 +1274,14 @@ impl BluepaneUi {
             let _ = self.session.execute(Command::Sort(key, None));
         }
     }
+}
+
+/// An open right-click menu.
+struct ContextMenu {
+    pos: egui::Pos2,
+    items: Vec<bluepane_engine::MenuItem>,
+    /// The frame it was opened in: the click that opened it must not close it.
+    opened_in: u64,
 }
 
 const COLUMN_PAD: f32 = 6.0;
