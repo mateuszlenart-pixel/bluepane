@@ -250,3 +250,29 @@ fn the_breadcrumb_menu_lists_the_folders_beside_the_current_one() {
         .collect();
     assert_eq!(beside, ["a", "b"]);
 }
+
+#[test]
+fn the_context_menu_offers_actions_for_the_row_and_a_click_runs_one() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "select a.txt");
+    command(&mut harness, "unselectall");
+    command(&mut harness, "menu");
+    harness.get_by_label_contains("Podgląd");
+    harness.get_by_label_contains("Kopiuj do drugiego panelu");
+    harness.get_by_label_contains("Właściwości").click();
+    harness.run_steps(4);
+    assert!(
+        harness
+            .state_mut()
+            .session_mut()
+            .status
+            .starts_with("a.txt: plik"),
+        "{}",
+        harness.state_mut().session_mut().status
+    );
+    assert!(
+        harness.query_by_label_contains("Właściwości").is_none(),
+        "the menu closed after the choice"
+    );
+}

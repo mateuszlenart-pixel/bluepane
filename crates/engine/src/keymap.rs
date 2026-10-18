@@ -43,6 +43,7 @@ impl Default for Keymap {
             ("F1", "palette"),
             ("Ctrl+P", "jump"),
             ("Ctrl+B", "places"),
+            ("Shift+F10", "menu"),
             ("Ctrl+Shift+Num1", "copynames stem"),
             ("Ctrl+Shift+Num2", "copynames file"),
             ("Ctrl+Shift+Num3", "copynames path"),
@@ -147,6 +148,16 @@ impl Default for Keymap {
 
 impl Keymap {
     /// The command line bound to a key, if any.
+    /// The key bound to exactly this command line (the shortest, then the first by name),
+    /// for showing next to a menu item.
+    pub fn key_for(&self, line: &str) -> Option<String> {
+        self.bindings
+            .iter()
+            .filter(|(_, bound)| bound.as_str() == line)
+            .map(|(key, _)| key.clone())
+            .min_by(|a, b| a.len().cmp(&b.len()).then_with(|| a.cmp(b)))
+    }
+
     pub fn lookup(&self, key: &str) -> Option<&str> {
         self.bindings.get(key).map(String::as_str)
     }

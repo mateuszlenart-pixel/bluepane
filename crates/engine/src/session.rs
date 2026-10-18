@@ -281,6 +281,8 @@ pub struct Session {
     pub palette: Option<crate::Palette>,
     /// A folder to open once the connection to the named site is up (`go sftp://host/dir`).
     pub(crate) after_connect: Option<(String, String)>,
+    /// The `menu` command asked for the context menu (the front end takes the request).
+    pub menu_requested: bool,
     /// The Places bar is shown (Ctrl+B).
     pub places_open: bool,
     /// The favorite folders (`fav`).
@@ -447,6 +449,7 @@ impl Session {
             palette: None,
             jump: None,
             after_connect: None,
+            menu_requested: false,
             places_open: false,
             favorites: crate::Favorites::default(),
             visits: crate::Visits::default(),
@@ -604,6 +607,9 @@ impl Session {
                 crate::PaletteAction::Run => self.jump_run()?,
             },
             Command::Go(text) => self.omnibox(&text)?,
+            Command::Menu => self.menu_requested = true,
+            Command::Open => self.open_default()?,
+            Command::Info => self.show_info()?,
             Command::Places => self.places_open = !self.places_open,
             Command::Favorite(action) => self.favorite_action(action)?,
             Command::Queue => self.queue_open = true,
@@ -1745,7 +1751,7 @@ impl Session {
     }
 
     /// The file under the cursor, for view and edit: never `..`, never a directory.
-    fn entry_to_open(&self) -> Result<PathBuf, EngineError> {
+    pub(crate) fn entry_to_open(&self) -> Result<PathBuf, EngineError> {
         let entry = self
             .active_panel()
             .current()
@@ -1910,7 +1916,7 @@ impl Session {
     }
 
     /// Refuses write operations while the active panel shows the inside of an archive.
-    fn deny_in_archive(&self, what: &str) -> Result<(), EngineError> {
+    pub(crate) fn deny_in_archive(&self, what: &str) -> Result<(), EngineError> {
         if self.active_panel().archive.is_some() {
             return Err(EngineError(format!(
                 "{what} nie jest dostępne w archiwum (tylko do odczytu): rozpakuj je (F5 lub unpack)"
