@@ -327,3 +327,40 @@ fn the_action_bar_offers_what_fits_the_selection_and_its_buttons_work() {
         "the button ran `pack` (its dialog is open)"
     );
 }
+
+#[test]
+fn the_key_sheet_lists_the_keys_and_question_mark_does_not_start_a_filter() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "keys");
+    harness.get_by_label("Klawisze");
+    harness.get_by_label("Ctrl+P");
+    command(&mut harness, "keys");
+    assert!(harness.query_by_label("Klawisze").is_none());
+
+    harness.key_press(egui::Key::Questionmark);
+    harness.event(egui::Event::Text("?".into()));
+    harness.run_steps(3);
+    harness.get_by_label("Klawisze");
+    assert!(
+        harness
+            .state_mut()
+            .session_mut()
+            .active_panel()
+            .filter
+            .is_empty(),
+        "? is not typed into the filter"
+    );
+}
+
+#[test]
+fn holding_ctrl_for_a_moment_shows_its_keys_until_it_is_let_go() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    harness.event(egui::Event::ModifiersChanged(egui::Modifiers::CTRL));
+    harness.run_steps(80);
+    harness.get_by_label("Klawisze z Ctrl");
+    harness.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    harness.run_steps(3);
+    assert!(harness.query_by_label("Klawisze z Ctrl").is_none());
+}

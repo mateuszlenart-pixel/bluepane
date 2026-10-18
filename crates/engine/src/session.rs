@@ -281,6 +281,8 @@ pub struct Session {
     pub palette: Option<crate::Palette>,
     /// A folder to open once the connection to the named site is up (`go sftp://host/dir`).
     pub(crate) after_connect: Option<(String, String)>,
+    /// The key cheat sheet is shown, with the prefix of the keys it lists (`""` = all).
+    pub key_sheet_open: Option<String>,
     /// The `menu` command asked for the context menu (the front end takes the request).
     pub menu_requested: bool,
     /// The Places bar is shown (Ctrl+B).
@@ -452,6 +454,7 @@ impl Session {
             jump: None,
             after_connect: None,
             menu_requested: false,
+            key_sheet_open: None,
             places_open: false,
             favorites: crate::Favorites::default(),
             visits: crate::Visits::default(),
@@ -612,6 +615,13 @@ impl Session {
             Command::Go(text) => self.omnibox(&text)?,
             Command::DragTo(remove, target) => self.drag_to(remove, target)?,
             Command::Drop(target, paths) => self.drop_files(target, paths)?,
+            Command::Keys(prefix) => {
+                let prefix = prefix.unwrap_or_default();
+                self.key_sheet_open = match &self.key_sheet_open {
+                    Some(open) if *open == prefix => None,
+                    _ => Some(prefix),
+                };
+            }
             Command::Menu => self.menu_requested = true,
             Command::Open => self.open_default()?,
             Command::Info => self.show_info()?,

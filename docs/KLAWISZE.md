@@ -23,6 +23,7 @@ są na razie stałe.
 | F1 | paleta komend: wyszukiwarka wszystkich komend z opisem (↑↓ wybór, Enter uruchamia, Esc zamyka); opis w [FUNKCJE.md](FUNKCJE.md) |
 | Ctrl+P | „Skocz do”: katalogi według częstości i świeżości odwiedzin, zakładki i serwery w jednym polu szukania (Enter przechodzi w aktywnym panelu); opis w [FUNKCJE.md](FUNKCJE.md) |
 | Ctrl+B | pasek „Miejsca”: dyski z wolnym miejscem, ulubione katalogi, serwery i ostatnie katalogi (klik przechodzi w aktywnym panelu); opis w [FUNKCJE.md](FUNKCJE.md) |
+| ? | ściąga klawiszy (także przytrzymanie samego Ctrl albo Alt: tylko skróty z tym klawiszem) |
 | Ctrl+J | kolejka zadań: bieżące, oczekujące (usuń z kolejki), zakończone (ponów), wstrzymanie kolejki |
 | Ctrl+Shift+F4 | wyślij na serwer plik edytowany przez F4 |
 | Ctrl+S | serwery SFTP / FTP / FTPS (zapisane połączenia) |

@@ -44,6 +44,8 @@ impl Default for Keymap {
             ("Ctrl+P", "jump"),
             ("Ctrl+B", "places"),
             ("Shift+F10", "menu"),
+            ("Questionmark", "keys"),
+            ("Shift+Questionmark", "keys"),
             ("Ctrl+Shift+Num1", "copynames stem"),
             ("Ctrl+Shift+Num2", "copynames file"),
             ("Ctrl+Shift+Num3", "copynames path"),
@@ -148,6 +150,17 @@ impl Default for Keymap {
 
 impl Keymap {
     /// The command line bound to a key, if any.
+    /// Every key of the panels and its command line, sorted by key.
+    pub fn bindings(&self) -> Vec<(&str, &str)> {
+        let mut all: Vec<(&str, &str)> = self
+            .bindings
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        all.sort();
+        all
+    }
+
     /// The key bound to exactly this command line (the shortest, then the first by name),
     /// for showing next to a menu item.
     pub fn key_for(&self, line: &str) -> Option<String> {

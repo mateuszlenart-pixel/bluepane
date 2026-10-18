@@ -138,9 +138,31 @@ impl TabViewer for DockViewer<'_> {
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| panel.location().display().to_string());
                 let side = if i == 0 { "Lewy panel" } else { "Prawy panel" };
-                RichText::new(format!("{side}: {place}")).into()
+                if self.app.focused_tool().is_none() && usize::from(i) == self.app.session.active {
+                    RichText::new(format!(
+                        "{} {side}: {place}",
+                        egui_phosphor::regular::KEYBOARD
+                    ))
+                    .color(self.app.theme.accent)
+                    .into()
+                } else {
+                    RichText::new(format!("{side}: {place}")).into()
+                }
             }
-            Tab::Tool(tool) => RichText::new(tool.label()).into(),
+            Tab::Tool(tool) => {
+                // The tool that has the keyboard says so on its tab.
+                if self.app.focused_tool() == Some(tool) {
+                    RichText::new(format!(
+                        "{} {}",
+                        egui_phosphor::regular::KEYBOARD,
+                        tool.label()
+                    ))
+                    .color(self.app.theme.accent)
+                    .into()
+                } else {
+                    RichText::new(tool.label()).into()
+                }
+            }
         }
     }
 

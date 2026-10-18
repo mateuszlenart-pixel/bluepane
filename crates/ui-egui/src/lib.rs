@@ -8,6 +8,7 @@ mod context_ui;
 mod dock_ui;
 mod drag_ui;
 mod find_ui;
+mod keys_ui;
 mod omnibox_ui;
 mod pages_ui;
 mod palette_ui;
@@ -44,6 +45,8 @@ pub struct BluepaneUi {
     /// The open right-click menu: where it is and what it offers.
     context_menu: Option<ContextMenu>,
     toasts: Vec<toast_ui::Toast>,
+    /// Since when Ctrl or Alt alone has been held (the key sheet appears after a moment).
+    modifier_hold: Option<(&'static str, f64)>,
     /// The name being edited in its row has been given the keyboard.
     rename_focused: bool,
     /// A row of this frame holds the in-place name editor (the name dialog is not needed).
@@ -97,6 +100,7 @@ impl BluepaneUi {
             path_text: [String::new(), String::new()],
             context_menu: None,
             toasts: Vec::new(),
+            modifier_hold: None,
             rename_focused: false,
             inline_rename_drawn: false,
             drag: None,
@@ -199,6 +203,7 @@ impl BluepaneUi {
                 .unwrap_or(ctx.content_rect().center());
             self.open_context_menu(pos, true);
         }
+        self.key_sheet_ui(&ctx);
         self.toasts_ui(&ctx);
         self.drag_overlay(&ctx);
         self.context_menu_popup(&ctx);
@@ -582,7 +587,7 @@ impl BluepaneUi {
     }
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
-        let (pressed, typed) = ctx.input(|i| {
+        let (pressed, mut typed) = ctx.input(|i| {
             let mut pressed = Vec::new();
             let mut typed = String::new();
             // Alt/Ctrl shortcuts can also arrive as text ("Alt+2" -> "2"); the modifier state
@@ -624,6 +629,11 @@ impl BluepaneUi {
             }
             return;
         }
+        // The key event and the text of `?` may come in different frames: while `?` opens the
+        // sheet, it never goes into the filter.
+        let sheet_key = ["Questionmark", "Shift+Questionmark"]
+            .iter()
+            .any(|k| self.session.keymap.lookup(k) == Some("keys"));
         // A tool tab that has the focus gets the keys; otherwise they are for the panels.
         if let Some(tool) = self.focused_tool() {
             self.tool_keys(tool, &pressed);
@@ -639,6 +649,9 @@ impl BluepaneUi {
             if let Some(line) = self.session.keymap.lookup(&key).map(str::to_owned) {
                 self.dispatch(&line);
             }
+        }
+        if sheet_key {
+            typed.retain(|c| c != '?');
         }
         if !typed.is_empty() {
             let filter = format!("{}{typed}", self.session.active_panel().filter);

@@ -163,6 +163,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `theme [nazwa]` | pokazuje dostępne motywy kolorów albo przełącza motyw |
 | `bind [<klawisz> [<komenda>\|default]]` | przypisuje klawisz do komendy, pokazuje przypisanie albo przywraca domyślne; zapisuje się w `settings.conf` |
 | `unbind <klawisz>` | wyłącza klawisz |
+| `keys [ctrl\|alt\|shift]` | ściąga klawiszy: wszystkie skróty (także własne z `bind`) z opisami; z argumentem tylko te z Ctrl, Alt albo Shift (?, albo przytrzymaj Ctrl lub Alt) |
 
 ## Paleta komend i „Skocz do”
 
