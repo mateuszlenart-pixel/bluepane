@@ -78,6 +78,8 @@ pub const COMMAND_NAMES: &[&str] = &[
     "palette",
     "jump",
     "go",
+    "dragto",
+    "drop",
     "menu",
     "open",
     "info",
@@ -315,6 +317,10 @@ pub enum Command {
     Jump(PaletteAction),
     /// What the path bar does with its text: go to a path or server, search, run a command.
     Go(String),
+    /// Drag the active panel's marked entries (copy or move) to a panel or a folder row of it.
+    DragTo(bool, crate::DropTarget),
+    /// Files dropped from outside into a panel (or a folder row of it); they are copied.
+    Drop(crate::DropTarget, Vec<PathBuf>),
     /// Open the context menu of the active panel (Shift+F10).
     Menu,
     /// Open the file under the cursor in the system's default application.
@@ -600,6 +606,8 @@ impl Command {
             "palette" => parse_palette(rest).map(Command::Palette),
             "jump" => parse_palette(rest).map(Command::Jump),
             "go" => need_arg("adres").map(Command::Go),
+            "dragto" => parse_dragto(rest),
+            "drop" => parse_drop(rest),
             "menu" => Ok(Command::Menu),
             "open" => Ok(Command::Open),
             "info" => Ok(Command::Info),
@@ -753,6 +761,64 @@ fn parse_tab(args: &str) -> Result<TabAction, EngineError> {
         return Err(usage());
     }
     Ok(action)
+}
+
+fn parse_panel_number(word: &str) -> Option<usize> {
+    match word {
+        "1" => Some(0),
+        "2" => Some(1),
+        _ => None,
+    }
+}
+
+/// `dragto copy|move <1|2> [row]`
+fn parse_dragto(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("dragto: użycie: dragto copy|move <1|2> [wiersz]".into());
+    let words: Vec<&str> = args.split_whitespace().collect();
+    let remove = match words.first().map(|w| w.to_ascii_lowercase()).as_deref() {
+        Some("copy") => false,
+        Some("move") => true,
+        _ => return Err(usage()),
+    };
+    let panel = words
+        .get(1)
+        .and_then(|w| parse_panel_number(w))
+        .ok_or_else(usage)?;
+    let row = match words.get(2) {
+        Some(word) => Some(
+            word.parse::<usize>()
+                .ok()
+                .filter(|r| *r >= 1)
+                .ok_or_else(usage)?,
+        ),
+        None => None,
+    };
+    if words.len() > 3 {
+        return Err(usage());
+    }
+    Ok(Command::DragTo(remove, crate::DropTarget { panel, row }))
+}
+
+/// `drop <1|2> [row] "path"...`
+fn parse_drop(args: &str) -> Result<Command, EngineError> {
+    let usage = || EngineError("drop: użycie: drop <1|2> [wiersz] \"ścieżka\"…".into());
+    let mut words = crate::dragdrop::split_quoted(args).into_iter().peekable();
+    let panel = words
+        .next()
+        .and_then(|w| parse_panel_number(&w))
+        .ok_or_else(usage)?;
+    let row = match words.peek().and_then(|w| w.parse::<usize>().ok()) {
+        Some(row) if row >= 1 => {
+            words.next();
+            Some(row)
+        }
+        _ => None,
+    };
+    let paths: Vec<PathBuf> = words.map(PathBuf::from).collect();
+    if paths.is_empty() {
+        return Err(usage());
+    }
+    Ok(Command::Drop(crate::DropTarget { panel, row }, paths))
 }
 
 fn parse_favorite(rest: &str) -> crate::FavoriteAction {

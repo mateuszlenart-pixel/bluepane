@@ -22,6 +22,18 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Przeciąganie
+
+Zaznaczone pozycje (albo ta, od której zaczynasz przeciąganie) można przeciągnąć myszą:
+
+- **na drugi panel**: kopiowanie, tak jak F5; z przytrzymanym **Shiftem** przenoszenie, tak jak F6 (działa też dla serwerów i archiwów, tak jak F5 / F6),
+- **na wiersz katalogu** (w którymkolwiek panelu): do tego katalogu; podświetlenie pokazuje, gdzie wylądują pliki, a przy wskaźniku jest napis „Kopiuj: …” / „Przenieś: …”,
+- **Esc** w trakcie przeciągania je anuluje; upuszczenie w tym samym panelu poza katalogiem nic nie robi. Katalogu nie da się upuścić na siebie ani na własny podkatalog, a pliki, które już są w tym katalogu, są pomijane z komunikatem.
+
+Można też **upuścić pliki z menedżera plików systemu** na panel albo na wiersz katalogu: zostaną skopiowane (zawsze kopiowanie, nigdy przeniesienie). Konflikty nazw pyta zwykłe okno, a postęp jest w kolejce zadań.
+
+Komendy: `dragto copy|move <1|2> [wiersz]` (panel 1 = lewy, 2 = prawy) i `drop <1|2> [wiersz] "ścieżka"…`.
+
 ## Menu kontekstowe
 
 Prawy przycisk myszy (albo Shift+F10 z klawiatury) otwiera menu dla pozycji pod kursorem. Prawy klik na wierszu przesuwa na niego kursor (jeśli wiersz jest zaznaczony, zaznaczenie zostaje i menu dotyczy całego zaznaczenia); na pustym miejscu listy menu dotyczy katalogu. Każda pozycja to zwykła komenda (obok jest skrót klawiszowy, jeśli jakiś jest), więc robi dokładnie to samo co skrót, paleta czy wiersz poleceń:

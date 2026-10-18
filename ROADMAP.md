@@ -205,7 +205,7 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 - [x] 12d **Omnibox** zamiast pola ścieżki: ścieżka, `sftp://użytkownik@host/katalog`, `ftp://`, `smb://`, wnętrze archiwum, `?wzorzec` (szukanie), `>komenda`; podpowiedzi przy pisaniu
 - [x] 12e Okruszki z rozwijaniem: klik w `›` między segmentami pokazuje katalogi rodzeństwa
 - [x] 12f **Menu kontekstowe** pod prawym przyciskiem (otwórz w programie, kopiuj ścieżkę/nazwę, spakuj, rozpakuj, porównaj, właściwości, chmod na serwerze, dodaj do ulubionych); pozycje to komendy
-- [ ] 12g **Przeciąganie**: między panelami (kopiuj; z Shift przenieś), upuszczanie plików z pulpitu/menedżera systemu do panelu
+- [x] 12g **Przeciąganie**: między panelami (kopiuj; z Shift przenieś), upuszczanie plików z pulpitu/menedżera systemu do panelu
 - [ ] 12h **Zmiana nazwy w wierszu** (F2 edytuje nazwę na liście; rozszerzenie nie jest zaznaczane) i **powiadomienia** po skończonych zadaniach (w rogu okna, z przyciskiem „Cofnij", gdzie się da)
 - [ ] 12i **Pasek akcji zależny od zaznaczenia**: archiwum → „Rozpakuj tutaj / do podkatalogu", PDF/dokument → „Podgląd", dwa katalogi → „Porównaj / Synchronizuj", plik na serwerze → „Edytuj"
 - [ ] 12j **Ściąga klawiszy**: przytrzymanie Ctrl (albo `?`) nakłada skróty na przyciski; wyraźny wskaźnik, która zakładka doku ma klawiaturę

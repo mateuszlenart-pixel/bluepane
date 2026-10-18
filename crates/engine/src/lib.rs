@@ -9,6 +9,7 @@ mod command_help;
 mod context_menu;
 mod dirsize;
 mod documents;
+mod dragdrop;
 mod fileclass;
 mod find;
 mod format;
@@ -61,6 +62,7 @@ pub use command::{
 pub use command_help::{command_help, commands_markdown, CommandHelp, COMMAND_HELP};
 pub use context_menu::MenuItem;
 pub use dirsize::{DirSizes, PanelStats};
+pub use dragdrop::DropTarget;
 pub use fileclass::{class_of, class_of_name, FileClass};
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};

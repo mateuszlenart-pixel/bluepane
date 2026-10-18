@@ -607,6 +607,8 @@ impl Session {
                 crate::PaletteAction::Run => self.jump_run()?,
             },
             Command::Go(text) => self.omnibox(&text)?,
+            Command::DragTo(remove, target) => self.drag_to(remove, target)?,
+            Command::Drop(target, paths) => self.drop_files(target, paths)?,
             Command::Menu => self.menu_requested = true,
             Command::Open => self.open_default()?,
             Command::Info => self.show_info()?,
@@ -798,7 +800,7 @@ impl Session {
     }
 
     /// Copy or move the active panel's targets into the other panel's directory.
-    fn transfer(&mut self, remove_source: bool) -> Result<(), EngineError> {
+    pub(crate) fn transfer(&mut self, remove_source: bool) -> Result<(), EngineError> {
         if self.panels.iter().any(|p| p.remote.is_some()) {
             return self.remote_transfer(remove_source);
         }
@@ -1051,7 +1053,7 @@ impl Session {
     }
 
     /// Runs the job now, or queues it behind the running one.
-    fn enqueue(&mut self, spec: JobSpec) {
+    pub(crate) fn enqueue(&mut self, spec: JobSpec) {
         self.active_panel_mut().selected.clear();
         self.enqueue_quiet(spec);
     }

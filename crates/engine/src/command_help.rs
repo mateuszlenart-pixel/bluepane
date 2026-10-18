@@ -75,6 +75,8 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(OPS, "open", "open", "otwiera plik pod kursorem w domyślnym programie systemu (menu kontekstowe; F4 używa edytora z `BLUEPANE_EDITOR`)"),
     h(OPS, "info", "info", "pokazuje w pasku stanu, czym jest pozycja pod kursorem (rodzaj, rozmiar, data, ścieżka) albo podsumowanie zaznaczonych"),
     h(OPS, "menu", "menu", "otwiera menu kontekstowe pozycji pod kursorem (Shift+F10; myszą: prawy przycisk)"),
+    h(OPS, "dragto", "dragto copy|move <1|2> [wiersz]", "przeciąganie: zaznaczone z aktywnego panelu do panelu 1 (lewy) lub 2 (prawy), z numerem wiersza do katalogu w tym panelu; tak działa przeciągnięcie myszą (z Shiftem przenosi)"),
+    h(OPS, "drop", "drop <1|2> [wiersz] \"ścieżka\"…", "kopiuje pliki spoza programu (upuszczone z menedżera plików systemu) do panelu 1 lub 2, z numerem wiersza do katalogu w nim"),
     h(OPS, "delete", "delete", "przenosi zaznaczone do kosza po potwierdzeniu; na serwerze usuwa trwale (alias: rm; F8)"),
     h(OPS, "chmod", "chmod <ósemkowo>", "ustawia uprawnienia zaznaczonych na serwerze, np. `chmod 755`"),
     h(OPS, "confirm", "confirm", "potwierdza pytanie (alias: yes; Enter)"),

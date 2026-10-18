@@ -6,6 +6,7 @@
 mod bottom_ui;
 mod context_ui;
 mod dock_ui;
+mod drag_ui;
 mod find_ui;
 mod omnibox_ui;
 mod pages_ui;
@@ -41,6 +42,11 @@ pub struct BluepaneUi {
     path_text: [String; 2],
     /// The open right-click menu: where it is and what it offers.
     context_menu: Option<ContextMenu>,
+    /// A drag of marked entries in progress.
+    drag: Option<DragState>,
+    /// Where something can be dropped, as drawn in the last frame and in this one.
+    drop_zones: Vec<DropZone>,
+    last_zones: Vec<DropZone>,
     /// Counts frames (to tell the frame a menu was opened in).
     frame: u64,
     /// The folders listed in the open breadcrumb menu, with the folder they are inside of.
@@ -84,6 +90,9 @@ impl BluepaneUi {
             pack_focused: false,
             path_text: [String::new(), String::new()],
             context_menu: None,
+            drag: None,
+            drop_zones: Vec::new(),
+            last_zones: Vec::new(),
             frame: 0,
             crumb_menu: None,
             sync_form: None,
@@ -115,6 +124,7 @@ impl BluepaneUi {
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.frame += 1;
+        self.last_zones = std::mem::take(&mut self.drop_zones);
         // The colours follow the session's theme (`theme` command, saved settings).
         if !self.theme_applied {
             // Icon font: Phosphor symbols become available in every proportional text.
@@ -170,6 +180,7 @@ impl BluepaneUi {
                 .unwrap_or(ctx.content_rect().center());
             self.open_context_menu(pos, true);
         }
+        self.drag_overlay(&ctx);
         self.context_menu_popup(&ctx);
         self.palette_dialog(&ctx);
         self.jump_dialog(&ctx);
@@ -999,6 +1010,8 @@ impl BluepaneUi {
         let cursor = panel.cursor;
         let sort = panel.sort;
         let mut clicked = None;
+        let mut zones: Vec<DropZone> = Vec::new();
+        let mut drag_started: Option<usize> = None;
         let mut entered = None;
         let mut sort_by = None;
 
@@ -1067,6 +1080,11 @@ impl BluepaneUi {
             ui.id().with(("list-backdrop", index)),
             egui::Sense::click(),
         );
+        zones.push(DropZone {
+            rect: list_rect,
+            panel: index,
+            row: None,
+        });
         let mut right_clicked: Option<usize> = None;
         egui::ScrollArea::vertical()
             .id_salt(("panel", index))
@@ -1088,8 +1106,18 @@ impl BluepaneUi {
                     let entry = &panel.entries[row];
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), row_height),
-                        egui::Sense::click(),
+                        egui::Sense::click_and_drag(),
                     );
+                    if entry.is_dir() && !bluepane_engine::is_parent_entry(entry) {
+                        zones.push(DropZone {
+                            rect,
+                            panel: index,
+                            row: Some(row + 1),
+                        });
+                    }
+                    if response.drag_started() {
+                        drag_started = Some(row);
+                    }
                     let is_selected = panel.selected.contains(&entry.path);
                     if row == cursor {
                         // The cursor is a filled, outlined row; marks are text colour.
@@ -1230,6 +1258,28 @@ impl BluepaneUi {
             self.session.active = index;
             let _ = self.session.run_line("filter");
         }
+        self.drop_zones.extend(zones);
+        if let Some(row) = drag_started {
+            // The dragged row is carried along with the marks; an unmarked row alone.
+            self.session.active = index;
+            let marked = self.session.panels[index]
+                .entries
+                .get(row)
+                .is_some_and(|e| self.session.panels[index].selected.contains(&e.path));
+            if marked {
+                self.session.panels[index].cursor = row;
+            } else {
+                let _ = self
+                    .session
+                    .execute(Command::Click(row + 1, ClickMode::Plain));
+            }
+            let targets = self.session.panels[index].target_entries();
+            self.drag = Some(DragState {
+                from: index,
+                count: targets.len(),
+                first: targets.first().map(|e| e.name.clone()).unwrap_or_default(),
+            });
+        }
         let pointer = ui.ctx().pointer_latest_pos().unwrap_or(list_rect.center());
         if let Some(row) = right_clicked {
             // A click on a marked row keeps the marks; on any other row it moves the cursor.
@@ -1274,6 +1324,22 @@ impl BluepaneUi {
             let _ = self.session.execute(Command::Sort(key, None));
         }
     }
+}
+
+/// Entries being dragged from a panel.
+#[derive(Debug, Clone)]
+struct DragState {
+    from: usize,
+    count: usize,
+    first: String,
+}
+
+/// A part of the window that takes a drop: a panel's list, or one folder row of it.
+#[derive(Debug, Clone, Copy)]
+struct DropZone {
+    rect: Rect,
+    panel: usize,
+    row: Option<usize>,
 }
 
 /// An open right-click menu.
