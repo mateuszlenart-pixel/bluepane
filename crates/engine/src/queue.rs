@@ -480,9 +480,21 @@ mod tests {
         assert!(!notices[0].is_error && !notices[0].cancelled);
         assert!(s.take_notices().is_empty(), "taken once");
 
-        // The same file again: the conflict is not answered, the job is stopped.
+        // The same file again: the conflict is answered with "cancel", which stops the job.
         s.run_line("copy").unwrap();
-        s.run_line("stop").unwrap();
+        for _ in 0..1000 {
+            s.poll();
+            if matches!(s.pending, Some(crate::Pending::Conflict(_))) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            matches!(s.pending, Some(crate::Pending::Conflict(_))),
+            "{}",
+            s.status
+        );
+        s.run_line("cancel").unwrap();
         settle(&mut s);
         let again = s.take_notices();
         assert_eq!(again.len(), 1, "{again:?}");
