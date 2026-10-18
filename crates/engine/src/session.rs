@@ -629,6 +629,8 @@ impl Session {
                     crate::PanelView::Grid => "Widok: miniatury".into(),
                 };
             }
+            Command::Columns(word) => self.set_columns(word)?,
+            Command::Density(word) => self.set_density(word)?,
             Command::Keys(prefix) => {
                 let prefix = prefix.unwrap_or_default();
                 self.key_sheet_open = match &self.key_sheet_open {

@@ -164,6 +164,8 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `theme [nazwa]` | pokazuje dostępne motywy kolorów albo przełącza motyw |
 | `bind [<klawisz> [<komenda>\|default]]` | przypisuje klawisz do komendy, pokazuje przypisanie albo przywraca domyślne; zapisuje się w `settings.conf` |
 | `unbind <klawisz>` | wyłącza klawisz |
+| `columns [ext\|size\|date\|created\|default]` | kolumny listy obok nazwy: bez argumentu pokazuje, z nazwą kolumny ją pokazuje albo chowa (created = data utworzenia), default przywraca; zapisuje się w `settings.conf` |
+| `density [compact\|comfortable]` | wiersze listy zwarte albo wygodne; bez argumentu przełącza; zapisuje się w `settings.conf` |
 | `keys [ctrl\|alt\|shift]` | ściąga klawiszy: wszystkie skróty (także własne z `bind`) z opisami; z argumentem tylko te z Ctrl, Alt albo Shift (?, albo przytrzymaj Ctrl lub Alt) |
 
 ## Paleta komend i „Skocz do”

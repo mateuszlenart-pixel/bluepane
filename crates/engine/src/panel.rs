@@ -97,6 +97,7 @@ fn archive_entries(view: &ArchiveView) -> Vec<Entry> {
             },
             size: e.size,
             modified: e.modified,
+            created: None,
             hidden: false,
         })
         .collect()
@@ -489,6 +490,7 @@ impl Panel {
                 kind: EntryKind::Dir,
                 size: 0,
                 modified: None,
+                created: None,
                 hidden: false,
             });
         }
@@ -1016,6 +1018,7 @@ mod tests {
             kind: if dir { EntryKind::Dir } else { EntryKind::File },
             size,
             modified: Some(UNIX_EPOCH + std::time::Duration::from_secs(secs)),
+            created: None,
             hidden: false,
         }
     }

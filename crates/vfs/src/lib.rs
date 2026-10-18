@@ -66,6 +66,8 @@ pub struct Entry {
     pub kind: EntryKind,
     pub size: u64,
     pub modified: Option<SystemTime>,
+    /// When the file was created, where the file system keeps it.
+    pub created: Option<SystemTime>,
     pub hidden: bool,
 }
 
@@ -104,6 +106,7 @@ pub fn entry_of(path: &Path) -> io::Result<Entry> {
         EntryKind::Other
     };
     Ok(Entry {
+        created: meta.created().ok(),
         hidden: platform::is_hidden(&name, &meta),
         size: if kind == EntryKind::File {
             meta.len()

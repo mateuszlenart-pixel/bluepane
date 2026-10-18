@@ -12,6 +12,8 @@ lista kontrolna do testów: [TESTOWANIE.md](TESTOWANIE.md).
 - nad panelem: lista dysków z paskiem zajętości i „wolne z”, ścieżka jako klikalne segmenty (kliknięcie = `cd` do tego miejsca; kliknięcie pustego miejsca paska zamienia ścieżkę w pole do wpisania), a aktywny filtr jako odznaka z ✕
 - ikony i kolory typów plików: katalogi, archiwa, dokumenty, obrazy, audio/wideo, kod, programy (klasa pliku z nazwy, bez otwierania)
 - motyw kolorów: komenda `theme` (pokazuje dostępne), `theme dark`; wybór zapisuje się w `settings.conf`
+- **kolumny listy**: `columns` pokazuje, które są włączone; `columns ext|size|date|created` pokazuje albo chowa kolumnę (Typ, Rozmiar, Data zmiany, **Utworzono** — data utworzenia pliku tam, gdzie system plików ją zapisuje; na niektórych dyskach Linuksa jej nie ma i kolumna jest pusta), `columns default` przywraca Typ, Rozmiar, Data. Kolejność w wierszu jest stała: Nazwa, Typ, Rozmiar, Utworzono, Data; w wąskim panelu pierwsza znika data utworzenia, potem data, typ, a rozmiar najpóźniej. Po kolumnie Utworzono się nie sortuje
+- **gęstość listy**: `density` przełącza wiersze zwarte i wygodne (`density compact`, `density comfortable`); kolumny i gęstość zapisują się w `settings.conf` (`columns = ext size date`, `density = compact`)
 - **własne skróty**: `bind ctrl+k sort name` (przypisz), `bind ctrl+k` (pokaż), `bind ctrl+k default` (przywróć domyślny), `unbind f9` (wyłącz), samo `bind` (lista zmian); zapisują się w tym samym `settings.conf` (wiersze `key Ctrl+K = sort name`, `key F9 =` wyłącza klawisz); błędny wiersz jest pomijany z ostrzeżeniem w pasku stanu. Dotyczy skrótów paneli; klawisze okien (podgląd, strony) są na razie stałe
 
 ## Paleta komend (F1)

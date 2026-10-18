@@ -425,3 +425,25 @@ fn the_grid_view_draws_tiles_and_the_arrows_move_by_rows() {
         bluepane_engine::PanelView::List
     );
 }
+
+#[test]
+fn chosen_columns_and_compact_rows_draw_and_are_kept() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "columns created");
+    command(&mut harness, "columns ext");
+    command(&mut harness, "density compact");
+    harness.run_steps(4);
+    let session = harness.state_mut().session_mut();
+    assert_eq!(
+        session.columns(),
+        [
+            bluepane_engine::Column::Size,
+            bluepane_engine::Column::Created,
+            bluepane_engine::Column::Modified
+        ]
+    );
+    assert_eq!(session.density(), bluepane_engine::Density::Compact);
+    // The panels still list their files.
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+}

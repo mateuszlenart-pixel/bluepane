@@ -390,6 +390,7 @@ mod tests {
                 },
                 size: i as u64,
                 modified: None,
+                created: None,
                 hidden: false,
             })
             .collect();
