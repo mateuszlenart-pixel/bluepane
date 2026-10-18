@@ -227,6 +227,16 @@ pub enum ClickMode {
     CtrlShift,
 }
 
+/// How a panel shows its entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PanelView {
+    /// Rows with name, type, size and date.
+    #[default]
+    List,
+    /// Tiles with a thumbnail for pictures and an icon for the rest.
+    Grid,
+}
+
 /// `entries` is what the user sees: the `..` row (when there is a parent directory)
 /// followed by the directory contents that match `filter`.
 #[derive(Debug, Clone)]
@@ -242,6 +252,8 @@ pub struct Panel {
     /// Quick filter: only entries whose name contains this text (case-insensitive) are shown.
     pub filter: String,
     pub sort: Sort,
+    /// A list of rows, or a grid of thumbnails (`viewmode`).
+    pub view: PanelView,
     /// Set while browsing the inside of an archive.
     pub archive: Option<ArchiveView>,
     /// Set while the panel shows a list of files (search results); `cwd` stays where the
@@ -275,6 +287,7 @@ impl Panel {
                 key: SortKey::Name,
                 descending: false,
             },
+            view: PanelView::List,
             archive: None,
             virtual_list: None,
             remote: None,
@@ -299,6 +312,7 @@ impl Panel {
                 key: SortKey::Name,
                 descending: false,
             },
+            view: PanelView::List,
             archive: None,
             virtual_list: None,
             remote: None,

@@ -390,3 +390,38 @@ fn a_picture_opens_in_the_page_view_and_is_drawn() {
         session.status
     );
 }
+
+#[test]
+fn the_grid_view_draws_tiles_and_the_arrows_move_by_rows() {
+    let (tmp, mut harness) = window();
+    for i in 0..12 {
+        std::fs::write(tmp.path().join(format!("left/plik{i:02}.txt")), "x").unwrap();
+    }
+    harness.run_steps(2);
+    command(&mut harness, "refresh");
+    command(&mut harness, "viewmode grid");
+    harness.run_steps(4);
+    assert_eq!(
+        harness.state_mut().session_mut().active_panel().view,
+        bluepane_engine::PanelView::Grid
+    );
+    let before = harness.state_mut().session_mut().active_panel().cursor;
+    harness.key_press(egui::Key::ArrowRight);
+    harness.run_steps(2);
+    assert_eq!(
+        harness.state_mut().session_mut().active_panel().cursor,
+        before + 1
+    );
+    harness.key_press(egui::Key::ArrowDown);
+    harness.run_steps(2);
+    let after = harness.state_mut().session_mut().active_panel().cursor;
+    assert!(
+        after > before + 1,
+        "down moves by a whole row of tiles: {before} -> {after}"
+    );
+    command(&mut harness, "viewmode");
+    assert_eq!(
+        harness.state_mut().session_mut().active_panel().view,
+        bluepane_engine::PanelView::List
+    );
+}
