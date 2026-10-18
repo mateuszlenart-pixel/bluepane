@@ -63,7 +63,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | Komenda | Opis |
 | --- | --- |
 | `pack [opcje]` | pakuje zaznaczone do archiwum w drugim panelu (zip, 7z, tar.gz; okno ustawień bez opcji; Alt+F5) |
-| `unpack [opcje]` | rozpakowuje archiwum pod kursorem albo otwarte do drugiego panelu (Alt+F9) |
+| `unpack [opcje]` | rozpakowuje archiwum pod kursorem albo otwarte do drugiego panelu; `-h` obok archiwum, `-s` do podkatalogu o nazwie archiwum (Alt+F9) |
 | `testarchive [opcje]` | sprawdza archiwum bez rozpakowywania |
 
 ## Podgląd i dokumenty

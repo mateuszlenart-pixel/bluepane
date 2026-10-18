@@ -133,6 +133,58 @@ impl Session {
         b.items
     }
 
+    /// The buttons over the function keys: the few actions that fit what is marked or under
+    /// the cursor right now (an archive, a document, several files, two folders, a file on a
+    /// server). Empty when nothing special is pointed at.
+    pub fn action_bar(&self) -> Vec<MenuItem> {
+        let panel = self.active_panel();
+        let other = &self.panels[1 - self.active];
+        let is_local = |p: &crate::Panel| {
+            p.remote.is_none() && p.archive.is_none() && p.virtual_list.is_none()
+        };
+        let mut b = Builder {
+            session: self,
+            items: Vec::new(),
+            new_group: false,
+        };
+        let targets = panel.target_entries();
+        if panel.archive.is_some() {
+            b.add("Rozpakuj całe archiwum do drugiego panelu", "unpack");
+            b.add("Rozpakuj obok archiwum", "unpack -h");
+            return b.items;
+        }
+        if let [entry] = targets.as_slice() {
+            match class_of(entry) {
+                FileClass::Archive if is_local(panel) => {
+                    b.add("Rozpakuj tutaj", "unpack -h");
+                    b.add("Rozpakuj do podkatalogu", "unpack -h -s");
+                    b.add("Rozpakuj do drugiego panelu", "unpack");
+                }
+                FileClass::Document | FileClass::Text | FileClass::Code if !entry.is_dir() => {
+                    b.add("Podgląd", "view");
+                    if panel.remote.is_some() {
+                        b.add("Edytuj na serwerze", "edit");
+                    }
+                }
+                _ if panel.remote.is_some() && !entry.is_dir() => {
+                    b.add("Edytuj na serwerze", "edit");
+                    b.add("Pobierz do drugiego panelu", "copy");
+                }
+                _ => {}
+            }
+        } else if targets.len() > 1 && is_local(panel) {
+            b.add(&format!("Spakuj ({})…", targets.len()), "pack");
+            b.add("Zmień nazwy zbiorowo…", "multirename");
+        }
+        // Two different folders side by side: compare them.
+        let only_folders = targets.iter().all(|e| e.is_dir());
+        if is_local(panel) && is_local(other) && panel.cwd != other.cwd && only_folders {
+            b.group();
+            b.add("Porównaj / synchronizuj katalogi paneli", "sync");
+        }
+        b.items
+    }
+
     /// `info`: what the entry under the cursor is, or a summary of the marked ones.
     pub(crate) fn show_info(&mut self) -> Result<(), EngineError> {
         let panel = self.active_panel();
@@ -281,5 +333,67 @@ mod tests {
         // A folder is entered, not opened in a program (and nothing is started by the test).
         assert!(s.run_line("open").is_err());
         assert!(s.status.contains("katalog"), "{}", s.status);
+    }
+
+    #[test]
+    fn the_action_bar_follows_what_is_pointed_at() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = session(tmp.path());
+        std::fs::write(tmp.path().join("left/paczka.zip"), b"PK\x05\x06").unwrap();
+        std::fs::write(tmp.path().join("left/raport.pdf"), b"%PDF-1.4").unwrap();
+        s.run_line("refresh").unwrap();
+
+        s.run_line("select paczka.zip").unwrap();
+        s.run_line("unselectall").unwrap();
+        let archive = s.action_bar();
+        assert_eq!(
+            lines(&archive)[..3],
+            ["unpack -h", "unpack -h -s", "unpack"]
+        );
+
+        s.run_line("select raport.pdf").unwrap();
+        s.run_line("unselectall").unwrap();
+        assert_eq!(lines(&s.action_bar()), ["view"]);
+
+        s.run_line("select a.txt").unwrap();
+        s.run_line("select b.txt").unwrap();
+        let many = s.action_bar();
+        assert!(lines(&many).contains(&"pack") && lines(&many).contains(&"multirename"));
+        assert!(many[0].label.contains("(2)"), "{}", many[0].label);
+        assert!(
+            !lines(&many).contains(&"sync"),
+            "files are marked, not folders"
+        );
+
+        // A folder (or nothing) with two different folders in the panels: compare them.
+        s.run_line("unselectall").unwrap();
+        s.run_line("select katalog").unwrap();
+        s.run_line("unselectall").unwrap();
+        assert_eq!(lines(&s.action_bar()), ["sync"]);
+        // The same folder on both sides: nothing to compare.
+        s.run_line(&format!("cd {}", tmp.path().join("right").display()))
+            .unwrap();
+        assert!(s.action_bar().is_empty());
+    }
+
+    #[test]
+    fn unpack_here_extracts_next_to_the_archive() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = session(tmp.path());
+        // `pack` writes the archive into the other panel (right).
+        s.run_line("select a.txt").unwrap();
+        s.run_line("pack dane.zip").unwrap();
+        s.wait_idle();
+        assert!(tmp.path().join("right/dane.zip").exists(), "{}", s.status);
+        s.run_line("switch").unwrap();
+        s.run_line("select dane.zip").unwrap();
+        s.run_line("unselectall").unwrap();
+        s.run_line("unpack -h -s").unwrap();
+        s.wait_idle();
+        assert!(tmp.path().join("right/dane/a.txt").exists(), "{}", s.status);
+        assert!(
+            !tmp.path().join("left/dane").exists(),
+            "not into the other panel"
+        );
     }
 }

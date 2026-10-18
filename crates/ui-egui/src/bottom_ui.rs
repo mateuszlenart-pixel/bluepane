@@ -168,6 +168,36 @@ impl BluepaneUi {
         }
     }
 
+    /// A row of the actions that fit what is pointed at (an archive, a document, several
+    /// files, two folders); nothing when there is nothing special to offer.
+    pub(crate) fn action_bar_ui(&mut self, ui: &mut egui::Ui) {
+        let items = self.session.action_bar();
+        if items.is_empty() {
+            return;
+        }
+        let mut line: Option<String> = None;
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(egui_phosphor::regular::LIGHTNING).color(self.theme.accent),
+            );
+            for item in &items {
+                if item.separator {
+                    ui.separator();
+                }
+                let mut button = egui::Button::new(&item.label).small();
+                if let Some(key) = &item.shortcut {
+                    button = button.shortcut_text(key);
+                }
+                if ui.add(button).clicked() {
+                    line = Some(item.line.clone());
+                }
+            }
+        });
+        if let Some(line) = line {
+            self.dispatch(&line);
+        }
+    }
+
     /// Two rows of buttons, each spread over the whole width.
     pub(crate) fn fkey_bar(&mut self, ui: &mut egui::Ui) {
         let theme = self.theme.clone();

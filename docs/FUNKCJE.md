@@ -22,6 +22,18 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Pasek akcji
+
+Nad klawiszami funkcyjnymi pojawia się rząd przycisków (ikona błyskawicy) z akcjami, które pasują do tego, co jest pod kursorem albo zaznaczone; gdy nic szczególnego nie jest wskazane, pasek znika:
+
+- **archiwum**: Rozpakuj tutaj, Rozpakuj do podkatalogu (o nazwie archiwum), Rozpakuj do drugiego panelu; wewnątrz otwartego archiwum: rozpakuj całe do drugiego panelu albo obok archiwum,
+- **dokument, tekst, kod**: Podgląd (na serwerze także Edytuj na serwerze),
+- **inny plik na serwerze**: Edytuj na serwerze, Pobierz do drugiego panelu,
+- **kilka zaznaczonych plików**: Spakuj (z liczbą), Zmień nazwy zbiorowo,
+- **katalog albo nic, a w panelach dwa różne katalogi na dysku**: Porównaj / synchronizuj katalogi paneli.
+
+Przyciski to te same komendy co klawisze (np. „Rozpakuj tutaj” to `unpack -h`, „do podkatalogu” to `unpack -h -s`); skrót jest podany obok, jeśli jest.
+
 ## Zmiana nazwy w wierszu i powiadomienia
 
 **F2** (`rename`) zmienia nazwę w samym wierszu listy: nazwa staje się polem tekstowym, a zaznaczona jest część bez rozszerzenia (dla katalogów cała nazwa), więc wystarczy wpisać nową nazwę, a rozszerzenie zostaje. Enter zatwierdza, Esc anuluje, kliknięcie w inny wiersz też kończy bez zmiany. Gdy wiersz nie jest widoczny (np. przez filtr), program pyta o nazwę w oknie, jak dawniej.

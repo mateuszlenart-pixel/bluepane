@@ -199,6 +199,8 @@ pub struct UnpackArgs {
     pub password: Option<String>,
     /// `-s`: extract into a subfolder named after the archive.
     pub subfolder: bool,
+    /// `-h`: extract next to the archive ("here") instead of into the other panel.
+    pub here: bool,
 }
 
 /// What `quick` does: switch Quick View on or off, scroll its text, or turn its pages.
@@ -721,7 +723,8 @@ fn parse_unpack(args: &str) -> Result<UnpackArgs, EngineError> {
     let (words, switches) = split_switches(args);
     if !words.is_empty() {
         return Err(EngineError(
-            "użycie: unpack [-s] [-p<hasło>] (archiwum wskazuje kursor lub otwarty panel)".into(),
+            "użycie: unpack [-h] [-s] [-p<hasło>] (archiwum wskazuje kursor lub otwarty panel)"
+                .into(),
         ));
     }
     let mut unpack = UnpackArgs::default();
@@ -730,6 +733,8 @@ fn parse_unpack(args: &str) -> Result<UnpackArgs, EngineError> {
             unpack.password = Some(password.to_string());
         } else if switch == "-s" {
             unpack.subfolder = true;
+        } else if switch == "-h" {
+            unpack.here = true;
         } else {
             return Err(EngineError(format!("nieznany przełącznik {switch}")));
         }
@@ -1457,7 +1462,15 @@ mod tests {
             Command::parse("unpack -s -ppw"),
             Ok(Command::Unpack(UnpackArgs {
                 password: Some("pw".into()),
-                subfolder: true
+                subfolder: true,
+                here: false,
+            }))
+        );
+        assert_eq!(
+            Command::parse("unpack -h"),
+            Ok(Command::Unpack(UnpackArgs {
+                here: true,
+                ..UnpackArgs::default()
             }))
         );
         assert_eq!(

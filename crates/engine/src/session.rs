@@ -2044,7 +2044,14 @@ impl Session {
     fn unpack(&mut self, args: &UnpackArgs) -> Result<(), EngineError> {
         self.deny_remote("rozpakowanie")?;
         let (archive, listing, known_password) = self.archive_target()?;
-        let base = self.other_directory()?;
+        let base = if args.here {
+            archive
+                .parent()
+                .map(Path::to_path_buf)
+                .ok_or_else(|| EngineError("archiwum nie ma katalogu nadrzędnego".into()))?
+        } else {
+            self.other_directory()?
+        };
         let dest = if args.subfolder {
             let name = archive
                 .file_name()
