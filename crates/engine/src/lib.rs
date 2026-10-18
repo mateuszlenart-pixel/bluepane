@@ -16,6 +16,7 @@ mod format;
 mod job;
 mod jump;
 mod keymap;
+mod keysheet;
 mod mask;
 mod multirename;
 mod navbar;
@@ -72,6 +73,7 @@ pub use job::{
 };
 pub use jump::{JumpEntry, Visits};
 pub use keymap::Keymap;
+pub use keysheet::KeyHelp;
 pub use mask::Mask;
 pub use multirename::{RenameEntry, RenameView};
 pub use navbar::{crumbs, Crumb, DiskUsage};

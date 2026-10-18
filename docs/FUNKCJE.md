@@ -22,6 +22,12 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Ściąga klawiszy
+
+- **`?`** (albo komenda `keys`) otwiera ściągę ze wszystkimi skrótami panelu, pogrupowanymi jak w [KOMENDY.md](KOMENDY.md), z krótkim opisem; widać w niej także klawisze zmienione komendą `bind`. Esc, `?` albo przycisk „Zamknij” ją chowa. Znak `?` nie trafia przy tym do szybkiego filtra.
+- **Przytrzymanie samego Ctrl albo samego Alt** przez chwilę (ok. 0,7 s) pokazuje tylko skróty z tym klawiszem; puszczenie klawisza zamyka ściągę. To samo z klawiatury: `keys ctrl`, `keys alt`, `keys shift`.
+- **Która zakładka ma klawiaturę**: tytuł zakładki doku, do której trafiają klawisze (aktywny panel albo kliknięte narzędzie), ma ikonę klawiatury i kolor akcentu.
+
 ## Pasek akcji
 
 Nad klawiszami funkcyjnymi pojawia się rząd przycisków (ikona błyskawicy) z akcjami, które pasują do tego, co jest pod kursorem albo zaznaczone; gdy nic szczególnego nie jest wskazane, pasek znika:

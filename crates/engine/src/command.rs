@@ -80,6 +80,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "go",
     "dragto",
     "drop",
+    "keys",
     "menu",
     "open",
     "info",
@@ -323,6 +324,8 @@ pub enum Command {
     DragTo(bool, crate::DropTarget),
     /// Files dropped from outside into a panel (or a folder row of it); they are copied.
     Drop(crate::DropTarget, Vec<PathBuf>),
+    /// Show or hide the key cheat sheet; the argument keeps only Ctrl or Alt keys.
+    Keys(Option<String>),
     /// Open the context menu of the active panel (Shift+F10).
     Menu,
     /// Open the file under the cursor in the system's default application.
@@ -610,6 +613,13 @@ impl Command {
             "go" => need_arg("adres").map(Command::Go),
             "dragto" => parse_dragto(rest),
             "drop" => parse_drop(rest),
+            "keys" => match rest.to_ascii_lowercase().as_str() {
+                "" => Ok(Command::Keys(None)),
+                "ctrl" => Ok(Command::Keys(Some("Ctrl+".into()))),
+                "alt" => Ok(Command::Keys(Some("Alt+".into()))),
+                "shift" => Ok(Command::Keys(Some("Shift+".into()))),
+                _ => Err(EngineError("keys: użycie: keys [ctrl|alt|shift]".into())),
+            },
             "menu" => Ok(Command::Menu),
             "open" => Ok(Command::Open),
             "info" => Ok(Command::Info),

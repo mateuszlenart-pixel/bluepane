@@ -208,7 +208,7 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 - [x] 12g **Przeciąganie**: między panelami (kopiuj; z Shift przenieś), upuszczanie plików z pulpitu/menedżera systemu do panelu
 - [x] 12h **Zmiana nazwy w wierszu** (F2 edytuje nazwę na liście; rozszerzenie nie jest zaznaczane) i **powiadomienia** po skończonych zadaniach (w rogu okna, z przyciskiem „Cofnij", gdzie się da)
 - [x] 12i **Pasek akcji zależny od zaznaczenia**: archiwum → „Rozpakuj tutaj / do podkatalogu", PDF/dokument → „Podgląd", dwa katalogi → „Porównaj / Synchronizuj", plik na serwerze → „Edytuj"
-- [ ] 12j **Ściąga klawiszy**: przytrzymanie Ctrl (albo `?`) nakłada skróty na przyciski; wyraźny wskaźnik, która zakładka doku ma klawiaturę
+- [x] 12j **Ściąga klawiszy**: przytrzymanie Ctrl (albo `?`) nakłada skróty na przyciski; wyraźny wskaźnik, która zakładka doku ma klawiaturę
 - [ ] 12k **Obrazy**: widok miniatur (przełącznik lista/siatka) i podgląd obrazów w Quick View i F3 (zależność `image` do zgody; tylko popularne formaty)
 - [ ] 12l **Kolumny**: wybór kolumn (uprawnienia, właściciel, data utworzenia, suma SHA-256, status gita), szerokość przeciągana myszą, zapamiętana; gęstość zwarta/wygodna; **jasny motyw** (po decyzji właściciela) 
 - [ ] 12m Dok — poprawki z etapu 10 (wąskie panele: zrobione w 11b): komendy `layout save`/`layout reset`, Quick View jako zakładka doku (do wyboru zamiast zastępowania panelu), oba panele zawsze widoczne
