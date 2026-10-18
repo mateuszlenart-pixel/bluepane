@@ -43,10 +43,44 @@ pub struct RenderedPage {
     pub image: Arc<PageImage>,
 }
 
+/// What the pages come from: a PDF, or one picture (PNG, JPEG, ...) as a single page.
+#[derive(Debug, Clone)]
+enum Pages {
+    Pdf(PdfDocument),
+    Picture(Arc<PageImage>),
+}
+
+impl Pages {
+    fn count(&self) -> usize {
+        match self {
+            Pages::Pdf(doc) => doc.pages(),
+            Pages::Picture(_) => 1,
+        }
+    }
+
+    /// In points; a picture's pixels count as 96 per inch, so 100 % shows it pixel for pixel.
+    fn size(&self, page: usize) -> Option<(f32, f32)> {
+        match self {
+            Pages::Pdf(doc) => doc.page_size(page),
+            Pages::Picture(p) => Some((p.width as f32 * 0.75, p.height as f32 * 0.75)),
+        }
+    }
+
+    fn render(&self, page: usize, width: u32) -> Result<PageImage, String> {
+        match self {
+            Pages::Pdf(doc) => doc.render(page, width).map_err(|e| e.to_string()),
+            Pages::Picture(p) => Ok(bluepane_docs::scale_picture(p, width)),
+        }
+    }
+}
+
+/// Picture files bigger than this are not opened in the viewer.
+pub const MAX_PICTURE_FILE: u64 = 200 * 1024 * 1024;
+
 #[derive(Debug)]
 struct Shared {
     state: PageState,
-    doc: Option<PdfDocument>,
+    doc: Option<Pages>,
     rendered: Option<RenderedPage>,
     /// The picture being drawn right now: (page, width).
     rendering: Option<(usize, u32)>,
@@ -92,7 +126,7 @@ impl Drop for PageViewer {
 }
 
 impl PageViewer {
-    fn new(source: PathBuf, state: PageState, doc: Option<PdfDocument>, fallback: bool) -> Self {
+    fn new(source: PathBuf, state: PageState, doc: Option<Pages>, fallback: bool) -> Self {
         PageViewer {
             source,
             page: 0,
@@ -120,7 +154,35 @@ impl PageViewer {
 
     /// An already opened PDF.
     pub fn from_document(source: &Path, doc: PdfDocument) -> PageViewer {
-        PageViewer::new(source.to_path_buf(), PageState::Ready, Some(doc), false)
+        PageViewer::new(
+            source.to_path_buf(),
+            PageState::Ready,
+            Some(Pages::Pdf(doc)),
+            false,
+        )
+    }
+
+    /// A picture file (PNG, JPEG, GIF, BMP, WebP, ICO) as one page.
+    pub fn from_picture(source: &Path) -> Result<PageViewer, EngineError> {
+        let size = std::fs::metadata(source)
+            .map_err(|e| EngineError(format!("nie można odczytać obrazu: {e}")))?
+            .len();
+        if size > MAX_PICTURE_FILE {
+            return Err(EngineError(format!(
+                "obraz jest za duży do podglądu ({})",
+                crate::human_size(size)
+            )));
+        }
+        let bytes = std::fs::read(source)
+            .map_err(|e| EngineError(format!("nie można odczytać obrazu: {e}")))?;
+        let picture =
+            bluepane_docs::decode_picture(&bytes).map_err(|e| EngineError(e.to_string()))?;
+        Ok(PageViewer::new(
+            source.to_path_buf(),
+            PageState::Ready,
+            Some(Pages::Picture(Arc::new(picture))),
+            false,
+        ))
     }
 
     /// A document that LibreOffice turns into a PDF in `scratch` on a thread of its own.
@@ -142,7 +204,7 @@ impl PageViewer {
             let mut shared = shared.lock().unwrap_or_else(|e| e.into_inner());
             match result {
                 Ok(doc) => {
-                    shared.doc = Some(doc);
+                    shared.doc = Some(Pages::Pdf(doc));
                     shared.state = PageState::Ready;
                 }
                 Err(error) => shared.state = PageState::Failed(error.to_string()),
@@ -156,12 +218,12 @@ impl PageViewer {
     }
 
     pub fn pages(&self) -> usize {
-        self.lock().doc.as_ref().map_or(0, PdfDocument::pages)
+        self.lock().doc.as_ref().map_or(0, Pages::count)
     }
 
     /// The current page's size in points, when known.
     pub fn page_size(&self) -> Option<(f32, f32)> {
-        self.lock().doc.as_ref()?.page_size(self.page)
+        self.lock().doc.as_ref()?.size(self.page)
     }
 
     pub fn go(&mut self, target: PageMove) {
@@ -228,7 +290,7 @@ impl PageViewer {
                         image: Arc::new(image),
                     });
                 }
-                Err(error) => shared.state = PageState::Failed(error.to_string()),
+                Err(error) => shared.state = PageState::Failed(error),
             }
         });
     }
@@ -333,6 +395,15 @@ impl Session {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
+        // A file that is not really a picture (a wrong extension) goes to the text viewer below.
+        if bluepane_docs::is_picture(file) {
+            if let Ok(viewer) = PageViewer::from_picture(file) {
+                self.remove_preview_dir();
+                self.preview_dir = Some(dir);
+                self.show_pages(viewer);
+                return (format!("Podgląd {origin}: {name}"), false);
+            }
+        }
         let kind = bluepane_docs::kind_of(file);
         if kind.is_some() {
             self.remove_preview_dir();
@@ -369,7 +440,7 @@ impl Session {
         }
     }
 
-    fn show_pages(&mut self, viewer: PageViewer) {
+    pub(crate) fn show_pages(&mut self, viewer: PageViewer) {
         let name = viewer
             .source
             .file_name()
@@ -718,5 +789,72 @@ mod tests {
         let text = std::fs::read_to_string(s.preview_dir.as_ref().unwrap().join("letter.docx.txt"))
             .unwrap();
         assert!(text.contains("Dear reader"));
+    }
+
+    /// A 30 × 10 PNG file.
+    fn write_png(path: &Path) {
+        let picture = image::RgbaImage::from_pixel(30, 10, image::Rgba([10, 200, 30, 255]));
+        picture.save(path).unwrap();
+    }
+
+    fn wait_for_any_picture(viewer: &PageViewer, width: u32) -> RenderedPage {
+        for _ in 0..2000 {
+            viewer.want(width);
+            if let Some(page) = viewer.rendered().filter(|r| r.width == width) {
+                return page;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        panic!("no picture: {:?}", viewer.state());
+    }
+
+    #[test]
+    fn a_picture_is_one_page_drawn_at_the_asked_width() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("zdjęcie.png");
+        write_png(&path);
+        let viewer = PageViewer::from_picture(&path).unwrap();
+        assert_eq!(viewer.pages(), 1);
+        assert_eq!(viewer.state(), PageState::Ready);
+        // 30 px at 96 dpi = 22.5 points.
+        assert_eq!(viewer.page_size(), Some((22.5, 7.5)));
+        let page = wait_for_any_picture(&viewer, 60);
+        assert_eq!((page.image.width, page.image.height), (60, 20));
+        assert!(PageViewer::from_picture(&tmp.path().join("nie-ma.png")).is_err());
+    }
+
+    #[test]
+    fn f3_and_quick_view_show_pictures_and_a_fake_one_falls_back_to_text() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (left, right) = (tmp.path().join("left"), tmp.path().join("right"));
+        std::fs::create_dir_all(&left).unwrap();
+        std::fs::create_dir_all(&right).unwrap();
+        write_png(&left.join("obraz.png"));
+        std::fs::write(left.join("udawany.png"), "to nie jest obraz").unwrap();
+        let mut s = Session::new(&left, &right);
+        s.run_line("select obraz.png").unwrap();
+        s.run_line("unselectall").unwrap();
+        s.run_line("view").unwrap();
+        assert!(
+            s.pages.as_ref().is_some_and(|p| p.pages() == 1),
+            "{}",
+            s.status
+        );
+        assert!(s.viewer.is_none());
+        s.run_line("pageclose").unwrap();
+
+        s.run_line("select udawany.png").unwrap();
+        s.run_line("unselectall").unwrap();
+        s.run_line("view").unwrap();
+        assert!(
+            s.pages.is_none() && s.viewer.is_some(),
+            "a fake picture opens as text"
+        );
+        s.run_line("viewer close").unwrap();
+
+        s.run_line("select obraz.png").unwrap();
+        s.run_line("unselectall").unwrap();
+        let view = crate::quickview::build(&crate::QuickKey::File(left.join("obraz.png")));
+        assert!(matches!(view.content, crate::QuickContent::Pages(_)));
     }
 }

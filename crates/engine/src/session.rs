@@ -1787,6 +1787,13 @@ impl Session {
             return self.preview_from_archive();
         }
         let path = self.entry_to_open()?;
+        if bluepane_docs::is_picture(&path) {
+            // A file named .png that is not a picture still opens as text / hex below.
+            if let Ok(viewer) = crate::PageViewer::from_picture(&path) {
+                self.show_pages(viewer);
+                return Ok(());
+            }
+        }
         match bluepane_docs::kind_of(&path) {
             Some(bluepane_docs::Kind::Pdf) => return self.open_local_pdf(&path, None),
             // Word, Excel, OpenDocument: pages through LibreOffice when it is there, the

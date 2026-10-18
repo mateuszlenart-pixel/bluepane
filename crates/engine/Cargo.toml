@@ -22,6 +22,7 @@ tempfile.workspace = true
 
 [dev-dependencies]
 zip.workspace = true
+image.workspace = true
 
 [lints]
 workspace = true
