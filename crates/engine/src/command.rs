@@ -80,6 +80,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "go",
     "dragto",
     "drop",
+    "viewmode",
     "keys",
     "menu",
     "open",
@@ -324,6 +325,8 @@ pub enum Command {
     DragTo(bool, crate::DropTarget),
     /// Files dropped from outside into a panel (or a folder row of it); they are copied.
     Drop(crate::DropTarget, Vec<PathBuf>),
+    /// The active panel as a list or as a grid of thumbnails (`None` switches).
+    PanelView(Option<crate::PanelView>),
     /// Show or hide the key cheat sheet; the argument keeps only Ctrl or Alt keys.
     Keys(Option<String>),
     /// Open the context menu of the active panel (Shift+F10).
@@ -613,6 +616,12 @@ impl Command {
             "go" => need_arg("adres").map(Command::Go),
             "dragto" => parse_dragto(rest),
             "drop" => parse_drop(rest),
+            "viewmode" => match rest.to_ascii_lowercase().as_str() {
+                "" => Ok(Command::PanelView(None)),
+                "list" => Ok(Command::PanelView(Some(crate::PanelView::List))),
+                "grid" => Ok(Command::PanelView(Some(crate::PanelView::Grid))),
+                _ => Err(EngineError("viewmode: użycie: viewmode [list|grid]".into())),
+            },
             "keys" => match rest.to_ascii_lowercase().as_str() {
                 "" => Ok(Command::Keys(None)),
                 "ctrl" => Ok(Command::Keys(Some("Ctrl+".into()))),

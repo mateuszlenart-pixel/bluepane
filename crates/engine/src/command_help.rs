@@ -58,6 +58,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(NAV, "select", "select <nazwa>", "ustawia kursor na pozycji o tej nazwie i zaznacza ją"),
     h(NAV, "filter", "filter [tekst]", "zawęża listę do nazw zawierających tekst; bez tekstu czyści filtr (Esc)"),
     h(NAV, "dirsize", "dirsize", "liczy w tle rozmiar zaznaczonych katalogów albo tego pod kursorem (Alt+Shift+Enter)"),
+    h(NAV, "viewmode", "viewmode [list|grid]", "aktywny panel jako lista albo siatka miniatur (obrazy z podglądem, reszta z ikoną); bez argumentu przełącza (Ctrl+Shift+G)"),
     h(NAV, "places", "places", "pokazuje lub chowa pasek „Miejsca”: dyski z wolnym miejscem, ulubione, serwery i ostatnie katalogi (Ctrl+B)"),
     h(NAV, "fav", "fav [ścieżka]|del <ścieżka>", "dodaje katalog (domyślnie bieżący) do ulubionych albo go z nich usuwa; `fav del` usuwa po ścieżce"),
     h(SEL, "toggle", "toggle", "zaznacza lub odznacza pozycję pod kursorem i schodzi niżej (Spacja, Insert)"),

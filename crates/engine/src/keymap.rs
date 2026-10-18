@@ -44,6 +44,7 @@ impl Default for Keymap {
             ("Ctrl+P", "jump"),
             ("Ctrl+B", "places"),
             ("Shift+F10", "menu"),
+            ("Ctrl+Shift+G", "viewmode"),
             ("Questionmark", "keys"),
             ("Shift+Questionmark", "keys"),
             ("Ctrl+Shift+Num1", "copynames stem"),

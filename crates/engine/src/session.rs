@@ -281,6 +281,8 @@ pub struct Session {
     pub palette: Option<crate::Palette>,
     /// A folder to open once the connection to the named site is up (`go sftp://host/dir`).
     pub(crate) after_connect: Option<(String, String)>,
+    /// Thumbnails of pictures for the grid view.
+    pub thumbnails: crate::Thumbnails,
     /// The key cheat sheet is shown, with the prefix of the keys it lists (`""` = all).
     pub key_sheet_open: Option<String>,
     /// The `menu` command asked for the context menu (the front end takes the request).
@@ -455,6 +457,7 @@ impl Session {
             after_connect: None,
             menu_requested: false,
             key_sheet_open: None,
+            thumbnails: crate::Thumbnails::default(),
             places_open: false,
             favorites: crate::Favorites::default(),
             visits: crate::Visits::default(),
@@ -615,6 +618,17 @@ impl Session {
             Command::Go(text) => self.omnibox(&text)?,
             Command::DragTo(remove, target) => self.drag_to(remove, target)?,
             Command::Drop(target, paths) => self.drop_files(target, paths)?,
+            Command::PanelView(mode) => {
+                let panel = self.active_panel_mut();
+                panel.view = mode.unwrap_or(match panel.view {
+                    crate::PanelView::List => crate::PanelView::Grid,
+                    crate::PanelView::Grid => crate::PanelView::List,
+                });
+                self.status = match self.active_panel().view {
+                    crate::PanelView::List => "Widok: lista".into(),
+                    crate::PanelView::Grid => "Widok: miniatury".into(),
+                };
+            }
             Command::Keys(prefix) => {
                 let prefix = prefix.unwrap_or_default();
                 self.key_sheet_open = match &self.key_sheet_open {

@@ -32,6 +32,7 @@ mod remote_job;
 mod scan;
 mod session;
 mod settings;
+mod thumbs;
 mod tools;
 mod viewer;
 
@@ -81,8 +82,8 @@ pub use omnibox::{classify as classify_address, Hint, Target};
 pub use pageview::{PageMove, PageState, PageViewer, PageZoom, RenderedPage, ZoomChange};
 pub use palette::{rank as rank_commands, Palette, PaletteEntry};
 pub use panel::{
-    is_parent_entry, ArchiveView, ClickMode, Panel, RemoteView, Sort, SortKey, VirtualList,
-    PARENT_NAME,
+    is_parent_entry, ArchiveView, ClickMode, Panel, PanelView, RemoteView, Sort, SortKey,
+    VirtualList, PARENT_NAME,
 };
 pub use places::{FavoriteAction, Favorites, Place, PlaceSection};
 pub use queue::{FinishedJob, Notice, QueueLine};
@@ -92,6 +93,7 @@ pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };
 pub use settings::{normalize_key, DEFAULT_THEME, THEMES};
+pub use thumbs::{Thumbnails, THUMB_SIZE};
 pub use tools::Tool;
 pub use viewer::{Row, ViewMode, Viewer};
 

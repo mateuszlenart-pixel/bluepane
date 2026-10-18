@@ -8,6 +8,7 @@ mod context_ui;
 mod dock_ui;
 mod drag_ui;
 mod find_ui;
+mod grid_ui;
 mod keys_ui;
 mod omnibox_ui;
 mod pages_ui;
@@ -45,6 +46,10 @@ pub struct BluepaneUi {
     /// The open right-click menu: where it is and what it offers.
     context_menu: Option<ContextMenu>,
     toasts: Vec<toast_ui::Toast>,
+    /// Textures of the thumbnails in the grid view.
+    thumb_textures: grid_ui::Textures,
+    /// Tiles per row in each panel's grid, as drawn in the last frame.
+    grid_cols: [usize; 2],
     /// Since when Ctrl or Alt alone has been held (the key sheet appears after a moment).
     modifier_hold: Option<(&'static str, f64)>,
     /// The name being edited in its row has been given the keyboard.
@@ -100,6 +105,8 @@ impl BluepaneUi {
             path_text: [String::new(), String::new()],
             context_menu: None,
             toasts: Vec::new(),
+            thumb_textures: grid_ui::Textures::default(),
+            grid_cols: [1, 1],
             modifier_hold: None,
             rename_focused: false,
             inline_rename_drawn: false,
@@ -177,7 +184,8 @@ impl BluepaneUi {
             || self.session.scan.as_ref().is_some_and(|v| v.is_running())
             || self.session.dir_sizes.is_running()
             || self.session.disk_usage.is_asking()
-            || self.session.quick_pending();
+            || self.session.quick_pending()
+            || self.session.thumbnails.is_working();
         if self.session.is_busy() || searching {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
@@ -640,6 +648,21 @@ impl BluepaneUi {
             return;
         }
         for key in pressed {
+            // In the grid the arrows move by a tile sideways and by a row of tiles up and down.
+            if self.session.active_panel().view == bluepane_engine::PanelView::Grid {
+                let cols = self.grid_cols[self.session.active] as i64;
+                let step = match key.as_str() {
+                    "ArrowUp" => Some(-cols),
+                    "ArrowDown" => Some(cols),
+                    "ArrowLeft" => Some(-1),
+                    "ArrowRight" => Some(1),
+                    _ => None,
+                };
+                if let Some(step) = step {
+                    let _ = self.session.run_line(&format!("cursor {step}"));
+                    continue;
+                }
+            }
             // While a filter is being typed, Space is part of the name, not "select".
             if key == "Space" && !self.session.active_panel().filter.is_empty() {
                 let filter = format!("{} ", self.session.active_panel().filter);
@@ -1137,204 +1160,229 @@ impl BluepaneUi {
             row: None,
         });
         let mut right_clicked: Option<usize> = None;
-        egui::ScrollArea::vertical()
-            .id_salt(("panel", index))
-            .auto_shrink([false, false])
-            .max_height((ui.available_height() - footer_height).max(row_height * 3.0))
-            .show_rows(ui, row_height, panel.entries.len(), |ui, range| {
-                if is_active {
-                    let y =
-                        ui.min_rect().min.y + cursor.saturating_sub(range.start) as f32 * stride;
-                    if cursor < range.start || cursor >= range.end {
-                        let rect = Rect::from_min_size(
-                            egui::pos2(ui.min_rect().min.x, y),
-                            egui::vec2(1.0, row_height),
-                        );
-                        ui.scroll_to_rect(rect, None);
-                    }
-                }
-                for row in range {
-                    let entry = &panel.entries[row];
-                    let (rect, response) = ui.allocate_exact_size(
-                        egui::vec2(ui.available_width(), row_height),
-                        egui::Sense::click_and_drag(),
-                    );
-                    if entry.is_dir() && !bluepane_engine::is_parent_entry(entry) {
-                        zones.push(DropZone {
-                            rect,
-                            panel: index,
-                            row: Some(row + 1),
-                        });
-                    }
-                    if response.drag_started() {
-                        drag_started = Some(row);
-                    }
-                    let is_selected = panel.selected.contains(&entry.path);
-                    if row == cursor {
-                        // The cursor is a filled, outlined row; marks are text colour.
-                        let (fill, outline) = if is_active {
-                            (theme.cursor_fill, theme.cursor_stroke)
-                        } else {
-                            (theme.cursor_fill_inactive, theme.cursor_stroke_inactive)
-                        };
-                        ui.painter().rect(
-                            rect,
-                            2.0,
-                            fill,
-                            egui::Stroke::new(1.0, outline),
-                            egui::StrokeKind::Inside,
-                        );
-                    } else if response.hovered() {
-                        ui.painter().rect_filled(rect, 2.0, theme.hover);
-                    } else if row % 2 == 1 {
-                        ui.painter().rect_filled(rect, 0.0, theme.row_alt);
-                    }
-                    // The kind of file gives the icon and, unless the row is marked or hidden,
-                    // the colour of the name.
-                    let (icon, class_color) = theme.look(bluepane_engine::class_of(entry));
-                    let color = if is_selected {
-                        theme.selected
-                    } else if entry.hidden {
-                        theme.muted
-                    } else if matches!(
-                        bluepane_engine::class_of(entry),
-                        bluepane_engine::FileClass::Text | bluepane_engine::FileClass::Other
-                    ) {
-                        theme.text
-                    } else {
-                        class_color
-                    };
-                    let icon_color = if is_selected {
-                        theme.selected
-                    } else if entry.hidden {
-                        theme.muted
-                    } else {
-                        class_color
-                    };
-                    let cols = Columns::split(rect);
-                    let (stem, ext) = name_parts(&entry.name, entry.is_dir());
-                    let mut name = if entry.is_dir() {
-                        format!("[{stem}]")
-                    } else {
-                        stem.to_string()
-                    };
-                    // In a list of results the folder is part of what identifies a row.
-                    if panel.virtual_list.is_some() && !bluepane_engine::is_parent_entry(entry) {
-                        if let Some(dir) = entry.path.parent() {
-                            name = format!("{name}    {}", dir.display());
-                        }
-                    }
-                    let known_size = session.entry_size(entry);
-                    let size = match (entry.is_dir(), known_size) {
-                        (true, None) => "<DIR>".to_string(),
-                        (_, Some(bytes)) => human_size(bytes),
-                        (false, None) => String::new(),
-                    };
-                    // A bar behind the size, as long as the size is relative to the biggest.
-                    if let Some(bytes) = known_size.filter(|b| {
-                        *b > 0
-                            && cols.size.width() > 1.0
-                            && !bluepane_engine::is_parent_entry(entry)
-                    }) {
-                        let fraction = (bytes as f64 / biggest as f64).clamp(0.02, 1.0) as f32;
-                        let bar = Rect::from_min_max(
-                            egui::pos2(
-                                cols.size.right() - cols.size.width() * fraction,
-                                rect.top() + 2.0,
-                            ),
-                            egui::pos2(cols.size.right(), rect.bottom() - 2.0),
-                        );
-                        ui.painter().rect_filled(
-                            bar,
-                            2.0,
-                            theme
-                                .accent
-                                .gamma_multiply(if entry.is_dir() { 0.30 } else { 0.18 }),
-                        );
-                    }
-                    let painter = ui.painter().clone();
-                    let y = rect.center().y;
-                    // Each text is clipped to its own column so long names do not spill over.
-                    let cell = |col: Rect, align: Align2, text: String| {
-                        let x = if align == Align2::RIGHT_CENTER {
-                            col.right() - COLUMN_PAD
-                        } else {
-                            col.left() + COLUMN_PAD
-                        };
-                        painter.with_clip_rect(col).text(
-                            egui::pos2(x, y),
-                            align,
-                            text,
-                            font.clone(),
-                            color,
-                        );
-                    };
-                    // Icon in its own narrow column, then the name next to it.
-                    painter.with_clip_rect(cols.name).text(
-                        egui::pos2(cols.name.left() + COLUMN_PAD, y),
-                        Align2::LEFT_CENTER,
-                        icon,
-                        FontId::proportional(15.0),
-                        icon_color,
-                    );
-                    let name_col = Rect::from_min_max(
-                        egui::pos2(cols.name.left() + ICON_WIDTH, cols.name.top()),
-                        cols.name.max,
-                    );
-                    let renaming_here = row == cursor
-                        && inline_rename
-                            .as_ref()
-                            .is_some_and(|(path, _)| *path == entry.path);
-                    if renaming_here {
-                        let text = rename_text.get_or_insert_with(String::new);
-                        let id = egui::Id::new(("inline-rename", index));
-                        let edit = egui::TextEdit::singleline(text)
-                            .id(id)
-                            .font(font.clone())
-                            .desired_width(name_col.width());
-                        let response = ui.put(name_col.shrink2(egui::vec2(0.0, 1.0)), edit);
-                        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                            rename_end = Some(true);
-                        } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                            rename_end = Some(false);
-                        } else {
-                            response.request_focus();
-                        }
-                        if first_frame_of_rename {
-                            // Everything but the extension is selected, like in a file manager.
-                            let (stem, _) = bluepane_engine::name_parts(text, entry.is_dir());
-                            let range = egui::text::CCursorRange::two(
-                                egui::text::CCursor::new(0),
-                                egui::text::CCursor::new(stem.chars().count()),
+        let list_height = (ui.available_height() - footer_height).max(row_height * 3.0);
+        if panel.view == bluepane_engine::PanelView::Grid {
+            self.grid_cols[index] = grid_ui::columns(ui.available_width());
+            let input = grid_ui::grid(
+                ui,
+                index,
+                panel,
+                is_active,
+                &theme,
+                &session.thumbnails,
+                &mut self.thumb_textures,
+                &mut zones,
+                list_height,
+            );
+            clicked = input.clicked;
+            entered = input.entered;
+            right_clicked = input.right_clicked;
+            drag_started = input.drag_started;
+        } else {
+            egui::ScrollArea::vertical()
+                .id_salt(("panel", index))
+                .auto_shrink([false, false])
+                .max_height((ui.available_height() - footer_height).max(row_height * 3.0))
+                .show_rows(ui, row_height, panel.entries.len(), |ui, range| {
+                    if is_active {
+                        let y = ui.min_rect().min.y
+                            + cursor.saturating_sub(range.start) as f32 * stride;
+                        if cursor < range.start || cursor >= range.end {
+                            let rect = Rect::from_min_size(
+                                egui::pos2(ui.min_rect().min.x, y),
+                                egui::vec2(1.0, row_height),
                             );
-                            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), id) {
-                                state.cursor.set_char_range(Some(range));
-                                state.store(ui.ctx(), id);
+                            ui.scroll_to_rect(rect, None);
+                        }
+                    }
+                    for row in range {
+                        let entry = &panel.entries[row];
+                        let (rect, response) = ui.allocate_exact_size(
+                            egui::vec2(ui.available_width(), row_height),
+                            egui::Sense::click_and_drag(),
+                        );
+                        if entry.is_dir() && !bluepane_engine::is_parent_entry(entry) {
+                            zones.push(DropZone {
+                                rect,
+                                panel: index,
+                                row: Some(row + 1),
+                            });
+                        }
+                        if response.drag_started() {
+                            drag_started = Some(row);
+                        }
+                        let is_selected = panel.selected.contains(&entry.path);
+                        if row == cursor {
+                            // The cursor is a filled, outlined row; marks are text colour.
+                            let (fill, outline) = if is_active {
+                                (theme.cursor_fill, theme.cursor_stroke)
+                            } else {
+                                (theme.cursor_fill_inactive, theme.cursor_stroke_inactive)
+                            };
+                            ui.painter().rect(
+                                rect,
+                                2.0,
+                                fill,
+                                egui::Stroke::new(1.0, outline),
+                                egui::StrokeKind::Inside,
+                            );
+                        } else if response.hovered() {
+                            ui.painter().rect_filled(rect, 2.0, theme.hover);
+                        } else if row % 2 == 1 {
+                            ui.painter().rect_filled(rect, 0.0, theme.row_alt);
+                        }
+                        // The kind of file gives the icon and, unless the row is marked or hidden,
+                        // the colour of the name.
+                        let (icon, class_color) = theme.look(bluepane_engine::class_of(entry));
+                        let color = if is_selected {
+                            theme.selected
+                        } else if entry.hidden {
+                            theme.muted
+                        } else if matches!(
+                            bluepane_engine::class_of(entry),
+                            bluepane_engine::FileClass::Text | bluepane_engine::FileClass::Other
+                        ) {
+                            theme.text
+                        } else {
+                            class_color
+                        };
+                        let icon_color = if is_selected {
+                            theme.selected
+                        } else if entry.hidden {
+                            theme.muted
+                        } else {
+                            class_color
+                        };
+                        let cols = Columns::split(rect);
+                        let (stem, ext) = name_parts(&entry.name, entry.is_dir());
+                        let mut name = if entry.is_dir() {
+                            format!("[{stem}]")
+                        } else {
+                            stem.to_string()
+                        };
+                        // In a list of results the folder is part of what identifies a row.
+                        if panel.virtual_list.is_some() && !bluepane_engine::is_parent_entry(entry)
+                        {
+                            if let Some(dir) = entry.path.parent() {
+                                name = format!("{name}    {}", dir.display());
                             }
                         }
-                        rename_drawn = true;
-                    } else {
-                        cell(name_col, Align2::LEFT_CENTER, name);
+                        let known_size = session.entry_size(entry);
+                        let size = match (entry.is_dir(), known_size) {
+                            (true, None) => "<DIR>".to_string(),
+                            (_, Some(bytes)) => human_size(bytes),
+                            (false, None) => String::new(),
+                        };
+                        // A bar behind the size, as long as the size is relative to the biggest.
+                        if let Some(bytes) = known_size.filter(|b| {
+                            *b > 0
+                                && cols.size.width() > 1.0
+                                && !bluepane_engine::is_parent_entry(entry)
+                        }) {
+                            let fraction = (bytes as f64 / biggest as f64).clamp(0.02, 1.0) as f32;
+                            let bar = Rect::from_min_max(
+                                egui::pos2(
+                                    cols.size.right() - cols.size.width() * fraction,
+                                    rect.top() + 2.0,
+                                ),
+                                egui::pos2(cols.size.right(), rect.bottom() - 2.0),
+                            );
+                            ui.painter().rect_filled(
+                                bar,
+                                2.0,
+                                theme.accent.gamma_multiply(if entry.is_dir() {
+                                    0.30
+                                } else {
+                                    0.18
+                                }),
+                            );
+                        }
+                        let painter = ui.painter().clone();
+                        let y = rect.center().y;
+                        // Each text is clipped to its own column so long names do not spill over.
+                        let cell = |col: Rect, align: Align2, text: String| {
+                            let x = if align == Align2::RIGHT_CENTER {
+                                col.right() - COLUMN_PAD
+                            } else {
+                                col.left() + COLUMN_PAD
+                            };
+                            painter.with_clip_rect(col).text(
+                                egui::pos2(x, y),
+                                align,
+                                text,
+                                font.clone(),
+                                color,
+                            );
+                        };
+                        // Icon in its own narrow column, then the name next to it.
+                        painter.with_clip_rect(cols.name).text(
+                            egui::pos2(cols.name.left() + COLUMN_PAD, y),
+                            Align2::LEFT_CENTER,
+                            icon,
+                            FontId::proportional(15.0),
+                            icon_color,
+                        );
+                        let name_col = Rect::from_min_max(
+                            egui::pos2(cols.name.left() + ICON_WIDTH, cols.name.top()),
+                            cols.name.max,
+                        );
+                        let renaming_here = row == cursor
+                            && inline_rename
+                                .as_ref()
+                                .is_some_and(|(path, _)| *path == entry.path);
+                        if renaming_here {
+                            let text = rename_text.get_or_insert_with(String::new);
+                            let id = egui::Id::new(("inline-rename", index));
+                            let edit = egui::TextEdit::singleline(text)
+                                .id(id)
+                                .font(font.clone())
+                                .desired_width(name_col.width());
+                            let response = ui.put(name_col.shrink2(egui::vec2(0.0, 1.0)), edit);
+                            if response.lost_focus()
+                                && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                            {
+                                rename_end = Some(true);
+                            } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                rename_end = Some(false);
+                            } else {
+                                response.request_focus();
+                            }
+                            if first_frame_of_rename {
+                                // Everything but the extension is selected, like in a file manager.
+                                let (stem, _) = bluepane_engine::name_parts(text, entry.is_dir());
+                                let range = egui::text::CCursorRange::two(
+                                    egui::text::CCursor::new(0),
+                                    egui::text::CCursor::new(stem.chars().count()),
+                                );
+                                if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), id) {
+                                    state.cursor.set_char_range(Some(range));
+                                    state.store(ui.ctx(), id);
+                                }
+                            }
+                            rename_drawn = true;
+                        } else {
+                            cell(name_col, Align2::LEFT_CENTER, name);
+                        }
+                        cell(cols.ext, Align2::LEFT_CENTER, ext.to_string());
+                        cell(cols.size, Align2::RIGHT_CENTER, size);
+                        cell(
+                            cols.date,
+                            Align2::LEFT_CENTER,
+                            format_modified(entry.modified),
+                        );
+                        if response.clicked() {
+                            let m = ui.input(|i| i.modifiers);
+                            clicked = Some((row, (m.command, m.shift)));
+                        }
+                        if response.double_clicked() {
+                            entered = Some(row);
+                        }
+                        if response.secondary_clicked() {
+                            right_clicked = Some(row);
+                        }
                     }
-                    cell(cols.ext, Align2::LEFT_CENTER, ext.to_string());
-                    cell(cols.size, Align2::RIGHT_CENTER, size);
-                    cell(
-                        cols.date,
-                        Align2::LEFT_CENTER,
-                        format_modified(entry.modified),
-                    );
-                    if response.clicked() {
-                        let m = ui.input(|i| i.modifiers);
-                        clicked = Some((row, (m.command, m.shift)));
-                    }
-                    if response.double_clicked() {
-                        entered = Some(row);
-                    }
-                    if response.secondary_clicked() {
-                        right_clicked = Some(row);
-                    }
-                }
-            });
+                });
+        }
 
         ui.separator();
         ui.label(RichText::new(summary).color(theme.muted));

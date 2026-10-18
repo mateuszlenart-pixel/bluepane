@@ -114,6 +114,13 @@ Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jum
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie
 zajmuje pamięci. Pliki z bajtami zerowymi otwierają się w trybie hex.
 
+**Widok miniatur** (Ctrl+Shift+G, komenda `viewmode [list|grid]`) zamienia listę aktywnego panelu
+w siatkę kafelków: obrazy mają miniaturę (liczoną w tle tylko dla widocznych kafelków,
+zapamiętywaną do ok. 600 obrazów; przy zmianie pliku liczona od nowa), pozostałe pliki i katalogi
+ikonę. Kliknięcia, zaznaczanie, Enter, menu kontekstowe i przeciąganie działają jak na liście;
+strzałki w lewo / w prawo przesuwają o kafelek, w górę / w dół o cały rząd. Na serwerach i w
+archiwach kafelki mają tylko ikony (miniatura wymagałaby pobrania pliku).
+
 **Obrazy** (PNG, JPEG, GIF, BMP, WebP, ICO) F3 pokazuje jako obraz w zakładce „Strony”, z tym samym
 powiększaniem co strony PDF (`pagezoom fit|in|out|<procent>`; 100% = piksel w piksel). To samo
 działa w Quick View (Ctrl+Q), dla obrazu w archiwum i na serwerze. Plik z rozszerzeniem obrazu,
