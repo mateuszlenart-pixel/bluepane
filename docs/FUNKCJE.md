@@ -22,6 +22,12 @@ Ostatnio uruchomione z palety komendy (pogrubione) są na górze i wygrywają re
 
 Komenda: `palette [tekst]` (otwiera paletę z tekstem), `palette query <tekst>`, `palette move <n>`, `palette run`, `palette close`. Lista pochodzi z tej samej tabeli opisów co [KOMENDY.md](KOMENDY.md), więc nowa komenda pojawia się w palecie sama.
 
+## Zmiana nazwy w wierszu i powiadomienia
+
+**F2** (`rename`) zmienia nazwę w samym wierszu listy: nazwa staje się polem tekstowym, a zaznaczona jest część bez rozszerzenia (dla katalogów cała nazwa), więc wystarczy wpisać nową nazwę, a rozszerzenie zostaje. Enter zatwierdza, Esc anuluje, kliknięcie w inny wiersz też kończy bez zmiany. Gdy wiersz nie jest widoczny (np. przez filtr), program pyta o nazwę w oknie, jak dawniej.
+
+Po zakończeniu zadania (kopiowanie, przenoszenie, usuwanie, pakowanie, synchronizacja, transfer z serwera…) w prawym dolnym rogu okna pojawia się **powiadomienie**: tytuł zadania i jak poszło, z ikoną sukcesu, anulowania albo błędu. Sukces znika po kilku sekundach, **błąd zostaje do zamknięcia** (✕); kliknięcie w tekst powiadomienia otwiera kolejkę zadań. Naraz widać cztery powiadomienia. Zadania pomocnicze (listowanie serwera, logowanie) nie dają powiadomień. Cofania operacji przyciskiem nie ma (zob. decyzje w `ROADMAP.md`).
+
 ## Przeciąganie
 
 Zaznaczone pozycje (albo ta, od której zaczynasz przeciąganie) można przeciągnąć myszą:

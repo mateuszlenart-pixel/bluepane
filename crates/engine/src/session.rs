@@ -296,6 +296,8 @@ pub struct Session {
     pub recent_commands: Vec<String>,
     /// Text the front end should put in the command line (taken with `take`).
     pub command_prefill: Option<String>,
+    /// Jobs that ended and were not shown to the user yet (`take_notices`).
+    pub(crate) notices: Vec<crate::Notice>,
     /// The last finished jobs, newest first (for "retry" in the queue window).
     pub finished: VecDeque<crate::FinishedJob>,
     /// The site manager window is open.
@@ -456,6 +458,7 @@ impl Session {
             last_visit: [None, None],
             recent_commands: Vec::new(),
             command_prefill: None,
+            notices: Vec::new(),
             finished: VecDeque::new(),
             sites_open: false,
             config_loaded: false,

@@ -276,3 +276,35 @@ fn the_context_menu_offers_actions_for_the_row_and_a_click_runs_one() {
         "the menu closed after the choice"
     );
 }
+
+#[test]
+fn f2_edits_the_name_in_its_row_instead_of_a_dialog() {
+    let (tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "select a.txt");
+    command(&mut harness, "unselectall");
+    command(&mut harness, "rename");
+    harness.run_steps(3);
+    // The name sits in a text field in the list, and no dialog asks for it.
+    assert!(harness.query_all_by_value("a.txt").count() >= 1);
+    assert!(harness.query_by_label("OK (Enter)").is_none());
+    if let Some(bluepane_engine::Pending::Input { text, .. }) =
+        &mut harness.state_mut().session_mut().pending
+    {
+        *text = "z.txt".into();
+    }
+    command(&mut harness, "confirm");
+    assert!(tmp.path().join("left/z.txt").exists());
+    assert!(!tmp.path().join("left/a.txt").exists());
+}
+
+#[test]
+fn a_finished_job_shows_a_notice_that_can_be_closed() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "select a.txt");
+    command(&mut harness, "copy");
+    harness.state_mut().session_mut().wait_idle();
+    harness.run_steps(4);
+    assert_eq!(harness.state().toast_count(), 1);
+}
