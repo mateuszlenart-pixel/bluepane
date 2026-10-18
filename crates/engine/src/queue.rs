@@ -21,6 +21,20 @@ pub struct FinishedJob {
     pub(crate) spec: JobSpec,
 }
 
+/// A finished job to tell the user about (a toast in the corner of the window).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    /// What the job did (`Kopiowanie: a.txt (+2)`).
+    pub title: String,
+    /// How it went (the status line it produced).
+    pub text: String,
+    pub is_error: bool,
+    pub cancelled: bool,
+}
+
+/// How many notices wait for the front end before the oldest are dropped.
+const NOTICES_MAX: usize = 20;
+
 /// One row of the queue window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueueLine {
@@ -78,6 +92,15 @@ impl Session {
         }
         // Files were copied, moved or deleted: counted folder sizes may be wrong now.
         self.dir_sizes.clear();
+        self.notices.push(Notice {
+            title: spec.describe(),
+            text: text.to_string(),
+            is_error,
+            cancelled,
+        });
+        if self.notices.len() > NOTICES_MAX {
+            self.notices.remove(0);
+        }
         self.finished.push_front(FinishedJob {
             title: spec.describe(),
             result: text.to_string(),
@@ -86,6 +109,11 @@ impl Session {
             spec: spec.clone(),
         });
         self.finished.truncate(HISTORY);
+    }
+
+    /// The jobs that ended since the last call, oldest first.
+    pub fn take_notices(&mut self) -> Vec<Notice> {
+        std::mem::take(&mut self.notices)
     }
 
     pub(crate) fn pause_queue(&mut self, pause: bool) {
@@ -436,6 +464,60 @@ mod tests {
         assert_eq!(
             JobSpec::new(JobKind::Delete, vec![], None).describe(),
             "Usuwanie do kosza"
+        );
+    }
+
+    #[test]
+    fn every_finished_job_leaves_one_notice_that_is_taken_once() {
+        let (_tmp, mut s) = session();
+        assert!(s.take_notices().is_empty());
+        s.run_line("select a.txt").unwrap();
+        s.run_line("copy").unwrap();
+        settle(&mut s);
+        let notices = s.take_notices();
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert!(notices[0].title.starts_with("Kopiowanie"), "{notices:?}");
+        assert!(!notices[0].is_error && !notices[0].cancelled);
+        assert!(s.take_notices().is_empty(), "taken once");
+
+        // The same file again: the conflict is answered with "cancel", which stops the job.
+        s.run_line("copy").unwrap();
+        for _ in 0..1000 {
+            s.poll();
+            if matches!(s.pending, Some(crate::Pending::Conflict(_))) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            matches!(s.pending, Some(crate::Pending::Conflict(_))),
+            "{}",
+            s.status
+        );
+        s.run_line("cancel").unwrap();
+        settle(&mut s);
+        let again = s.take_notices();
+        assert_eq!(again.len(), 1, "{again:?}");
+        assert!(again[0].cancelled, "{again:?}");
+    }
+
+    #[test]
+    fn unseen_notices_are_capped() {
+        let (_tmp, mut s) = session();
+        for i in 0..(NOTICES_MAX + 5) {
+            s.record_finished(
+                &JobSpec::new(JobKind::Copy, vec![format!("/x/{i}.txt").into()], None),
+                "ok",
+                false,
+                false,
+            );
+        }
+        let notices = s.take_notices();
+        assert_eq!(notices.len(), NOTICES_MAX);
+        assert!(
+            notices[0].title.contains("5.txt"),
+            "oldest dropped: {}",
+            notices[0].title
         );
     }
 }

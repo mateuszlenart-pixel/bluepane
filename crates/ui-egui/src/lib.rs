@@ -19,6 +19,7 @@ mod scan_ui;
 mod sites_ui;
 mod sync_ui;
 mod theme;
+mod toast_ui;
 
 use std::time::Duration;
 
@@ -42,6 +43,11 @@ pub struct BluepaneUi {
     path_text: [String; 2],
     /// The open right-click menu: where it is and what it offers.
     context_menu: Option<ContextMenu>,
+    toasts: Vec<toast_ui::Toast>,
+    /// The name being edited in its row has been given the keyboard.
+    rename_focused: bool,
+    /// A row of this frame holds the in-place name editor (the name dialog is not needed).
+    inline_rename_drawn: bool,
     /// A drag of marked entries in progress.
     drag: Option<DragState>,
     /// Where something can be dropped, as drawn in the last frame and in this one.
@@ -90,6 +96,9 @@ impl BluepaneUi {
             pack_focused: false,
             path_text: [String::new(), String::new()],
             context_menu: None,
+            toasts: Vec::new(),
+            rename_focused: false,
+            inline_rename_drawn: false,
             drag: None,
             drop_zones: Vec::new(),
             last_zones: Vec::new(),
@@ -125,6 +134,16 @@ impl BluepaneUi {
         let ctx = ui.ctx().clone();
         self.frame += 1;
         self.last_zones = std::mem::take(&mut self.drop_zones);
+        self.inline_rename_drawn = false;
+        if !matches!(
+            self.session.pending,
+            Some(Pending::Input {
+                kind: InputKind::Rename(_),
+                ..
+            })
+        ) {
+            self.rename_focused = false;
+        }
         // The colours follow the session's theme (`theme` command, saved settings).
         if !self.theme_applied {
             // Icon font: Phosphor symbols become available in every proportional text.
@@ -180,11 +199,17 @@ impl BluepaneUi {
                 .unwrap_or(ctx.content_rect().center());
             self.open_context_menu(pos, true);
         }
+        self.toasts_ui(&ctx);
         self.drag_overlay(&ctx);
         self.context_menu_popup(&ctx);
         self.palette_dialog(&ctx);
         self.jump_dialog(&ctx);
         match &self.session.pending {
+            // F2 edits the name in its row; the dialog is the fallback when the row is not shown.
+            Some(Pending::Input {
+                kind: InputKind::Rename(_),
+                ..
+            }) if self.inline_rename_drawn => {}
             Some(Pending::Input { .. }) => self.input_dialog(&ctx),
             Some(Pending::Conflict(_)) => self.conflict_dialog(&ctx),
             Some(Pending::Pack(_)) => self.pack_dialog(&ctx),
@@ -1009,6 +1034,18 @@ impl BluepaneUi {
         let stride = row_height + ui.spacing().item_spacing.y;
         let cursor = panel.cursor;
         let sort = panel.sort;
+        // F2: the name is edited in its row (the engine keeps the text in the pending question).
+        let inline_rename: Option<(std::path::PathBuf, String)> = match &session.pending {
+            Some(Pending::Input {
+                kind: InputKind::Rename(path),
+                text,
+            }) if is_active => Some((path.clone(), text.clone())),
+            _ => None,
+        };
+        let first_frame_of_rename = !self.rename_focused;
+        let mut rename_text: Option<String> = inline_rename.as_ref().map(|(_, t)| t.clone());
+        let mut rename_drawn = false;
+        let mut rename_end: Option<bool> = None;
         let mut clicked = None;
         let mut zones: Vec<DropZone> = Vec::new();
         let mut drag_started: Option<usize> = None;
@@ -1201,7 +1238,7 @@ impl BluepaneUi {
                                 .gamma_multiply(if entry.is_dir() { 0.30 } else { 0.18 }),
                         );
                     }
-                    let painter = ui.painter();
+                    let painter = ui.painter().clone();
                     let y = rect.center().y;
                     // Each text is clipped to its own column so long names do not spill over.
                     let cell = |col: Rect, align: Align2, text: String| {
@@ -1230,7 +1267,41 @@ impl BluepaneUi {
                         egui::pos2(cols.name.left() + ICON_WIDTH, cols.name.top()),
                         cols.name.max,
                     );
-                    cell(name_col, Align2::LEFT_CENTER, name);
+                    let renaming_here = row == cursor
+                        && inline_rename
+                            .as_ref()
+                            .is_some_and(|(path, _)| *path == entry.path);
+                    if renaming_here {
+                        let text = rename_text.get_or_insert_with(String::new);
+                        let id = egui::Id::new(("inline-rename", index));
+                        let edit = egui::TextEdit::singleline(text)
+                            .id(id)
+                            .font(font.clone())
+                            .desired_width(name_col.width());
+                        let response = ui.put(name_col.shrink2(egui::vec2(0.0, 1.0)), edit);
+                        if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                            rename_end = Some(true);
+                        } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            rename_end = Some(false);
+                        } else {
+                            response.request_focus();
+                        }
+                        if first_frame_of_rename {
+                            // Everything but the extension is selected, like in a file manager.
+                            let (stem, _) = bluepane_engine::name_parts(text, entry.is_dir());
+                            let range = egui::text::CCursorRange::two(
+                                egui::text::CCursor::new(0),
+                                egui::text::CCursor::new(stem.chars().count()),
+                            );
+                            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), id) {
+                                state.cursor.set_char_range(Some(range));
+                                state.store(ui.ctx(), id);
+                            }
+                        }
+                        rename_drawn = true;
+                    } else {
+                        cell(name_col, Align2::LEFT_CENTER, name);
+                    }
                     cell(cols.ext, Align2::LEFT_CENTER, ext.to_string());
                     cell(cols.size, Align2::RIGHT_CENTER, size);
                     cell(
@@ -1259,6 +1330,20 @@ impl BluepaneUi {
             let _ = self.session.run_line("filter");
         }
         self.drop_zones.extend(zones);
+        if rename_drawn {
+            self.rename_focused = true;
+            self.inline_rename_drawn = true;
+            if let (Some(new_text), Some(Pending::Input { text, .. })) =
+                (rename_text, &mut self.session.pending)
+            {
+                *text = new_text;
+            }
+            match rename_end {
+                Some(true) => self.dispatch("confirm"),
+                Some(false) => self.dispatch("cancel"),
+                None => {}
+            }
+        }
         if let Some(row) = drag_started {
             // The dragged row is carried along with the marks; an unmarked row alone.
             self.session.active = index;

@@ -83,7 +83,7 @@ pub use panel::{
     PARENT_NAME,
 };
 pub use places::{FavoriteAction, Favorites, Place, PlaceSection};
-pub use queue::{FinishedJob, QueueLine};
+pub use queue::{FinishedJob, Notice, QueueLine};
 pub use quickview::{QuickContent, QuickKey, QuickView, QUICK_DELAY};
 pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, ShareList};
 pub use session::{
