@@ -708,6 +708,7 @@ impl BluepaneUi {
             }
         });
 
+        self.action_bar_ui(ui);
         self.fkey_bar(ui);
     }
 

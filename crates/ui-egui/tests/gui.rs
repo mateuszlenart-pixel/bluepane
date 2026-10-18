@@ -258,7 +258,8 @@ fn the_context_menu_offers_actions_for_the_row_and_a_click_runs_one() {
     command(&mut harness, "select a.txt");
     command(&mut harness, "unselectall");
     command(&mut harness, "menu");
-    harness.get_by_label_contains("Podgląd");
+    // (Podgląd is also on the action bar for a text file, so it is not looked up here.)
+    harness.get_by_label_contains("Otwórz w programie");
     harness.get_by_label_contains("Kopiuj do drugiego panelu");
     harness.get_by_label_contains("Właściwości").click();
     harness.run_steps(4);
@@ -307,4 +308,22 @@ fn a_finished_job_shows_a_notice_that_can_be_closed() {
     harness.state_mut().session_mut().wait_idle();
     harness.run_steps(4);
     assert_eq!(harness.state().toast_count(), 1);
+}
+
+#[test]
+fn the_action_bar_offers_what_fits_the_selection_and_its_buttons_work() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    // Two files marked: pack and rename them together.
+    command(&mut harness, "selectall");
+    harness.get_by_label_contains("Zmień nazwy zbiorowo");
+    harness.get_by_label_contains("Spakuj (2)").click();
+    harness.run_steps(4);
+    assert!(
+        matches!(
+            harness.state_mut().session_mut().pending,
+            Some(bluepane_engine::Pending::Pack(_))
+        ),
+        "the button ran `pack` (its dialog is open)"
+    );
 }

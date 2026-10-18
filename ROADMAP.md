@@ -207,7 +207,7 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 - [x] 12f **Menu kontekstowe** pod prawym przyciskiem (otwórz w programie, kopiuj ścieżkę/nazwę, spakuj, rozpakuj, porównaj, właściwości, chmod na serwerze, dodaj do ulubionych); pozycje to komendy
 - [x] 12g **Przeciąganie**: między panelami (kopiuj; z Shift przenieś), upuszczanie plików z pulpitu/menedżera systemu do panelu
 - [x] 12h **Zmiana nazwy w wierszu** (F2 edytuje nazwę na liście; rozszerzenie nie jest zaznaczane) i **powiadomienia** po skończonych zadaniach (w rogu okna, z przyciskiem „Cofnij", gdzie się da)
-- [ ] 12i **Pasek akcji zależny od zaznaczenia**: archiwum → „Rozpakuj tutaj / do podkatalogu", PDF/dokument → „Podgląd", dwa katalogi → „Porównaj / Synchronizuj", plik na serwerze → „Edytuj"
+- [x] 12i **Pasek akcji zależny od zaznaczenia**: archiwum → „Rozpakuj tutaj / do podkatalogu", PDF/dokument → „Podgląd", dwa katalogi → „Porównaj / Synchronizuj", plik na serwerze → „Edytuj"
 - [ ] 12j **Ściąga klawiszy**: przytrzymanie Ctrl (albo `?`) nakłada skróty na przyciski; wyraźny wskaźnik, która zakładka doku ma klawiaturę
 - [ ] 12k **Obrazy**: widok miniatur (przełącznik lista/siatka) i podgląd obrazów w Quick View i F3 (zależność `image` do zgody; tylko popularne formaty)
 - [ ] 12l **Kolumny**: wybór kolumn (uprawnienia, właściciel, data utworzenia, suma SHA-256, status gita), szerokość przeciągana myszą, zapamiętana; gęstość zwarta/wygodna; **jasny motyw** (po decyzji właściciela) 

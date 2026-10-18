@@ -83,7 +83,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(OPS, "cancel", "cancel", "odrzuca pytanie (alias: no; Esc); przy konflikcie przerywa zadanie"),
     h(OPS, "stop", "stop", "przerywa bieżące zadanie i usuwa oczekujące"),
     h(ARC, "pack", "pack [opcje]", "pakuje zaznaczone do archiwum w drugim panelu (zip, 7z, tar.gz; okno ustawień bez opcji; Alt+F5)"),
-    h(ARC, "unpack", "unpack [opcje]", "rozpakowuje archiwum pod kursorem albo otwarte do drugiego panelu (Alt+F9)"),
+    h(ARC, "unpack", "unpack [opcje]", "rozpakowuje archiwum pod kursorem albo otwarte do drugiego panelu; `-h` obok archiwum, `-s` do podkatalogu o nazwie archiwum (Alt+F9)"),
     h(ARC, "testarchive", "testarchive [opcje]", "sprawdza archiwum bez rozpakowywania"),
     h(VIEW, "view", "view", "podgląd pliku pod kursorem: tekst/hex, strony PDF i dokumentów (alias: f3; F3)"),
     h(VIEW, "edit", "edit", "otwiera plik w zewnętrznym programie albo w `BLUEPANE_EDITOR` (F4)"),
