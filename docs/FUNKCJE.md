@@ -114,6 +114,12 @@ Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jum
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie
 zajmuje pamięci. Pliki z bajtami zerowymi otwierają się w trybie hex.
 
+**Obrazy** (PNG, JPEG, GIF, BMP, WebP, ICO) F3 pokazuje jako obraz w zakładce „Strony”, z tym samym
+powiększaniem co strony PDF (`pagezoom fit|in|out|<procent>`; 100% = piksel w piksel). To samo
+działa w Quick View (Ctrl+Q), dla obrazu w archiwum i na serwerze. Plik z rozszerzeniem obrazu,
+który obrazem nie jest, otwiera się jako tekst / hex. Obrazy większe niż 200 MB albo 100 mln
+pikseli nie są otwierane; z GIF-a widać pierwszą klatkę.
+
 | Klawisz | Akcja |
 | --- | --- |
 | strzałki góra/dół, PgUp/PgDn, Spacja | przewijanie o wiersz / stronę |

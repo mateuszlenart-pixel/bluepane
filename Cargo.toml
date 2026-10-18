@@ -63,6 +63,8 @@ keyring = "4"
 # Text of PDF files for the fallback preview, and PDF page rendering (both pure Rust).
 pdf-extract = "0.12"
 hayro = { version = "0.8", features = ["embed-fonts"] }
+# Pictures for the viewer and Quick View; only the common formats, no threads pool.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico"] }
 # Network scanner: reverse DNS names and the manufacturer behind a MAC address.
 dns-lookup = "4"
 oui-data = "0.2"

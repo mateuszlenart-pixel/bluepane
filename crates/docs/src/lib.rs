@@ -7,6 +7,7 @@ mod docx;
 mod odf;
 mod office;
 mod pdf;
+mod picture;
 mod pptx;
 mod render;
 mod rtf;
@@ -14,6 +15,7 @@ mod xlsx;
 mod xml;
 
 pub use office::{office_program, to_pdf};
+pub use picture::{decode_picture, is_picture, scale_picture};
 pub use render::{PageImage, PdfDocument};
 
 use std::fmt;

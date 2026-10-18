@@ -364,3 +364,29 @@ fn holding_ctrl_for_a_moment_shows_its_keys_until_it_is_let_go() {
     harness.run_steps(3);
     assert!(harness.query_by_label("Klawisze z Ctrl").is_none());
 }
+
+#[test]
+fn a_picture_opens_in_the_page_view_and_is_drawn() {
+    let (tmp, mut harness) = window();
+    // A minimal valid 1 × 1 PNG, written byte by byte (the UI crate does not decode images).
+    let png: [u8; 67] = [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    std::fs::write(tmp.path().join("left/punkt.png"), png).unwrap();
+    harness.run_steps(2);
+    command(&mut harness, "refresh");
+    command(&mut harness, "select punkt.png");
+    command(&mut harness, "unselectall");
+    command(&mut harness, "view");
+    harness.run_steps(20);
+    let session = harness.state_mut().session_mut();
+    assert!(
+        session.pages.as_ref().is_some_and(|p| p.pages() == 1),
+        "{}",
+        session.status
+    );
+}

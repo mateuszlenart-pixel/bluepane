@@ -154,7 +154,7 @@ fn note(key: &QuickKey, title: String, text: impl Into<String>) -> QuickView {
 }
 
 /// The preview of what `key` names.
-fn build(key: &QuickKey) -> QuickView {
+pub(crate) fn build(key: &QuickKey) -> QuickView {
     match key {
         QuickKey::Other(text) => note(key, "Quick View".into(), text.clone()),
         QuickKey::Dir(path) => {
@@ -172,6 +172,15 @@ fn build(key: &QuickKey) -> QuickView {
 fn build_file(key: &QuickKey, path: &Path) -> QuickView {
     let title = name_of(path);
     let size = std::fs::metadata(path).map_or(0, |m| m.len());
+    if bluepane_docs::is_picture(path) {
+        if let Ok(viewer) = PageViewer::from_picture(path) {
+            return QuickView {
+                key: key.clone(),
+                title,
+                content: QuickContent::Pages(viewer),
+            };
+        }
+    }
     let kind = bluepane_docs::kind_of(path);
     if kind == Some(bluepane_docs::Kind::Pdf) {
         if size > bluepane_docs::MAX_PDF {

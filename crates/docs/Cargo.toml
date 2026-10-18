@@ -1,6 +1,6 @@
 [package]
 name = "bluepane-docs"
-description = "Text of documents for the viewer: Word (DOCX), OpenDocument (ODT, ODS), Excel (XLSX) and PDF"
+description = "Text and pages of documents for the viewer: Word (DOCX), OpenDocument (ODT, ODS), Excel (XLSX), PDF, and pictures"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,6 +12,7 @@ bluepane-text.workspace = true
 zip.workspace = true
 pdf-extract.workspace = true
 hayro.workspace = true
+image.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
