@@ -466,6 +466,29 @@ fn a_layout_is_saved_by_name_reset_and_loaded_again() {
 }
 
 #[test]
+fn a_workspace_is_saved_with_its_layout_and_loaded_again() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "queue");
+    command(&mut harness, "workspace save Praca");
+    harness.run_steps(2);
+    assert_eq!(
+        harness.state_mut().session_mut().saved_workspaces(),
+        ["Praca"]
+    );
+    assert_eq!(
+        harness.state_mut().session_mut().saved_layouts(),
+        ["obszar Praca"]
+    );
+    command(&mut harness, "layout reset");
+    command(&mut harness, "workspace load Praca");
+    harness.run_steps(2);
+    let session = harness.state_mut().session_mut();
+    assert!(!session.status_is_error, "{}", session.status);
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+}
+
+#[test]
 fn quick_view_in_a_tab_leaves_both_panels_in_place() {
     let (_tmp, mut harness) = window();
     harness.run_steps(2);

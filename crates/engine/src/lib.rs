@@ -37,6 +37,7 @@ mod settings;
 mod thumbs;
 mod tools;
 mod viewer;
+mod workspace;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
 pub use bluepane_docs::PageImage;
@@ -100,6 +101,7 @@ pub use settings::{normalize_key, Column, Density, DEFAULT_COLUMNS, DEFAULT_THEM
 pub use thumbs::{Thumbnails, THUMB_SIZE};
 pub use tools::Tool;
 pub use viewer::{Row, ViewMode, Viewer};
+pub use workspace::WorkspaceAction;
 
 use std::fmt;
 

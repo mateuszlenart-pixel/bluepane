@@ -112,6 +112,14 @@ Wpisane słowa muszą wszystkie pasować do ścieżki (polskie litery można pom
 
 Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jump close`. Udziałów sieciowych ze skanera na tej liście jeszcze nie ma.
 
+## Obszary robocze i przywracanie sesji
+
+Obszar roboczy to zapamiętany układ pracy: katalogi i zakładki obu paneli (z sortowaniem i widokiem lista/siatka), aktywny panel, wybrane miejsca i układ okna (zapisany jako układ „obszar <nazwa>”). Pliki leżą w `workspaces/<nazwa>.conf` w katalogu konfiguracji; format ma numer wersji, a nowszej wersji niż znana program odmawia wczytać zamiast ją zepsuć.
+
+- `workspace save <nazwa>`: zapisuje obszar; `workspace load <nazwa>`: przywraca; `workspace delete <nazwa>`; `workspace list` (wymienia obszary). Skrót: `ws`.
+- Przy przywracaniu katalogi, których już nie ma, są pomijane, a pasek stanu mówi, ile ich było.
+- **Sesja:** przy zamknięciu okna zapisuje się ostatni stan jako ukryty obszar, a przy starcie wraca (chyba że podasz katalogi w wierszu poleceń). Wyłączenie: `workspace restore off` (zapisuje `restore = off` w `settings.conf`); `workspace restore on` włącza z powrotem.
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

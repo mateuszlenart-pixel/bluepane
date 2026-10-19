@@ -81,6 +81,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "dragto",
     "drop",
     "viewmode",
+    "workspace",
     "layout",
     "columns",
     "density",
@@ -332,6 +333,8 @@ pub enum Command {
     Drop(crate::DropTarget, Vec<PathBuf>),
     /// The active panel as a list or as a grid of thumbnails (`None` switches).
     PanelView(Option<crate::PanelView>),
+    /// Workspaces: the tabs of both panels and the layout, saved by name.
+    Workspace(crate::WorkspaceAction),
     /// Window layouts: list, reset, save, load, delete.
     Layout(String),
     /// Show or hide a column of the file list (`None` lists them).
@@ -633,6 +636,7 @@ impl Command {
                 "grid" => Ok(Command::PanelView(Some(crate::PanelView::Grid))),
                 _ => Err(EngineError("viewmode: użycie: viewmode [list|grid]".into())),
             },
+            "workspace" | "ws" => crate::workspace::parse_workspace(rest).map(Command::Workspace),
             "layout" => Ok(Command::Layout(rest.to_string())),
             "columns" => Ok(Command::Columns(Some(rest.to_string()).filter(|r| !r.is_empty()))),
             "density" => Ok(Command::Density(Some(rest.to_string()).filter(|r| !r.is_empty()))),
