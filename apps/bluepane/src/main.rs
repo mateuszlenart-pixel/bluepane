@@ -23,6 +23,10 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         self.ui.show(ui);
     }
+
+    fn on_exit(&mut self) {
+        self.ui.session().save_last_session();
+    }
 }
 
 fn start_dir(arg: Option<String>) -> PathBuf {
@@ -43,11 +47,17 @@ fn icon() -> eframe::egui::IconData {
 
 fn main() -> eframe::Result {
     let mut args = std::env::args().skip(1);
-    let left = start_dir(args.next());
+    let first = args.next();
+    let given = first.is_some();
+    let left = start_dir(first);
     let right = start_dir(args.next());
     let mut session = Session::new(left, right);
     // The settings (and the place for the log) are needed before the window opens.
     session.load_config();
+    // Folders on the command line mean "start here"; otherwise the last session comes back.
+    if !given {
+        session.restore_last_session();
+    }
     if let Some(dir) = session.config_dir() {
         log::install(dir.join("bluepane.log"));
     }

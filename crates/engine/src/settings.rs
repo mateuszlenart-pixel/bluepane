@@ -107,6 +107,8 @@ pub struct Settings {
     pub density: Option<Density>,
     /// Quick View in a tab of its own instead of in place of the other panel.
     pub quick_tab: Option<bool>,
+    /// Put the last session back at start (default: yes).
+    pub restore: Option<bool>,
     /// Keys that differ from the built-in map: `Some(line)` binds, `None` takes the key off.
     pub keys: Vec<(String, Option<String>)>,
 }
@@ -262,6 +264,14 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                 }
             }
             settings.columns = Some(columns);
+        } else if left == "restore" {
+            match right.trim() {
+                "on" => settings.restore = Some(true),
+                "off" => settings.restore = Some(false),
+                other => warnings.push(format!(
+                    "wiersz {number}: restore to on albo off, nie „{other}”"
+                )),
+            }
         } else if left == "quickview" {
             match right.trim() {
                 "tab" => settings.quick_tab = Some(true),
@@ -318,6 +328,9 @@ pub fn render(settings: &Settings) -> String {
     if let Some(columns) = &settings.columns {
         let words: Vec<&str> = columns.iter().map(|c| c.word()).collect();
         out.push_str(&format!("columns = {}\n", words.join(" ")));
+    }
+    if let Some(on) = settings.restore {
+        out.push_str(&format!("restore = {}\n", if on { "on" } else { "off" }));
     }
     if let Some(tab) = settings.quick_tab {
         out.push_str(&format!(

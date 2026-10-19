@@ -164,9 +164,9 @@ impl JobStatus {
 /// The tabs of one side other than the active one. Together with the active panel they
 /// form the tab row: `others` in order with the active panel inserted at `position`.
 #[derive(Debug, Default)]
-struct ParkedTabs {
-    others: Vec<Panel>,
-    position: usize,
+pub(crate) struct ParkedTabs {
+    pub(crate) others: Vec<Panel>,
+    pub(crate) position: usize,
 }
 
 /// What the UI needs to draw one side's tab row.
@@ -309,7 +309,7 @@ pub struct Session {
     /// The site manager window is open.
     pub sites_open: bool,
     pub(crate) config_loaded: bool,
-    parked: [ParkedTabs; 2],
+    pub(crate) parked: [ParkedTabs; 2],
     current: Option<RunningJob>,
     queue: VecDeque<JobSpec>,
     /// The archive job that needs a password; run again once the user types it.
@@ -632,6 +632,7 @@ impl Session {
                     crate::PanelView::Grid => "Widok: miniatury".into(),
                 };
             }
+            Command::Workspace(action) => self.workspace_action(action)?,
             Command::Layout(words) => self.layout_command(&words)?,
             Command::Columns(word) => self.set_columns(word)?,
             Command::Density(word) => self.set_density(word)?,

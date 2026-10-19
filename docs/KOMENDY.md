@@ -164,6 +164,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `theme [nazwa]` | pokazuje dostępne motywy kolorów albo przełącza motyw |
 | `bind [<klawisz> [<komenda>\|default]]` | przypisuje klawisz do komendy, pokazuje przypisanie albo przywraca domyślne; zapisuje się w `settings.conf` |
 | `unbind <klawisz>` | wyłącza klawisz |
+| `workspace [list\|save <nazwa>\|load <nazwa>\|delete <nazwa>\|restore on\|off]` | obszary robocze (alias: ws): zakładki obu paneli z sortowaniem i widokiem, aktywny panel, pasek Miejsca i układ okna pod nazwą; `restore` włącza lub wyłącza powrót do poprzedniej sesji przy starcie |
 | `layout [list\|reset\|save <nazwa>\|load <nazwa>\|delete <nazwa>]` | układy okna (gdzie stoją panele i narzędzia): lista zapisanych, powrót do dwóch paneli obok siebie, zapis, wczytanie i usunięcie układu o nazwie |
 | `columns [ext\|size\|date\|created\|default]` | kolumny listy obok nazwy: bez argumentu pokazuje, z nazwą kolumny ją pokazuje albo chowa (created = data utworzenia), default przywraca; zapisuje się w `settings.conf` |
 | `density [compact\|comfortable]` | wiersze listy zwarte albo wygodne; bez argumentu przełącza; zapisuje się w `settings.conf` |
