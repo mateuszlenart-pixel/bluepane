@@ -79,9 +79,21 @@ impl Session {
                 } else {
                     let key = self.quick_key();
                     self.quick = Some(build(&key));
-                    self.status =
-                        "Quick View: drugi panel pokazuje plik pod kursorem (Ctrl+Q zamyka)".into();
+                    self.status = if self.quick_in_tab() {
+                        "Quick View: zakładka pokazuje plik pod kursorem (Ctrl+Q zamyka)".into()
+                    } else {
+                        "Quick View: drugi panel pokazuje plik pod kursorem (Ctrl+Q zamyka)".into()
+                    };
                 }
+            }
+            QuickAction::Place(tab) => {
+                self.settings.quick_tab = Some(tab);
+                self.status = if tab {
+                    "Quick View będzie się otwierał w osobnej zakładce".into()
+                } else {
+                    "Quick View będzie zastępował drugi panel".into()
+                };
+                self.save_settings()?;
             }
             QuickAction::Scroll(delta) => match &mut self.quick {
                 Some(QuickView {
@@ -246,11 +258,16 @@ fn build_file(key: &QuickKey, path: &Path) -> QuickView {
 
 impl Command {
     pub(crate) fn parse_quick(rest: &str) -> Result<Command, EngineError> {
-        let usage =
-            || EngineError("quick: użycie: quick [scroll <wiersze> | page <1 albo -1>]".into());
+        let usage = || {
+            EngineError(
+                "quick: użycie: quick [scroll <wiersze> | page <1 albo -1> | tab | panel]".into(),
+            )
+        };
         let mut words = rest.split_whitespace();
         let action = match (words.next(), words.next()) {
             (None, _) => QuickAction::Toggle,
+            (Some("tab"), None) => QuickAction::Place(true),
+            (Some("panel"), None) => QuickAction::Place(false),
             (Some("scroll"), Some(n)) => QuickAction::Scroll(n.parse().map_err(|_| usage())?),
             (Some("page"), Some(n)) => QuickAction::Page(n.parse().map_err(|_| usage())?),
             _ => return Err(usage()),

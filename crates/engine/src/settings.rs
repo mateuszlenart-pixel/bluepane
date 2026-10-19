@@ -9,6 +9,7 @@
 //! key Ctrl+L = "cd "           (quotes keep a trailing space: the command line gets `cd `)
 //! columns = ext size date      (the columns of the file list, beside the name)
 //! density = compact            (rows of the file list: compact or comfortable)
+//! quickview = tab              (Quick View in its own tab; `panel`: over the other panel)
 //! ```
 //!
 //! A line that cannot be understood is skipped with a warning; the rest still applies. The
@@ -104,6 +105,8 @@ pub struct Settings {
     /// The list's columns beside the name, when the user changed them.
     pub columns: Option<Vec<Column>>,
     pub density: Option<Density>,
+    /// Quick View in a tab of its own instead of in place of the other panel.
+    pub quick_tab: Option<bool>,
     /// Keys that differ from the built-in map: `Some(line)` binds, `None` takes the key off.
     pub keys: Vec<(String, Option<String>)>,
 }
@@ -259,6 +262,14 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                 }
             }
             settings.columns = Some(columns);
+        } else if left == "quickview" {
+            match right.trim() {
+                "tab" => settings.quick_tab = Some(true),
+                "panel" => settings.quick_tab = Some(false),
+                other => warnings.push(format!(
+                    "wiersz {number}: quickview to tab albo panel, nie „{other}”"
+                )),
+            }
         } else if left == "density" {
             match Density::from_word(right.trim()) {
                 Some(density) => settings.density = Some(density),
@@ -307,6 +318,12 @@ pub fn render(settings: &Settings) -> String {
     if let Some(columns) = &settings.columns {
         let words: Vec<&str> = columns.iter().map(|c| c.word()).collect();
         out.push_str(&format!("columns = {}\n", words.join(" ")));
+    }
+    if let Some(tab) = settings.quick_tab {
+        out.push_str(&format!(
+            "quickview = {}\n",
+            if tab { "tab" } else { "panel" }
+        ));
     }
     if let Some(density) = settings.density {
         out.push_str(&format!("density = {}\n", density.word()));
@@ -358,7 +375,7 @@ impl Session {
     }
 
     /// Writes the settings file (if there is a config directory).
-    fn save_settings(&self) -> Result<(), EngineError> {
+    pub(crate) fn save_settings(&self) -> Result<(), EngineError> {
         let Some(dir) = self.config_dir() else {
             return Ok(());
         };
@@ -374,6 +391,11 @@ impl Session {
             .into_iter()
             .filter(|c| chosen.contains(c))
             .collect()
+    }
+
+    /// Quick View opens in a tab of its own (`quick tab`) rather than over the other panel.
+    pub fn quick_in_tab(&self) -> bool {
+        self.settings.quick_tab.unwrap_or(false)
     }
 
     pub fn density(&self) -> Density {

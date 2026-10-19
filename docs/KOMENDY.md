@@ -77,7 +77,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `page next\|prev\|first\|last\|<numer>` | zmienia stronę w podglądzie stron dokumentu |
 | `pagezoom in\|out\|fit\|<procent>` | powiększenie strony dokumentu (dopasuj do szerokości: fit) |
 | `pageclose` | zamyka podgląd stron |
-| `quick [scroll <n>\|page <1\|-1>]` | Quick View: drugi panel pokazuje plik pod kursorem; bez argumentów włącza i wyłącza (Ctrl+Q) |
+| `quick [scroll <n>\|page <1\|-1>\|tab\|panel]` | Quick View: podgląd pliku pod kursorem; bez argumentów włącza i wyłącza (Ctrl+Q); `tab` otwiera go w osobnej zakładce, `panel` w miejscu drugiego panelu (zapisuje się w `settings.conf`) |
 | `editsend` | wysyła na serwer plik edytowany przez F4 (Ctrl+Shift+F4) |
 
 ## Kolejka zadań
@@ -164,6 +164,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `theme [nazwa]` | pokazuje dostępne motywy kolorów albo przełącza motyw |
 | `bind [<klawisz> [<komenda>\|default]]` | przypisuje klawisz do komendy, pokazuje przypisanie albo przywraca domyślne; zapisuje się w `settings.conf` |
 | `unbind <klawisz>` | wyłącza klawisz |
+| `layout [list\|reset\|save <nazwa>\|load <nazwa>\|delete <nazwa>]` | układy okna (gdzie stoją panele i narzędzia): lista zapisanych, powrót do dwóch paneli obok siebie, zapis, wczytanie i usunięcie układu o nazwie |
 | `columns [ext\|size\|date\|created\|default]` | kolumny listy obok nazwy: bez argumentu pokazuje, z nazwą kolumny ją pokazuje albo chowa (created = data utworzenia), default przywraca; zapisuje się w `settings.conf` |
 | `density [compact\|comfortable]` | wiersze listy zwarte albo wygodne; bez argumentu przełącza; zapisuje się w `settings.conf` |
 | `keys [ctrl\|alt\|shift]` | ściąga klawiszy: wszystkie skróty (także własne z `bind`) z opisami; z argumentem tylko te z Ctrl, Alt albo Shift (?, albo przytrzymaj Ctrl lub Alt) |

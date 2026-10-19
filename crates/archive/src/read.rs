@@ -85,9 +85,15 @@ fn io_failure(progress: &Progress, error: io::Error, encrypted: bool) -> Archive
         return ArchiveError::Cancelled;
     }
     let text = error.to_string().to_lowercase();
-    if encrypted && (text.contains("checksum") || error.kind() == io::ErrorKind::InvalidData) {
-        // The check value of a ZipCrypto password is one byte, so a wrong password can pass
-        // the open and only fail here.
+    let garbage = matches!(
+        error.kind(),
+        io::ErrorKind::InvalidData | io::ErrorKind::InvalidInput | io::ErrorKind::UnexpectedEof
+    );
+    if encrypted && (text.contains("checksum") || garbage) {
+        // The check value of a ZipCrypto password is one byte, so about one wrong password in
+        // 256 passes the open and only fails here: as a bad checksum, or as a "corrupt deflate
+        // stream" (`InvalidInput`) or a stream that ends early when the decrypted bytes are
+        // garbage for the decompressor.
         return ArchiveError::WrongPassword;
     }
     match error.kind() {
@@ -570,4 +576,37 @@ pub fn verify(
         }
     }
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn garbage_from_a_wrong_zipcrypto_password_is_reported_as_a_wrong_password() {
+        let progress = Progress::new();
+        for kind in [
+            io::ErrorKind::InvalidData,
+            io::ErrorKind::InvalidInput,
+            io::ErrorKind::UnexpectedEof,
+        ] {
+            let error = io::Error::new(kind, "corrupt deflate stream");
+            assert!(matches!(
+                io_failure(&progress, error, true),
+                ArchiveError::WrongPassword
+            ));
+        }
+        // Not encrypted: the same thing is damage.
+        let error = io::Error::new(io::ErrorKind::InvalidData, "corrupt deflate stream");
+        assert!(matches!(
+            io_failure(&progress, error, false),
+            ArchiveError::Corrupt(_)
+        ));
+        // A real I/O problem stays one, encrypted or not.
+        let error = io::Error::new(io::ErrorKind::PermissionDenied, "denied");
+        assert!(matches!(
+            io_failure(&progress, error, true),
+            ArchiveError::Io(_)
+        ));
+    }
 }

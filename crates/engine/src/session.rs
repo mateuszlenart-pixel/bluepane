@@ -281,6 +281,8 @@ pub struct Session {
     pub palette: Option<crate::Palette>,
     /// A folder to open once the connection to the named site is up (`go sftp://host/dir`).
     pub(crate) after_connect: Option<(String, String)>,
+    /// What `layout` asked the front end to do with its dock (taken by the front end).
+    pub layout_request: Option<crate::LayoutAction>,
     /// Thumbnails of pictures for the grid view.
     pub thumbnails: crate::Thumbnails,
     /// The key cheat sheet is shown, with the prefix of the keys it lists (`""` = all).
@@ -458,6 +460,7 @@ impl Session {
             menu_requested: false,
             key_sheet_open: None,
             thumbnails: crate::Thumbnails::default(),
+            layout_request: None,
             places_open: false,
             favorites: crate::Favorites::default(),
             visits: crate::Visits::default(),
@@ -629,6 +632,7 @@ impl Session {
                     crate::PanelView::Grid => "Widok: miniatury".into(),
                 };
             }
+            Command::Layout(words) => self.layout_command(&words)?,
             Command::Columns(word) => self.set_columns(word)?,
             Command::Density(word) => self.set_density(word)?,
             Command::Keys(prefix) => {
