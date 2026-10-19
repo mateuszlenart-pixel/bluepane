@@ -26,8 +26,8 @@ mod toast_ui;
 use std::time::Duration;
 
 use bluepane_engine::{
-    format_modified, human_size, name_parts, ArchiveFormat, ClickMode, Command, CompressionLevel,
-    InputKind, Panel, Pending, Session, SortKey, TabAction, ViewMode,
+    format_modified, human_size, name_parts, ArchiveFormat, ClickMode, Column, Command,
+    CompressionLevel, InputKind, Panel, Pending, Session, SortKey, TabAction, ViewMode,
 };
 use egui::{Align2, Color32, FontId, Rect, RichText};
 
@@ -1067,7 +1067,10 @@ impl BluepaneUi {
         // Footer text and the size the longest bar stands for: cached by the engine.
         let stats = session.panel_stats(index);
         let (biggest, summary) = (stats.biggest, stats.summary);
-        let row_height = ui.spacing().interact_size.y;
+        let row_height = match self.session.density() {
+            bluepane_engine::Density::Comfortable => ui.spacing().interact_size.y,
+            bluepane_engine::Density::Compact => (ui.spacing().interact_size.y - 4.0).max(14.0),
+        };
         let stride = row_height + ui.spacing().item_spacing.y;
         let cursor = panel.cursor;
         let sort = panel.sort;
@@ -1094,13 +1097,15 @@ impl BluepaneUi {
             egui::vec2(ui.available_width(), row_height),
             egui::Sense::hover(),
         );
-        let columns = Columns::split(header_rect);
+        let shown_columns = self.session.columns();
+        let columns = Columns::split(header_rect, &shown_columns);
         let font = FontId::monospace(13.0);
         for (rect, key, label) in [
-            (columns.name, SortKey::Name, "Nazwa"),
-            (columns.ext, SortKey::Ext, "Typ"),
-            (columns.size, SortKey::Size, "Rozmiar"),
-            (columns.date, SortKey::Date, "Data"),
+            (columns.name, Some(SortKey::Name), "Nazwa"),
+            (columns.ext, Some(SortKey::Ext), "Typ"),
+            (columns.size, Some(SortKey::Size), "Rozmiar"),
+            (columns.created, None, "Utworzono"),
+            (columns.date, Some(SortKey::Date), "Data"),
         ] {
             // A column dropped because the panel is narrow has no title either.
             if rect.width() < 1.0 {
@@ -1111,7 +1116,7 @@ impl BluepaneUi {
                 ui.id().with(("sort", index, label)),
                 egui::Sense::click(),
             );
-            let arrow = match (sort.key == key, sort.descending) {
+            let arrow = match (Some(sort.key) == key, sort.descending) {
                 (false, _) => "",
                 (true, false) => " ▲",
                 (true, true) => " ▼",
@@ -1121,7 +1126,7 @@ impl BluepaneUi {
             } else {
                 self.theme.muted
             };
-            let (pos, align) = if key == SortKey::Size {
+            let (pos, align) = if key == Some(SortKey::Size) {
                 (
                     egui::pos2(rect.right() - COLUMN_PAD, rect.center().y),
                     Align2::RIGHT_CENTER,
@@ -1135,7 +1140,7 @@ impl BluepaneUi {
             ui.painter()
                 .text(pos, align, format!("{label}{arrow}"), font.clone(), color);
             if response.clicked() {
-                sort_by = Some(key);
+                sort_by = key;
             }
         }
 
@@ -1253,7 +1258,7 @@ impl BluepaneUi {
                         } else {
                             class_color
                         };
-                        let cols = Columns::split(rect);
+                        let cols = Columns::split(rect, &shown_columns);
                         let (stem, ext) = name_parts(&entry.name, entry.is_dir());
                         let mut name = if entry.is_dir() {
                             format!("[{stem}]")
@@ -1365,6 +1370,11 @@ impl BluepaneUi {
                         }
                         cell(cols.ext, Align2::LEFT_CENTER, ext.to_string());
                         cell(cols.size, Align2::RIGHT_CENTER, size);
+                        cell(
+                            cols.created,
+                            Align2::LEFT_CENTER,
+                            format_modified(entry.created),
+                        );
                         cell(
                             cols.date,
                             Align2::LEFT_CENTER,
@@ -1506,6 +1516,7 @@ struct Columns {
     name: Rect,
     ext: Rect,
     size: Rect,
+    created: Rect,
     date: Rect,
 }
 
@@ -1516,27 +1527,40 @@ impl Columns {
     /// The name column never gets narrower than this while another column is shown.
     const NAME_MIN: f32 = 140.0;
 
-    /// The columns of a row. Size is dropped last, then the type, then the date goes first:
-    /// a column that would squeeze the name below [`Self::NAME_MIN`] is not shown (zero width
-    /// at the right edge), so a narrow panel (tools docked beside it) still shows names.
-    fn split(row: Rect) -> Columns {
+    fn width(column: Column) -> f32 {
+        match column {
+            Column::Ext => Self::EXT,
+            Column::Size => Self::SIZE,
+            Column::Modified | Column::Created => Self::DATE,
+        }
+    }
+
+    /// The columns of a row, of those the user chose (`shown`). Size is dropped last, then
+    /// the type, then the date, and the creation date goes first: a column that would squeeze
+    /// the name below [`Self::NAME_MIN`] is not shown (zero width at the right edge), so a
+    /// narrow panel (tools docked beside it) still shows names.
+    fn split(row: Rect, shown: &[Column]) -> Columns {
         let cut = |left: f32, right: f32| {
             Rect::from_min_max(egui::pos2(left, row.top()), egui::pos2(right, row.bottom()))
         };
         let mut room = row.width() - Self::NAME_MIN;
-        let show_size = room >= Self::SIZE;
-        if show_size {
-            room -= Self::SIZE;
+        let mut fits = true;
+        let mut visible = Vec::new();
+        for column in [Column::Size, Column::Ext, Column::Modified, Column::Created] {
+            if !shown.contains(&column) {
+                continue;
+            }
+            fits = fits && room >= Self::width(column);
+            if fits {
+                room -= Self::width(column);
+                visible.push(column);
+            }
         }
-        let show_ext = show_size && room >= Self::EXT;
-        if show_ext {
-            room -= Self::EXT;
-        }
-        let show_date = show_ext && room >= Self::DATE;
-        // Placed from the right edge: date, size, type; the name takes what is left.
+        // Placed from the right edge: date, creation date, size, type; the name takes the rest.
         let mut right = row.right();
-        let mut place = |shown: bool, width: f32| {
-            if shown {
+        let mut place = |column: Column| {
+            if visible.contains(&column) {
+                let width = Self::width(column);
                 let rect = cut(right - width, right);
                 right -= width;
                 rect
@@ -1544,13 +1568,15 @@ impl Columns {
                 cut(row.right(), row.right())
             }
         };
-        let date = place(show_date, Self::DATE);
-        let size = place(show_size, Self::SIZE);
-        let ext = place(show_ext, Self::EXT);
+        let date = place(Column::Modified);
+        let created = place(Column::Created);
+        let size = place(Column::Size);
+        let ext = place(Column::Ext);
         Columns {
             name: cut(row.left(), right),
             ext,
             size,
+            created,
             date,
         }
     }
@@ -1599,7 +1625,7 @@ mod tests {
     #[test]
     fn columns_tile_the_row_without_overlap() {
         let row = Rect::from_min_max(egui::pos2(10.0, 0.0), egui::pos2(500.0, 20.0));
-        let c = Columns::split(row);
+        let c = Columns::split(row, &bluepane_engine::DEFAULT_COLUMNS);
         assert_eq!(c.name.left(), 10.0);
         assert_eq!(c.name.right(), c.ext.left());
         assert_eq!(c.ext.right(), c.size.left());
@@ -1610,10 +1636,10 @@ mod tests {
     #[test]
     fn a_panel_beside_a_tool_drops_columns_but_keeps_the_name_readable() {
         let columns = |w: f32| {
-            Columns::split(Rect::from_min_max(
-                egui::pos2(0.0, 0.0),
-                egui::pos2(w, 20.0),
-            ))
+            Columns::split(
+                Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(w, 20.0)),
+                &bluepane_engine::DEFAULT_COLUMNS,
+            )
         };
         // Wide: everything.
         let wide = columns(500.0);
@@ -1645,9 +1671,34 @@ mod tests {
     #[test]
     fn narrow_rows_do_not_produce_inverted_columns() {
         let row = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 20.0));
-        let c = Columns::split(row);
+        let c = Columns::split(row, &bluepane_engine::DEFAULT_COLUMNS);
         for rect in [c.name, c.ext, c.size, c.date] {
             assert!(rect.width() >= 0.0);
         }
+    }
+
+    #[test]
+    fn chosen_columns_are_shown_in_row_order_and_the_creation_date_is_dropped_first() {
+        use bluepane_engine::Column;
+        let all = [Column::Ext, Column::Size, Column::Created, Column::Modified];
+        let row = |w: f32| Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(w, 20.0));
+        let wide = Columns::split(row(800.0), &all);
+        assert_eq!(wide.name.right(), wide.ext.left());
+        assert_eq!(wide.size.right(), wide.created.left());
+        assert_eq!(wide.created.right(), wide.date.left());
+        assert_eq!(wide.date.right(), 800.0);
+        // Not enough room for both dates: the creation date goes, the rest stays.
+        let medium = Columns::split(row(500.0), &all);
+        assert_eq!(medium.created.width(), 0.0);
+        assert!(medium.date.width() > 0.0);
+        // Only the name and the size: the size sits at the right edge.
+        let few = Columns::split(row(500.0), &[Column::Size]);
+        assert_eq!(few.size.right(), 500.0);
+        assert_eq!(
+            (few.ext.width(), few.date.width(), few.created.width()),
+            (0.0, 0.0, 0.0)
+        );
+        // No columns at all: the name takes the whole row.
+        assert_eq!(Columns::split(row(300.0), &[]).name.width(), 300.0);
     }
 }

@@ -130,6 +130,7 @@ mod tests {
             kind,
             size: 1,
             modified: None,
+            created: None,
             hidden: false,
         }
     }

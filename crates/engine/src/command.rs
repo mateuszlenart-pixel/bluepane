@@ -81,6 +81,8 @@ pub const COMMAND_NAMES: &[&str] = &[
     "dragto",
     "drop",
     "viewmode",
+    "columns",
+    "density",
     "keys",
     "menu",
     "open",
@@ -327,6 +329,10 @@ pub enum Command {
     Drop(crate::DropTarget, Vec<PathBuf>),
     /// The active panel as a list or as a grid of thumbnails (`None` switches).
     PanelView(Option<crate::PanelView>),
+    /// Show or hide a column of the file list (`None` lists them).
+    Columns(Option<String>),
+    /// Compact or comfortable rows (`None` switches).
+    Density(Option<String>),
     /// Show or hide the key cheat sheet; the argument keeps only Ctrl or Alt keys.
     Keys(Option<String>),
     /// Open the context menu of the active panel (Shift+F10).
@@ -622,6 +628,8 @@ impl Command {
                 "grid" => Ok(Command::PanelView(Some(crate::PanelView::Grid))),
                 _ => Err(EngineError("viewmode: użycie: viewmode [list|grid]".into())),
             },
+            "columns" => Ok(Command::Columns(Some(rest.to_string()).filter(|r| !r.is_empty()))),
+            "density" => Ok(Command::Density(Some(rest.to_string()).filter(|r| !r.is_empty()))),
             "keys" => match rest.to_ascii_lowercase().as_str() {
                 "" => Ok(Command::Keys(None)),
                 "ctrl" => Ok(Command::Keys(Some("Ctrl+".into()))),

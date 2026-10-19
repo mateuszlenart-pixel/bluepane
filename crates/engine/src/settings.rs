@@ -7,6 +7,8 @@
 //! key Ctrl+K = sort name       (binds Ctrl+K)
 //! key F9 =                     (takes F9 off: nothing happens)
 //! key Ctrl+L = "cd "           (quotes keep a trailing space: the command line gets `cd `)
+//! columns = ext size date      (the columns of the file list, beside the name)
+//! density = compact            (rows of the file list: compact or comfortable)
 //! ```
 //!
 //! A line that cannot be understood is skipped with a warning; the rest still applies. The
@@ -26,10 +28,82 @@ pub const THEMES: &[&str] = &["dark"];
 /// The theme used until the user picks another.
 pub const DEFAULT_THEME: &str = "dark";
 
+/// A column of the file list beside the name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Column {
+    /// The extension.
+    Ext,
+    Size,
+    /// When the file was last changed.
+    Modified,
+    /// When the file was created (where the file system keeps it).
+    Created,
+}
+
+impl Column {
+    /// Every column, in the order they stand in a row (left to right after the name).
+    pub const ALL: [Column; 4] = [Column::Ext, Column::Size, Column::Created, Column::Modified];
+
+    pub fn word(self) -> &'static str {
+        match self {
+            Column::Ext => "ext",
+            Column::Size => "size",
+            Column::Modified => "date",
+            Column::Created => "created",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Column::Ext => "Typ",
+            Column::Size => "Rozmiar",
+            Column::Modified => "Data",
+            Column::Created => "Utworzono",
+        }
+    }
+
+    pub fn from_word(word: &str) -> Option<Column> {
+        Column::ALL
+            .into_iter()
+            .find(|c| c.word() == word.to_ascii_lowercase())
+    }
+}
+
+/// The columns shown until the user picks others.
+pub const DEFAULT_COLUMNS: [Column; 3] = [Column::Ext, Column::Size, Column::Modified];
+
+/// How tall the rows of the file list are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Density {
+    #[default]
+    Comfortable,
+    Compact,
+}
+
+impl Density {
+    pub fn word(self) -> &'static str {
+        match self {
+            Density::Comfortable => "comfortable",
+            Density::Compact => "compact",
+        }
+    }
+
+    fn from_word(word: &str) -> Option<Density> {
+        match word.to_ascii_lowercase().as_str() {
+            "comfortable" | "wygodna" => Some(Density::Comfortable),
+            "compact" | "zwarta" => Some(Density::Compact),
+            _ => None,
+        }
+    }
+}
+
 /// What the settings file holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Settings {
     pub theme: Option<String>,
+    /// The list's columns beside the name, when the user changed them.
+    pub columns: Option<Vec<Column>>,
+    pub density: Option<Density>,
     /// Keys that differ from the built-in map: `Some(line)` binds, `None` takes the key off.
     pub keys: Vec<(String, Option<String>)>,
 }
@@ -173,6 +247,26 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                     THEMES.join(", ")
                 ));
             }
+        } else if left == "columns" {
+            let mut columns = Vec::new();
+            for word in right.split_whitespace() {
+                match Column::from_word(word) {
+                    Some(column) if !columns.contains(&column) => columns.push(column),
+                    Some(_) => {}
+                    None => warnings.push(format!(
+                        "wiersz {number}: nie ma kolumny „{word}” (są: ext, size, date, created)"
+                    )),
+                }
+            }
+            settings.columns = Some(columns);
+        } else if left == "density" {
+            match Density::from_word(right.trim()) {
+                Some(density) => settings.density = Some(density),
+                None => warnings.push(format!(
+                    "wiersz {number}: gęstość to compact albo comfortable, nie „{}”",
+                    right.trim()
+                )),
+            }
         } else if let Some(key) = left.strip_prefix("key ") {
             let key = match normalize_key(key) {
                 Ok(key) => key,
@@ -209,6 +303,13 @@ pub fn render(settings: &Settings) -> String {
     );
     if let Some(theme) = &settings.theme {
         out.push_str(&format!("theme = {theme}\n"));
+    }
+    if let Some(columns) = &settings.columns {
+        let words: Vec<&str> = columns.iter().map(|c| c.word()).collect();
+        out.push_str(&format!("columns = {}\n", words.join(" ")));
+    }
+    if let Some(density) = settings.density {
+        out.push_str(&format!("density = {}\n", density.word()));
     }
     for (key, line) in &settings.keys {
         match line {
@@ -264,6 +365,76 @@ impl Session {
         std::fs::create_dir_all(&dir)
             .and_then(|()| std::fs::write(dir.join("settings.conf"), render(&self.settings)))
             .map_err(|e| EngineError(format!("zmiana działa, ale nie udało się jej zapisać: {e}")))
+    }
+
+    /// The columns of the file list beside the name, in row order.
+    pub fn columns(&self) -> Vec<Column> {
+        let chosen = self.settings.columns.as_deref().unwrap_or(&DEFAULT_COLUMNS);
+        Column::ALL
+            .into_iter()
+            .filter(|c| chosen.contains(c))
+            .collect()
+    }
+
+    pub fn density(&self) -> Density {
+        self.settings.density.unwrap_or_default()
+    }
+
+    /// `columns` lists the columns, `columns <name>` shows or hides one, `columns default`
+    /// brings the built-in set back.
+    pub(crate) fn set_columns(&mut self, word: Option<String>) -> Result<(), EngineError> {
+        let describe = |columns: &[Column]| {
+            let shown: Vec<&str> = columns.iter().map(|c| c.label()).collect();
+            if shown.is_empty() {
+                "tylko nazwa".to_string()
+            } else {
+                format!("Nazwa, {}", shown.join(", "))
+            }
+        };
+        let Some(word) = word else {
+            self.status = format!(
+                "Kolumny: {} (columns ext|size|date|created przełącza, columns default przywraca)",
+                describe(&self.columns())
+            );
+            return Ok(());
+        };
+        if word.eq_ignore_ascii_case("default") {
+            self.settings.columns = None;
+        } else {
+            let column = Column::from_word(&word).ok_or_else(|| {
+                EngineError(format!(
+                    "nie ma kolumny „{word}” (są: ext, size, date, created)"
+                ))
+            })?;
+            let mut columns = self.columns();
+            if let Some(at) = columns.iter().position(|c| *c == column) {
+                columns.remove(at);
+            } else {
+                columns.push(column);
+            }
+            self.settings.columns = Some(columns);
+        }
+        self.status = format!("Kolumny: {}", describe(&self.columns()));
+        self.save_settings()
+    }
+
+    /// `density` switches between compact and comfortable rows; with a word sets it.
+    pub(crate) fn set_density(&mut self, word: Option<String>) -> Result<(), EngineError> {
+        let density = match word {
+            Some(word) => Density::from_word(&word).ok_or_else(|| {
+                EngineError("density: użycie: density [compact|comfortable]".into())
+            })?,
+            None => match self.density() {
+                Density::Comfortable => Density::Compact,
+                Density::Compact => Density::Comfortable,
+            },
+        };
+        self.settings.density = Some(density);
+        self.status = match density {
+            Density::Compact => "Gęstość listy: zwarta".into(),
+            Density::Comfortable => "Gęstość listy: wygodna".into(),
+        };
+        self.save_settings()
     }
 
     /// `theme` shows the current theme and the available ones; `theme <name>` switches.
@@ -479,5 +650,51 @@ mod tests {
         assert!(s.status.contains("settings.conf"), "{}", s.status);
         assert!(s.status.contains("nie jest komendą"), "{}", s.status);
         assert_eq!(s.keymap.lookup("Ctrl+J"), Some("queue"), "default kept");
+    }
+
+    #[test]
+    fn columns_and_density_are_parsed_rendered_and_kept_in_row_order() {
+        let (settings, warnings) =
+            parse("columns = date ext created bogus ext\ndensity = zwarta\ndensity = huge\n");
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert_eq!(
+            settings.columns,
+            Some(vec![Column::Modified, Column::Ext, Column::Created])
+        );
+        assert_eq!(settings.density, Some(Density::Compact));
+        let again = parse(&render(&settings)).0;
+        assert_eq!(again, settings);
+    }
+
+    #[test]
+    fn columns_and_density_commands_change_and_save_the_settings() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("l")).unwrap();
+        let mut s = Session::new(tmp.path().join("l"), tmp.path().join("l"));
+        s.use_config_dir(&tmp.path().join("config"));
+        assert_eq!(s.columns(), DEFAULT_COLUMNS);
+        assert_eq!(s.density(), Density::Comfortable);
+        s.run_line("columns created").unwrap();
+        // Shown in row order, whatever order they were switched on in.
+        assert_eq!(
+            s.columns(),
+            [Column::Ext, Column::Size, Column::Created, Column::Modified]
+        );
+        s.run_line("columns ext").unwrap();
+        assert!(!s.columns().contains(&Column::Ext));
+        s.run_line("density").unwrap();
+        assert_eq!(s.density(), Density::Compact);
+        assert!(s.run_line("columns colour").is_err());
+        assert!(s.run_line("density huge").is_err());
+
+        let mut again = Session::new(tmp.path().join("l"), tmp.path().join("l"));
+        again.use_config_dir(&tmp.path().join("config"));
+        assert_eq!(
+            again.columns(),
+            [Column::Size, Column::Created, Column::Modified]
+        );
+        assert_eq!(again.density(), Density::Compact);
+        again.run_line("columns default").unwrap();
+        assert_eq!(again.columns(), DEFAULT_COLUMNS);
     }
 }

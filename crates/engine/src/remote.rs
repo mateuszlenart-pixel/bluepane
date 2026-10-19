@@ -26,6 +26,7 @@ pub(crate) fn remote_entries(dir: &str, list: &[RemoteEntry]) -> Vec<Entry> {
             },
             size: e.size,
             modified: e.modified,
+            created: None,
             hidden: e.name.starts_with('.'),
         })
         .collect()
