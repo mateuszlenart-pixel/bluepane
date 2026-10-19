@@ -108,7 +108,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(SYNC, "syncset", "syncset <numer> left|right|skip", "zmienia kierunek jednej pozycji planu"),
     h(SYNC, "syncclose", "syncclose", "zamyka okno synchronizacji"),
     h(FIND, "find", "find", "otwiera okno szukania plików (Ctrl+F, Alt+F7)"),
-    h(FIND, "findset", "findset <pole> <wartość>", "ustawia kryterium szukania (roots, name, namergx, namecase, exclude, text, …)"),
+    h(FIND, "findset", "findset <pole> <wartość>", "ustawia kryterium szukania (roots, name, namergx, namecase, nameaccents, exclude, text, …); `nameaccents off` (domyślnie) znajduje nazwy bez względu na polskie znaki"),
     h(FIND, "findrun", "findrun", "uruchamia szukanie"),
     h(FIND, "findstop", "findstop", "zatrzymuje szukanie"),
     h(FIND, "findgo", "findgo <numer>", "przechodzi do wyniku (do katalogu lub archiwum z plikiem)"),

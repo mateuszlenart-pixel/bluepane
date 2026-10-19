@@ -108,6 +108,14 @@ impl BluepaneUi {
                         "rozróżniaj wielkość liter w nazwie",
                         &mut commands,
                     );
+                    check(
+                        ui,
+                        "polskie znaki",
+                        form.name_accents,
+                        "nameaccents",
+                        "rozróżniaj litery z polskimi znakami (wyłączone: „zolw” znajduje „żółw”)",
+                        &mut commands,
+                    );
                 });
                 ui.end_row();
 

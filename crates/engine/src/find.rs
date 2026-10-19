@@ -22,6 +22,8 @@ pub struct FindForm {
     pub name: String,
     pub name_regex: bool,
     pub name_case: bool,
+    /// Tell letters with Polish accents from those without (`nameaccents on`).
+    pub name_accents: bool,
     pub exclude: String,
     pub text: String,
     pub text_regex: bool,
@@ -47,6 +49,7 @@ impl FindForm {
             name: String::new(),
             name_regex: false,
             name_case: false,
+            name_accents: false,
             exclude: String::new(),
             text: String::new(),
             text_regex: false,
@@ -190,6 +193,7 @@ impl Session {
             "name" => f.name = value.to_string(),
             "namergx" => f.name_regex = parse_bool(field, value)?,
             "namecase" => f.name_case = parse_bool(field, value)?,
+            "nameaccents" => f.name_accents = parse_bool(field, value)?,
             "exclude" => f.exclude = value.to_string(),
             "text" => f.text = value.to_string(),
             "regex" => f.text_regex = parse_bool(field, value)?,
@@ -271,6 +275,7 @@ impl Session {
             name: form.name.clone(),
             name_regex: form.name_regex,
             name_case_sensitive: form.name_case,
+            name_fold_accents: !form.name_accents,
             exclude_dirs: form.exclude.clone(),
             text,
             archives: form.archives,
@@ -673,5 +678,20 @@ mod tests {
         finish(&s);
         s.run_line("findclose").unwrap();
         assert!(!s.find.as_ref().unwrap().visible);
+    }
+
+    #[test]
+    fn names_are_found_without_polish_accents_unless_asked_for() {
+        let (tmp, mut s) = session();
+        fs::write(tmp.path().join("left/żółw.txt"), "x").unwrap();
+        s.run_line("find").unwrap();
+        s.run_line("findset name zolw*").unwrap();
+        s.run_line("findrun").unwrap();
+        finish(&s);
+        assert_eq!(found(&s), ["żółw.txt"]);
+        s.run_line("findset nameaccents on").unwrap();
+        s.run_line("findrun").unwrap();
+        finish(&s);
+        assert!(found(&s).is_empty(), "accents told apart: {:?}", found(&s));
     }
 }

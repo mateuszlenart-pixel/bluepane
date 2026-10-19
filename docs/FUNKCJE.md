@@ -277,7 +277,7 @@ Komendy: `sites`, `siteset <nazwa> <protocol|host|port|user|key|start|secret> <w
 
 Alt+F7 bywa zajęty przez menedżer okien w Linuksie (przesuwanie okna), dlatego jest też Ctrl+F. Szuka w tle (równolegle z kopiowaniem itp.), a wyniki pojawiają się na bieżąco. Nic nie jest zapisywane.
 
-- **Nazwa:** maski (`*.rs;*.md`, `?` = jeden znak) albo wyrażenie regularne; z rozróżnianiem wielkości liter lub bez.
+- **Nazwa:** maski (`*.rs;*.md`, `?` = jeden znak) albo wyrażenie regularne; z rozróżnianiem wielkości liter lub bez. Maski domyślnie **nie rozróżniają polskich znaków**: `zolw*` znajduje „żółw.txt”, a `żółw*` także „zolw.txt” (nazwy plików się nie zmieniają). Opcja „polskie znaki” (`findset nameaccents on`) włącza dokładne dopasowanie; wyrażenia regularne i szukanie w treści zawsze są dosłowne.
 - **Szukaj w:** aktywny panel, oba panele, **wszystkie dyski** albo lista katalogów oddzielonych `;`.
   Katalog zawarty w innym z listy nie jest przeszukiwany dwa razy; dowiązania do katalogów nie są śledzone (brak pętli).
 - **Pomiń katalogi:** maski, np. `target;node_modules;.git`.

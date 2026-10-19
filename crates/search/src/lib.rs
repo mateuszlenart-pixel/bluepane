@@ -63,6 +63,9 @@ pub struct Query {
     pub name: String,
     pub name_regex: bool,
     pub name_case_sensitive: bool,
+    /// Name masks match with or without Polish accents (`zolw` finds `żółw`); not for
+    /// regular expressions.
+    pub name_fold_accents: bool,
     /// Masks of folder names that are not entered, e.g. `target;node_modules;.git`.
     pub exclude_dirs: String,
     /// When set, only files whose content matches are found.
@@ -88,6 +91,7 @@ impl Default for Query {
             name: String::new(),
             name_regex: false,
             name_case_sensitive: false,
+            name_fold_accents: true,
             exclude_dirs: String::new(),
             text: None,
             archives: false,
