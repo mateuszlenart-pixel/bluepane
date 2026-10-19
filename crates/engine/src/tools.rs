@@ -17,11 +17,13 @@ pub enum Tool {
     Sites,
     Rename,
     Find,
+    /// Quick View in a tab of its own (`quick tab`); otherwise it takes the other panel's place.
+    Quick,
 }
 
 impl Tool {
     /// Every tool, in the order their tabs are offered.
-    pub const ALL: [Tool; 8] = [
+    pub const ALL: [Tool; 9] = [
         Tool::Pages,
         Tool::Viewer,
         Tool::Sync,
@@ -30,6 +32,7 @@ impl Tool {
         Tool::Sites,
         Tool::Rename,
         Tool::Find,
+        Tool::Quick,
     ];
 
     /// The name shown on its tab.
@@ -43,6 +46,7 @@ impl Tool {
             Tool::Sites => "Serwery",
             Tool::Rename => "Zmiana nazw",
             Tool::Find => "Szukanie",
+            Tool::Quick => "Quick View",
         }
     }
 
@@ -57,6 +61,7 @@ impl Tool {
             Tool::Sites => "siteclose",
             Tool::Rename => "mrclose",
             Tool::Find => "findclose",
+            Tool::Quick => "quick",
         }
     }
 
@@ -71,6 +76,7 @@ impl Tool {
             Tool::Sites => session.sites_open,
             Tool::Rename => session.rename.is_some(),
             Tool::Find => session.find.as_ref().is_some_and(|f| f.visible),
+            Tool::Quick => session.quick.is_some() && session.quick_in_tab(),
         }
     }
 }
@@ -121,6 +127,10 @@ mod tests {
                 s.run_line("multirename").unwrap();
             }
             Tool::Find => s.run_line("find").unwrap(),
+            Tool::Quick => {
+                s.run_line("quick tab").unwrap();
+                s.run_line("quick").unwrap();
+            }
         };
         for tool in Tool::ALL {
             open(&mut s, tool);

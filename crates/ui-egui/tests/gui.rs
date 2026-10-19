@@ -447,3 +447,36 @@ fn chosen_columns_and_compact_rows_draw_and_are_kept() {
     // The panels still list their files.
     harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
 }
+
+#[test]
+fn a_layout_is_saved_by_name_reset_and_loaded_again() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "queue");
+    command(&mut harness, "layout save Praca");
+    assert_eq!(harness.state_mut().session_mut().saved_layouts(), ["Praca"]);
+    command(&mut harness, "layout reset");
+    command(&mut harness, "layout load Praca");
+    harness.run_steps(2);
+    let session = harness.state_mut().session_mut();
+    assert!(session.status.contains("Praca"), "{}", session.status);
+    assert!(!session.status_is_error);
+    // The panels are still there after all that.
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+}
+
+#[test]
+fn quick_view_in_a_tab_leaves_both_panels_in_place() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "quick tab");
+    command(&mut harness, "select a.txt");
+    command(&mut harness, "unselectall");
+    command(&mut harness, "quick");
+    harness.run_steps(6);
+    // The right panel is still shown (its footer), not replaced by the preview.
+    harness.get_by_label_contains("1 element: 0 katalogów, 1 plik");
+    assert!(harness.state_mut().session_mut().quick.is_some());
+    command(&mut harness, "quick");
+    assert!(harness.state_mut().session_mut().quick.is_none());
+}

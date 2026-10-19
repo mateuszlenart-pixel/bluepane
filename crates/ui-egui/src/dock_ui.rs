@@ -47,6 +47,40 @@ pub(crate) fn default_layout() -> DockState<Tab> {
     dock
 }
 
+/// Keeps both file panels on screen: a panel never shares its group of tabs with another
+/// tab (where it would hide behind it). Whatever was dropped next to a panel moves out: the
+/// other panel to a split on its right, a tool to the tools' group. Returns true if it moved
+/// something.
+pub(crate) fn keep_panels_visible(dock: &mut DockState<Tab>) -> bool {
+    let mut moved = false;
+    // A few rounds at most: each one empties one crowded group.
+    for _ in 0..8 {
+        let crowded = dock.iter_leaves().find_map(|(path, leaf)| {
+            let tabs = leaf.tabs();
+            let first_panel = tabs.iter().copied().find(|t| !t.is_tool())?;
+            (tabs.len() > 1).then(|| {
+                let others: Vec<Tab> = tabs.iter().copied().filter(|t| *t != first_panel).collect();
+                (path, others)
+            })
+        });
+        let Some((path, others)) = crowded else {
+            break;
+        };
+        for tab in others {
+            if let Some(found) = dock.find_tab(&tab) {
+                dock.remove_tab(found);
+            }
+            if tab.is_tool() {
+                add_tool(dock, tab);
+            } else {
+                dock[path.surface].split_right(path.node, 0.5, vec![tab]);
+            }
+        }
+        moved = true;
+    }
+    moved
+}
+
 /// Share of the width the panels keep when the first tool opens beside them.
 const PANELS_SHARE: f32 = 0.58;
 
@@ -93,17 +127,37 @@ fn add_tool(dock: &mut DockState<Tab>, tab: Tab) {
 /// The saved layout, if the file is there and sound: both panels exactly once. Tools are
 /// not restored (they are closed at start), only where the panels were put.
 pub(crate) fn load_layout(path: &Path) -> Option<DockState<Tab>> {
-    let text = std::fs::read_to_string(path).ok()?;
-    let mut dock: DockState<Tab> = serde_json::from_str(&text).ok()?;
-    dock.retain_tabs(|tab| !tab.is_tool());
+    parse_layout(&std::fs::read_to_string(path).ok()?)
+}
+
+/// A layout from its text, if it is sound (see [`load_layout`]).
+pub(crate) fn parse_layout(text: &str) -> Option<DockState<Tab>> {
+    let mut dock: DockState<Tab> = serde_json::from_str(text).ok()?;
+    without_tools(&mut dock);
+    // A file written by an older version may hold a broken tree (see `without_tools`).
+    let root_sound = dock
+        .iter_all_nodes()
+        .next()
+        .is_some_and(|(_, node)| node.is_leaf() || node.is_parent());
+    if !root_sound {
+        return None;
+    }
     let count = |wanted: Tab| dock.iter_all_tabs().filter(|(_, t)| **t == wanted).count();
     (count(Tab::Panel(0)) == 1 && count(Tab::Panel(1)) == 1).then_some(dock)
+}
+
+/// Takes the tool tabs out one by one. (`retain_tabs` of egui_dock leaves the tree broken
+/// when it empties a whole group: the split above it keeps pointing at empty nodes.)
+fn without_tools(dock: &mut DockState<Tab>) {
+    while let Some(path) = dock.find_tab_from(|tab| tab.is_tool()) {
+        dock.remove_tab(path);
+    }
 }
 
 /// The layout as text, without the tool tabs (see [`load_layout`]).
 pub(crate) fn layout_text(dock: &DockState<Tab>) -> String {
     let mut copy = dock.clone();
-    copy.retain_tabs(|tab| !tab.is_tool());
+    without_tools(&mut copy);
     // The sizes on screen are worked out again when the dock is drawn; before the first
     // frame they are "infinite", which JSON cannot hold.
     for (_, node) in copy.iter_all_nodes_mut() {
@@ -172,7 +226,10 @@ impl TabViewer for DockViewer<'_> {
             Tab::Panel(i) => {
                 let index = usize::from(i);
                 // Quick View takes the place of the panel that does not have the keyboard.
-                if app.session.quick.is_some() && index != app.session.active {
+                if app.session.quick.is_some()
+                    && !app.session.quick_in_tab()
+                    && index != app.session.active
+                {
                     app.quick_ui(ui, index);
                 } else {
                     app.panel_ui(ui, index);
@@ -212,6 +269,32 @@ impl BluepaneUi {
                 .and_then(|dir| load_layout(&dir.join("layout.json")))
                 .unwrap_or_else(default_layout)
         });
+        if let Some(request) = self.session.layout_request.take() {
+            match request {
+                bluepane_engine::LayoutAction::Reset => dock = default_layout(),
+                bluepane_engine::LayoutAction::Save(name) => {
+                    let text = layout_text(&dock);
+                    let _ = self.session.store_layout(&name, &text);
+                }
+                bluepane_engine::LayoutAction::Load(name) => {
+                    match self
+                        .session
+                        .layout_text(&name)
+                        .ok()
+                        .and_then(|t| parse_layout(&t))
+                    {
+                        Some(loaded) => {
+                            dock = loaded;
+                            self.session.status = format!("Wczytano układ „{name}”");
+                        }
+                        None => {
+                            self.session.status = format!("Układ „{name}” jest uszkodzony");
+                            self.session.status_is_error = true;
+                        }
+                    }
+                }
+            }
+        }
         sync_tools(&mut dock, &self.session);
         let style = egui_dock::Style::from_egui(ui.style().as_ref());
         let mut viewer = DockViewer {
@@ -229,6 +312,7 @@ impl BluepaneUi {
                 self.dispatch(tool.close_line());
             }
         }
+        keep_panels_visible(&mut dock);
         // The tab the user last clicked in decides where the keys go.
         if let Some((_, tab)) = dock.find_active_focused() {
             self.focus = *tab;
@@ -256,6 +340,7 @@ impl BluepaneUi {
             Tool::Sites => self.sites_ui(ui),
             Tool::Rename => self.rename_ui(ui),
             Tool::Find => self.find_ui(ui),
+            Tool::Quick => self.quick_ui(ui, 0),
         }
     }
 
@@ -275,6 +360,21 @@ impl BluepaneUi {
             Tool::Sites => self.sites_keys(pressed),
             Tool::Find => self.find_keys(pressed),
             Tool::Rename => self.rename_keys(pressed),
+            Tool::Quick => {
+                for key in pressed {
+                    let line = match key.as_str() {
+                        "ArrowDown" => "quick scroll 1",
+                        "ArrowUp" => "quick scroll -1",
+                        "PageDown" => "quick scroll 20",
+                        "PageUp" => "quick scroll -20",
+                        "ArrowRight" => "quick page 1",
+                        "ArrowLeft" => "quick page -1",
+                        "Escape" => "quick",
+                        _ => continue,
+                    };
+                    self.dispatch(line);
+                }
+            }
             Tool::Sync => {
                 let dirty = self.sync_form_is_dirty();
                 for key in pressed {
@@ -380,5 +480,65 @@ mod tests {
         std::fs::write(&path, layout_text(&only_left)).unwrap();
         assert!(load_layout(&path).is_none());
         assert!(load_layout(&tmp.path().join("missing.json")).is_none());
+    }
+
+    #[test]
+    fn a_tab_dropped_next_to_a_panel_is_moved_out_so_both_panels_stay_visible() {
+        // The right panel and a tool dragged into the left panel's group.
+        let mut dock = DockState::new(vec![Tab::Panel(0), Tab::Panel(1), Tab::Tool(Tool::Queue)]);
+        assert!(keep_panels_visible(&mut dock));
+        for (_, leaf) in dock.iter_leaves() {
+            let tabs = leaf.tabs();
+            if tabs.iter().any(|t| !t.is_tool()) {
+                assert_eq!(tabs.len(), 1, "a panel is alone in its group: {tabs:?}");
+            }
+        }
+        let all = tabs(&dock);
+        assert!(all.contains(&Tab::Panel(0)) && all.contains(&Tab::Panel(1)));
+        assert!(
+            all.contains(&Tab::Tool(Tool::Queue)),
+            "the tool is kept, elsewhere"
+        );
+        // Nothing to do in the default layout.
+        assert!(!keep_panels_visible(&mut default_layout()));
+    }
+
+    #[test]
+    fn quick_view_gets_a_tab_only_when_asked_for_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = Session::new(tmp.path(), tmp.path());
+        let mut dock = default_layout();
+        s.run_line("quick").unwrap();
+        sync_tools(&mut dock, &s);
+        assert!(
+            !tabs(&dock).contains(&Tab::Tool(Tool::Quick)),
+            "it takes the other panel's place"
+        );
+        s.run_line("quick").unwrap();
+        s.run_line("quick tab").unwrap();
+        s.run_line("quick").unwrap();
+        sync_tools(&mut dock, &s);
+        assert!(tabs(&dock).contains(&Tab::Tool(Tool::Quick)));
+        s.run_line("quick").unwrap();
+        sync_tools(&mut dock, &s);
+        assert!(!tabs(&dock).contains(&Tab::Tool(Tool::Quick)));
+    }
+
+    #[test]
+    fn a_layout_saved_with_tools_open_loads_as_a_sound_tree_that_takes_tools_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = Session::new(tmp.path(), tmp.path());
+        let mut dock = default_layout();
+        s.run_line("queue").unwrap();
+        s.run_line("sites").unwrap();
+        sync_tools(&mut dock, &s);
+        let loaded = parse_layout(&layout_text(&dock)).expect("sound");
+        let (_, root) = loaded.iter_all_nodes().next().unwrap();
+        assert!(root.is_parent(), "the panels' split is the root");
+        // Opening a tool in the loaded layout must not trip over the tree.
+        let mut loaded = loaded;
+        sync_tools(&mut loaded, &s);
+        let all = tabs(&loaded);
+        assert!(all.contains(&Tab::Tool(Tool::Queue)) && all.contains(&Tab::Panel(1)));
     }
 }

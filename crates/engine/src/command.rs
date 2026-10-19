@@ -81,6 +81,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "dragto",
     "drop",
     "viewmode",
+    "layout",
     "columns",
     "density",
     "keys",
@@ -213,6 +214,8 @@ pub enum QuickAction {
     Toggle,
     Scroll(i64),
     Page(i32),
+    /// Show the preview in a tab of its own (`true`) or in place of the other panel.
+    Place(bool),
 }
 
 /// What `limit` was asked to do.
@@ -329,6 +332,8 @@ pub enum Command {
     Drop(crate::DropTarget, Vec<PathBuf>),
     /// The active panel as a list or as a grid of thumbnails (`None` switches).
     PanelView(Option<crate::PanelView>),
+    /// Window layouts: list, reset, save, load, delete.
+    Layout(String),
     /// Show or hide a column of the file list (`None` lists them).
     Columns(Option<String>),
     /// Compact or comfortable rows (`None` switches).
@@ -628,6 +633,7 @@ impl Command {
                 "grid" => Ok(Command::PanelView(Some(crate::PanelView::Grid))),
                 _ => Err(EngineError("viewmode: użycie: viewmode [list|grid]".into())),
             },
+            "layout" => Ok(Command::Layout(rest.to_string())),
             "columns" => Ok(Command::Columns(Some(rest.to_string()).filter(|r| !r.is_empty()))),
             "density" => Ok(Command::Density(Some(rest.to_string()).filter(|r| !r.is_empty()))),
             "keys" => match rest.to_ascii_lowercase().as_str() {
