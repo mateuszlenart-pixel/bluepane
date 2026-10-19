@@ -41,7 +41,12 @@ pub fn search(
     }
     let mut search = Search {
         query,
-        name: name_matcher(&query.name, query.name_regex, query.name_case_sensitive)?,
+        name: name_matcher(
+            &query.name,
+            query.name_regex,
+            query.name_case_sensitive,
+            query.name_fold_accents,
+        )?,
         exclude: mask_regex(&query.exclude_dirs, false)?,
         text: match &query.text {
             Some(text) if !text.pattern.is_empty() => Some(text_matcher(text)?),

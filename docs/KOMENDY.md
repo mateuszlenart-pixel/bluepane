@@ -108,7 +108,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | Komenda | Opis |
 | --- | --- |
 | `find` | otwiera okno szukania plików (Ctrl+F, Alt+F7) |
-| `findset <pole> <wartość>` | ustawia kryterium szukania (roots, name, namergx, namecase, exclude, text, …) |
+| `findset <pole> <wartość>` | ustawia kryterium szukania (roots, name, namergx, namecase, nameaccents, exclude, text, …); `nameaccents off` (domyślnie) znajduje nazwy bez względu na polskie znaki |
 | `findrun` | uruchamia szukanie |
 | `findstop` | zatrzymuje szukanie |
 | `findgo <numer>` | przechodzi do wyniku (do katalogu lub archiwum z plikiem) |

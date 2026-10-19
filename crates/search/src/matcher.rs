@@ -4,8 +4,42 @@ use regex::{Regex, RegexBuilder};
 
 use crate::TextQuery;
 
+/// The letters a Polish letter is written as without its accent, both ways: with `fold`
+/// set, `o` and `ó` both stand for `[oó]`. Other characters have no class.
+fn polish_class(c: char) -> Option<&'static str> {
+    Some(match c {
+        'a' | 'ą' => "[aą]",
+        'c' | 'ć' => "[cć]",
+        'e' | 'ę' => "[eę]",
+        'l' | 'ł' => "[lł]",
+        'n' | 'ń' => "[nń]",
+        'o' | 'ó' => "[oó]",
+        's' | 'ś' => "[sś]",
+        'z' | 'ź' | 'ż' => "[zźż]",
+        'A' | 'Ą' => "[AĄ]",
+        'C' | 'Ć' => "[CĆ]",
+        'E' | 'Ę' => "[EĘ]",
+        'L' | 'Ł' => "[LŁ]",
+        'N' | 'Ń' => "[NŃ]",
+        'O' | 'Ó' => "[OÓ]",
+        'S' | 'Ś' => "[SŚ]",
+        'Z' | 'Ź' | 'Ż' => "[ZŹŻ]",
+        _ => return None,
+    })
+}
+
 /// A list of `;`-separated masks (`*`, `?`) compiled to one regular expression.
 pub(crate) fn mask_regex(masks: &str, case_sensitive: bool) -> Result<Option<Regex>, String> {
+    mask_regex_folding(masks, case_sensitive, false)
+}
+
+/// Like [`mask_regex`]; with `fold_accents` a letter matches itself with or without its
+/// Polish accent (`zolw` finds `żółw` and the other way round). The names are not changed.
+pub(crate) fn mask_regex_folding(
+    masks: &str,
+    case_sensitive: bool,
+    fold_accents: bool,
+) -> Result<Option<Regex>, String> {
     let patterns: Vec<String> = masks
         .split(';')
         .map(str::trim)
@@ -16,7 +50,10 @@ pub(crate) fn mask_regex(masks: &str, case_sensitive: bool) -> Result<Option<Reg
                 .map(|c| match c {
                     '*' => ".*".to_string(),
                     '?' => ".".to_string(),
-                    other => regex::escape(&other.to_string()),
+                    other => match polish_class(other).filter(|_| fold_accents) {
+                        Some(class) => class.to_string(),
+                        None => regex::escape(&other.to_string()),
+                    },
                 })
                 .collect::<String>()
         })
@@ -32,6 +69,7 @@ pub(crate) fn name_matcher(
     name: &str,
     as_regex: bool,
     case_sensitive: bool,
+    fold_accents: bool,
 ) -> Result<Option<Regex>, String> {
     if name.trim().is_empty() {
         return Ok(None);
@@ -39,7 +77,7 @@ pub(crate) fn name_matcher(
     if as_regex {
         build(name, case_sensitive).map(Some)
     } else {
-        mask_regex(name, case_sensitive)
+        mask_regex_folding(name, case_sensitive, fold_accents)
     }
 }
 
@@ -69,7 +107,7 @@ mod tests {
     use super::*;
 
     fn names(masks: &str, case: bool, tests: &[&str]) -> Vec<bool> {
-        let re = name_matcher(masks, false, case).unwrap().unwrap();
+        let re = name_matcher(masks, false, case, false).unwrap().unwrap();
         tests.iter().map(|t| re.is_match(t)).collect()
     }
 
@@ -98,9 +136,9 @@ mod tests {
 
     #[test]
     fn empty_name_means_everything_and_regex_is_checked() {
-        assert!(name_matcher("  ", false, false).unwrap().is_none());
-        assert!(name_matcher("(", true, false).is_err());
-        let re = name_matcher(r"^img_\d+\.jpg$", true, false)
+        assert!(name_matcher("  ", false, false, false).unwrap().is_none());
+        assert!(name_matcher("(", true, false, false).is_err());
+        let re = name_matcher(r"^img_\d+\.jpg$", true, false, false)
             .unwrap()
             .unwrap();
         assert!(re.is_match("IMG_01.jpg"));
@@ -121,5 +159,25 @@ mod tests {
         assert!(re.is_match("a cat sat") && !re.is_match("concatenate"));
         q.case_sensitive = true;
         assert!(!text_matcher(&q).unwrap().is_match("A CAT"));
+    }
+
+    #[test]
+    fn masks_can_ignore_polish_accents_both_ways_without_losing_exact_matches() {
+        let folding = name_matcher("zolw*", false, false, true).unwrap().unwrap();
+        assert!(folding.is_match("żółw.txt"));
+        assert!(folding.is_match("Żółw.txt"), "case is still ignored");
+        assert!(folding.is_match("zolw.txt"));
+        let accented = name_matcher("żółw*", false, false, true).unwrap().unwrap();
+        assert!(accented.is_match("zolw.txt"), "the other way round too");
+        assert!(!folding.is_match("zalw.txt"), "other letters stay distinct");
+        // Without folding the accent matters.
+        let exact = name_matcher("zolw*", false, false, false).unwrap().unwrap();
+        assert!(!exact.is_match("żółw.txt"));
+        // With case sensitivity the accent is still folded, the case is not.
+        let both = name_matcher("Łódź*", false, true, true).unwrap().unwrap();
+        assert!(both.is_match("Lodz.txt") && !both.is_match("lodz.txt"));
+        // Regular expressions are taken as written.
+        let re = name_matcher("^zolw", true, false, true).unwrap().unwrap();
+        assert!(!re.is_match("żółw"));
     }
 }

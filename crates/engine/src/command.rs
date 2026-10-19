@@ -1066,7 +1066,7 @@ fn parse_siteset(args: &str) -> Result<Command, EngineError> {
 fn parse_findset(args: &str) -> Result<Command, EngineError> {
     let usage = || {
         EngineError(
-            "findset: użycie: findset <roots|name|namergx|namecase|exclude|text|regex|case|words|enc|binary|archives|password|hidden|min|max|after|before|limit|reset> <wartość>"
+            "findset: użycie: findset <roots|name|namergx|namecase|nameaccents|exclude|text|regex|case|words|enc|binary|archives|password|hidden|min|max|after|before|limit|reset> <wartość>"
                 .into(),
         )
     };
