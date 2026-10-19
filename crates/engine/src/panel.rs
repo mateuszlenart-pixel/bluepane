@@ -250,7 +250,8 @@ pub struct Panel {
     anchor: Option<PathBuf>,
     /// Grows every time `entries` is recomputed (listing, filter, sort).
     pub revision: u64,
-    /// Quick filter: only entries whose name contains this text (case-insensitive) are shown.
+    /// Quick filter: name fragments and criteria (see [`crate::FilterSpec`]); only the entries
+    /// that pass are shown.
     pub filter: String,
     pub sort: Sort,
     /// A list of rows, or a grid of thumbnails (`viewmode`).
@@ -468,7 +469,8 @@ impl Panel {
     /// (or, when that is gone, near the old position).
     fn rebuild(&mut self, keep: Option<&Path>) {
         self.revision += 1;
-        let needle = self.filter.to_lowercase();
+        let spec = crate::FilterSpec::parse(&self.filter);
+        let now = std::time::SystemTime::now();
         self.entries.clear();
         let parent = match &self.archive {
             // The `..` row of a list leaves it, back to the directory it was opened from.
@@ -497,13 +499,18 @@ impl Panel {
         self.entries.extend(
             self.listing
                 .iter()
-                .filter(|e| needle.is_empty() || e.name.to_lowercase().contains(&needle))
+                .filter(|e| spec.is_empty() || spec.matches(e, now))
                 .cloned(),
         );
         if let Some(index) = keep.and_then(|k| self.entries.iter().position(|e| e.path == k)) {
             self.cursor = index;
         }
         self.cursor = self.cursor.min(self.entries.len().saturating_sub(1));
+    }
+
+    /// How many entries the directory has, before the filter (without the `..` row).
+    pub fn listing_len(&self) -> usize {
+        self.listing.len()
     }
 
     /// Puts the cursor on the entry with this path, if it is visible.

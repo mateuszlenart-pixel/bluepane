@@ -21,7 +21,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `cursor <n>` | przesuwa kursor o n wierszy (ujemne: w górę) |
 | `click <wiersz> [ctrl\|shift\|ctrlshift]` | klik myszą w wiersz: przesuwa kursor, z modyfikatorem zaznacza (jak w Windows) |
 | `select <nazwa>` | ustawia kursor na pozycji o tej nazwie i zaznacza ją |
-| `filter [tekst]` | zawęża listę do nazw zawierających tekst; bez tekstu czyści filtr (Esc) |
+| `filter [tekst]` | zawęża listę: fragmenty nazwy (bez względu na wielkość liter i polskie znaki) oraz kryteria `typ:obraz\|dokument\|archiwum\|audio\|wideo\|kod\|tekst\|program`, `ext:jpg,png`, `>10m`, `<1g`, `nowsze:7d`, `starsze:30d`, `katalogi`, `pliki`; bez tekstu czyści filtr (Esc) |
 | `dirsize` | liczy w tle rozmiar zaznaczonych katalogów albo tego pod kursorem (Alt+Shift+Enter) |
 | `viewmode [list\|grid]` | aktywny panel jako lista albo siatka miniatur (obrazy z podglądem, reszta z ikoną); bez argumentu przełącza (Ctrl+Shift+G) |
 | `places` | pokazuje lub chowa pasek „Miejsca”: dyski z wolnym miejscem, ulubione, serwery i ostatnie katalogi (Ctrl+B) |

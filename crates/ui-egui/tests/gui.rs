@@ -480,3 +480,13 @@ fn quick_view_in_a_tab_leaves_both_panels_in_place() {
     command(&mut harness, "quick");
     assert!(harness.state_mut().session_mut().quick.is_none());
 }
+
+#[test]
+fn a_filter_with_criteria_narrows_the_list_and_the_footer_counts_it() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "filter pliki ext:txt a");
+    harness.get_by_label_contains("Widoczne 1 z 2");
+    command(&mut harness, "filter");
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+}
