@@ -56,7 +56,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(NAV, "cursor", "cursor <n>", "przesuwa kursor o n wierszy (ujemne: w górę)"),
     h(NAV, "click", "click <wiersz> [ctrl|shift|ctrlshift]", "klik myszą w wiersz: przesuwa kursor, z modyfikatorem zaznacza (jak w Windows)"),
     h(NAV, "select", "select <nazwa>", "ustawia kursor na pozycji o tej nazwie i zaznacza ją"),
-    h(NAV, "filter", "filter [tekst]", "zawęża listę do nazw zawierających tekst; bez tekstu czyści filtr (Esc)"),
+    h(NAV, "filter", "filter [tekst]", "zawęża listę: fragmenty nazwy (bez względu na wielkość liter i polskie znaki) oraz kryteria `typ:obraz|dokument|archiwum|audio|wideo|kod|tekst|program`, `ext:jpg,png`, `>10m`, `<1g`, `nowsze:7d`, `starsze:30d`, `katalogi`, `pliki`; bez tekstu czyści filtr (Esc)"),
     h(NAV, "dirsize", "dirsize", "liczy w tle rozmiar zaznaczonych katalogów albo tego pod kursorem (Alt+Shift+Enter)"),
     h(NAV, "viewmode", "viewmode [list|grid]", "aktywny panel jako lista albo siatka miniatur (obrazy z podglądem, reszta z ikoną); bez argumentu przełącza (Ctrl+Shift+G)"),
     h(NAV, "places", "places", "pokazuje lub chowa pasek „Miejsca”: dyski z wolnym miejscem, ulubione, serwery i ostatnie katalogi (Ctrl+B)"),

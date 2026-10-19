@@ -224,6 +224,12 @@ impl Session {
                 human_size(bytes)
             )
         };
+        // With a filter: how many of the folder's entries are shown.
+        let summary = if panel.filter.is_empty() {
+            summary
+        } else {
+            format!("Widoczne {real} z {} · {summary}", panel.listing_len())
+        };
         PanelStats {
             summary,
             biggest: biggest.max(1),

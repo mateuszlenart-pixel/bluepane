@@ -11,6 +11,7 @@ mod dirsize;
 mod documents;
 mod dragdrop;
 mod fileclass;
+mod filter;
 mod find;
 mod format;
 mod job;
@@ -67,6 +68,7 @@ pub use context_menu::MenuItem;
 pub use dirsize::{DirSizes, PanelStats};
 pub use dragdrop::DropTarget;
 pub use fileclass::{class_of, class_of_name, FileClass};
+pub use filter::{FilterSpec, Only};
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_modified, human_size, name_parts};
 pub use job::{
