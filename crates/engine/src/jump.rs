@@ -121,7 +121,7 @@ fn score((count, last): (u32, u64), now: u64) -> f64 {
     f64::from(count) * weight
 }
 
-fn unix_now() -> u64 {
+pub(crate) fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
@@ -148,7 +148,12 @@ impl Session {
         let Some(jump) = &self.jump else {
             return Vec::new();
         };
-        let folded = fold(&jump.query);
+        self.place_rows(&jump.query, now)
+    }
+
+    /// The places (tabs, visited folders, servers) that fit `query`, best first.
+    pub(crate) fn place_rows(&self, query: &str, now: u64) -> Vec<JumpEntry> {
+        let folded = fold(query);
         let words: Vec<&str> = folded.split_whitespace().collect();
         let fits = |text: &str| {
             let text = fold(text);
@@ -216,6 +221,7 @@ impl Session {
 
     pub(crate) fn jump_open(&mut self, query: String) {
         self.palette = None;
+        self.quickbox = None;
         self.jump = Some(Palette { query, selected: 0 });
     }
 

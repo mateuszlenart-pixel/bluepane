@@ -77,6 +77,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "testarchive",
     "palette",
     "jump",
+    "box",
     "go",
     "dragto",
     "drop",
@@ -325,6 +326,8 @@ pub enum Command {
     Palette(PaletteAction),
     /// Control the "jump to" list (Ctrl+P); it takes the same actions as the palette.
     Jump(PaletteAction),
+    /// Control the one search box (Ctrl+K); it takes the same actions as the palette.
+    Box(PaletteAction),
     /// What the path bar does with its text: go to a path or server, search, run a command.
     Go(String),
     /// Drag the active panel's marked entries (copy or move) to a panel or a folder row of it.
@@ -627,6 +630,7 @@ impl Command {
             "viewer" => parse_viewer(rest).map(Command::Viewer),
             "palette" => parse_palette(rest).map(Command::Palette),
             "jump" => parse_palette(rest).map(Command::Jump),
+            "box" => parse_palette(rest).map(Command::Box),
             "go" => need_arg("adres").map(Command::Go),
             "dragto" => parse_dragto(rest),
             "drop" => parse_drop(rest),

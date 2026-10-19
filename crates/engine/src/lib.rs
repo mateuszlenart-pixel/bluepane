@@ -28,6 +28,7 @@ mod palette;
 mod panel;
 mod places;
 mod queue;
+mod quickbox;
 mod quickview;
 mod remote;
 mod remote_job;
@@ -92,6 +93,7 @@ pub use panel::{
 };
 pub use places::{FavoriteAction, Favorites, Place, PlaceSection};
 pub use queue::{FinishedJob, Notice, QueueLine};
+pub use quickbox::{BoxEntry, BoxTarget};
 pub use quickview::{QuickContent, QuickKey, QuickView, QUICK_DELAY};
 pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, ShareList};
 pub use session::{

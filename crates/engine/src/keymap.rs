@@ -42,6 +42,7 @@ impl Default for Keymap {
             ("Ctrl+J", "queue"),
             ("F1", "palette"),
             ("Ctrl+P", "jump"),
+            ("Ctrl+K", "box"),
             ("Ctrl+B", "places"),
             ("Shift+F10", "menu"),
             ("Ctrl+Shift+G", "viewmode"),
