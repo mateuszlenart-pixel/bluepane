@@ -204,7 +204,6 @@ mod tests {
         assert_eq!(std::fs::read_link(&copy).unwrap(), Path::new("target.txt"));
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_listed_entry_carries_its_permission_bits_and_owner_where_the_system_has_them() {
         let tmp = tempfile::tempdir().unwrap();
@@ -224,6 +223,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn modes_round_trip_and_special_bits_are_stripped() {
         let tmp = tempfile::tempdir().unwrap();
