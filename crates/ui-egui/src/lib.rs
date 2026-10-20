@@ -4,6 +4,7 @@
 //! It contains no file system logic.
 
 mod bottom_ui;
+mod compare_ui;
 mod context_ui;
 mod dock_ui;
 mod drag_ui;

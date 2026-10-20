@@ -691,3 +691,52 @@ fn duplicates_are_listed_marked_by_a_rule_and_closed() {
     harness.run_steps(4);
     assert!(harness.state_mut().session_mut().duplicates.is_none());
 }
+
+#[test]
+fn a_comparison_of_two_text_files_shows_the_differences_and_closes() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    let (left, right) = {
+        let s = harness.state_mut().session_mut();
+        let left = s.active_panel().location();
+        s.run_line("switch").unwrap();
+        let right = s.active_panel().location();
+        s.run_line("switch").unwrap();
+        (left, right)
+    };
+    std::fs::write(left.join("zażółć.txt"), "jeden\ndwa\ntrzy\n").unwrap();
+    std::fs::write(right.join("zażółć.txt"), "jeden\nDWA\ntrzy\n").unwrap();
+    for dir in [&left, &right] {
+        assert!(dir.join("zażółć.txt").exists());
+    }
+    {
+        let s = harness.state_mut().session_mut();
+        s.run_line("refresh").unwrap();
+        s.run_line("select zażółć.txt").unwrap();
+        s.run_line("switch").unwrap();
+        s.run_line("refresh").unwrap();
+        s.run_line("select zażółć.txt").unwrap();
+        s.run_line("switch").unwrap();
+    }
+    command(&mut harness, "compare");
+    for _ in 0..200 {
+        harness.run_steps(2);
+        if !harness
+            .state_mut()
+            .session_mut()
+            .compare
+            .as_ref()
+            .unwrap()
+            .is_running()
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    harness.run_steps(4);
+    harness.get_by_label_contains("Różnice: 1");
+    harness.get_by_label("Następna różnica (F8)");
+    harness.get_by_label("Zamknij (Esc)").click();
+    harness.run_steps(4);
+    assert!(harness.state_mut().session_mut().compare.is_none());
+}

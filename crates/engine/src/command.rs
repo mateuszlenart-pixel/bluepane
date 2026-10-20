@@ -88,6 +88,8 @@ pub const COMMAND_NAMES: &[&str] = &[
     "macro",
     "button",
     "map",
+    "compare",
+    "checksum",
     "dupes",
     "schedule",
     "layout",
@@ -353,6 +355,10 @@ pub enum Command {
     Button(crate::ButtonAction),
     /// Disk usage map of the active folder.
     Map(crate::MapAction),
+    /// Compare two files.
+    Compare(crate::CompareAction),
+    /// Make or verify `.sha256` / `.md5` files.
+    Checksum(crate::ChecksumAction),
     /// Duplicate finder for the active folder.
     Dupes(crate::DupAction),
     /// Run a macro at a given time through the system scheduler.
@@ -673,6 +679,8 @@ impl Command {
             "dupes" | "dup" | "duplicates" => {
                 crate::duplicates::parse_dupes(rest).map(Command::Dupes)
             }
+            "compare" | "cmp" => crate::compare::parse_compare(rest).map(Command::Compare),
+            "checksum" | "cksum" => crate::compare::parse_checksum(rest).map(Command::Checksum),
             "map" => crate::diskmap::parse_map(rest).map(Command::Map),
             "button" | "btn" => crate::buttons::parse_button(rest).map(Command::Button),
             "macro" | "mac" => crate::macros::parse_macro(rest).map(Command::Macro),
