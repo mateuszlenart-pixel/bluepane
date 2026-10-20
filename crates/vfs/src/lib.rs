@@ -9,7 +9,7 @@ mod schedule;
 mod smb;
 
 pub use schedule::{ScheduleWhen, ScheduledTask};
-pub use smb::{list_shares, open_remote_desktop, Share, ShareKind};
+pub use smb::{list_shares, open_remote_desktop, share_folder, Share, ShareKind};
 
 use std::io;
 use std::path::{Path, PathBuf};

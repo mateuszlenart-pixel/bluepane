@@ -153,6 +153,9 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `scanshares <ip>` | pokazuje udziały sieciowe urządzenia |
 | `scanshare <ip> <udział>` | otwiera udział sieciowy |
 | `scansite <ip> sftp\|ftp\|ftps` | zapisuje urządzenie jako witrynę serwera |
+| `scanwake <ip\|adres MAC>` | Wake-on-LAN: wysyła pakiet budzący na adres MAC urządzenia (z ostatniego skanu albo z historii skanów; można podać sam adres MAC); odpowiedzi nie ma, więc program tylko potwierdza wysłanie, a komputer musi mieć włączone budzenie przez sieć w BIOS-ie i karcie sieciowej |
+| `scanpanel <ip> <nazwa udziału>` | otwiera udział sieciowy w aktywnym panelu: na Windows jako \\komputer\udział, na Linuksie przez zamontowanie `gio mount` (pakiet gvfs); udział wymagający logowania trzeba raz otworzyć w menedżerze plików systemu |
+| `scanhistory [off]` | pokazuje historię skanów: znane urządzenia (ostatnio widziane, kiedy pojawiły się pierwszy raz) i dziennik skanów; po zakończonym skanie urządzenia, których wcześniej nie było, mają znacznik NOWE (filtr `nowe` pokazuje tylko je; pierwszy skan zapisuje stan wyjściowy i nic nie oznacza); `off` wraca do wyników |
 | `scanfav <ip>` | dodaje lub usuwa urządzenie z ulubionych |
 | `scanfavorites [off]` | pokazuje tylko ulubione (off: wszystkie) |
 | `scancopy <ip>` | kopiuje adres urządzenia do schowka |

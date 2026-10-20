@@ -338,11 +338,15 @@ tylko nawiązuje i zrywa połączenia TCP, więc nie potrzeba uprawnień adminis
 - **Udziały sieciowe (SMB):** listę udziałów pobiera program systemu (Linux: `smbclient -L`, pakiet `smbclient`; Windows: `net view`), anonimowo albo na Twoim koncie Windows. Gdy serwer
   wymaga logowania, okno mówi to wprost zamiast pokazywać pustą listę. Udziały administracyjne (`C$`, `IPC$`) są ukryte. „Otwórz” otwiera udział w menedżerze plików systemu
   (`\\adres\udział` na Windows, `smb://adres/udział` na Linuksie).
+- **Udział w panelu:** „W panelu” przy udziale ustawia aktywny panel na tym udziale (`scanpanel <ip> <udział>`). Windows: ścieżka `\\adres\udział`. Linux: udział jest montowany przez `gio mount` (pakiet `gvfs`) i panel pokazuje jego katalog w `/run/user/.../gvfs`. Udział, który wymaga logowania, trzeba raz otworzyć w menedżerze plików systemu; okno podaje wtedy przyczynę zamiast pokazywać pusty panel.
+- **Wake-on-LAN:** „Obudź” (`scanwake <ip albo adres MAC>`) wysyła pakiet budzący (UDP, rozgłoszenie na port 9) na adres MAC urządzenia. MAC pochodzi z ostatniego skanu albo z historii, więc obudzisz też komputer, który jest teraz wyłączony. Odpowiedzi nie ma, więc program potwierdza tylko wysłanie; komputer musi mieć włączone budzenie przez sieć w BIOS-ie i w karcie sieciowej. Działa w sieci lokalnej.
+- **Witryna jednym kliknięciem:** „Witryna SFTP” i „Witryna FTP” przy zaznaczonym urządzeniu zapisują je jako serwer w menedżerze (Ctrl+S), niezależnie od tego, czy skan znalazł otwarty port 22 albo 21.
+- **Historia skanów:** po każdym **zakończonym** skanie program zapamiętuje urządzenia (po adresie MAC, a gdy go nie ma, po adresie IP) i krótki dziennik skanów w plikach `scan_known.conf` i `scan_log.conf`. Zakładka „Historia” pokazuje znane urządzenia (od ostatnio widzianych) z datą pierwszego i ostatniego razu oraz ostatnie skany. Urządzenie, którego wcześniej nie było, ma w wynikach znacznik **NOWE**; filtr `nowe` pokazuje tylko takie. **Pierwszy skan** zapisuje stan wyjściowy i niczego nie oznacza. Skan zatrzymany przed końcem nie jest zapamiętywany (widział tylko część sieci). Nic nie jest skanowane w tle.
 - **Ulubione:** zakładka „Ulubione” trzyma wybrane urządzenia między uruchomieniami (plik `scan_favorites.conf` w katalogu konfiguracji) i pokazuje, które były widoczne w ostatnim skanie.
 - **Filtr** zawęża tabelę po nazwie, adresie, producencie, MACu i usługach. Wyniki zostają po zamknięciu okna (`Ctrl+N` pokazuje je znowu). Esc zatrzymuje skanowanie.
 - Na Windows tablica ARP jest czytana poleceniem `arp -a`, na Linuksie z `/proc/net/arp`.
 
-Komendy: `scan`, `scanset <pole> <wartość>` (pola: `range`, `ports`, `names`, `arp`, `filter`, `timeout`, `reset`), `scanrun`, `scanstop`, `scanclose`, `scanselect <ip>`, `scanopen <ip> <port>`, `scanshares <ip>`, `scanshare <ip> <udział>`, `scansite <ip> sftp|ftp|ftps`, `scanfav <ip>`, `scanfavorites [off]`, `scancopy <ip>`.
+Komendy: `scan`, `scanset <pole> <wartość>` (pola: `range`, `ports`, `names`, `arp`, `filter`, `timeout`, `reset`), `scanrun`, `scanstop`, `scanclose`, `scanselect <ip>`, `scanopen <ip> <port>`, `scanshares <ip>`, `scanshare <ip> <udział>`, `scansite <ip> sftp|ftp|ftps`, `scanfav <ip>`, `scanfavorites [off]`, `scancopy <ip>`, `scanwake <ip|MAC>`, `scanpanel <ip> <udział>`, `scanhistory [off]`.
 
 ## Kolejka zadań (Ctrl+J)
 

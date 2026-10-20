@@ -40,6 +40,7 @@ mod quickview;
 mod remote;
 mod remote_job;
 mod scan;
+mod scanhistory;
 mod schedule;
 mod session;
 mod settings;
@@ -115,6 +116,7 @@ pub use queue::{FinishedJob, Notice, QueueLine};
 pub use quickbox::{BoxEntry, BoxTarget};
 pub use quickview::{QuickContent, QuickKey, QuickView, QUICK_DELAY};
 pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, ShareList};
+pub use scanhistory::{KnownDevice, ScanHistory, ScanLogEntry};
 pub use schedule::ScheduleAction;
 pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,

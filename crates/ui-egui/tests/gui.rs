@@ -764,3 +764,40 @@ fn the_sync_tab_offers_saving_a_profile_and_loading_a_saved_one() {
     harness.run_steps(2);
     harness.get_by_label_contains("Wczytaj: Zażółć");
 }
+
+#[test]
+fn the_scanner_offers_history_wake_and_site_buttons_for_a_selected_host() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "scan");
+    harness.run_steps(4);
+    harness.get_by_label("Wyniki");
+    harness.get_by_label("Historia").click();
+    harness.run_steps(4);
+    assert!(
+        harness
+            .state_mut()
+            .session_mut()
+            .scan
+            .as_ref()
+            .unwrap()
+            .show_history
+    );
+    harness.get_by_label_contains("Historia jest pusta");
+    command(&mut harness, "scanselect 10.0.0.5");
+    harness.run_steps(4);
+    harness.get_by_label("Obudź (Wake-on-LAN)");
+    harness.get_by_label("Witryna SFTP");
+    harness.get_by_label("Witryna FTP");
+    harness.get_by_label("Wyniki").click();
+    harness.run_steps(4);
+    assert!(
+        !harness
+            .state_mut()
+            .session_mut()
+            .scan
+            .as_ref()
+            .unwrap()
+            .show_history
+    );
+}

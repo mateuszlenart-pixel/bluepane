@@ -629,6 +629,9 @@ impl Session {
             Command::ScanFavorites(show) => {
                 if let Some(view) = self.scan.as_mut() {
                     view.show_favorites = show;
+                    if show {
+                        view.show_history = false;
+                    }
                 }
             }
             Command::ScanCopy(ip) => self.scan_copy(ip),
@@ -636,6 +639,14 @@ impl Session {
             Command::ScanShare(ip, name) => self.scan_share(ip, &name)?,
             Command::ScanOpen(ip, port) => self.scan_open(ip, port)?,
             Command::ScanSite(ip, protocol) => self.scan_site(ip, protocol)?,
+            Command::ScanWake(target) => self.scan_wake(&target)?,
+            Command::ScanPanel(ip, name) => self.scan_panel(ip, &name)?,
+            Command::ScanHistory(show) => {
+                if let Some(view) = self.scan.as_mut() {
+                    view.show_history = show;
+                    view.show_favorites = false;
+                }
+            }
             Command::Palette(action) => match action {
                 crate::PaletteAction::Query(text) => self.palette_set_query(text),
                 crate::PaletteAction::Close => self.palette = None,
