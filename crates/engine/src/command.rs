@@ -91,6 +91,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "macro",
     "button",
     "map",
+    "cloud",
     "panel",
     "syncprofile",
     "compare",
@@ -360,6 +361,8 @@ pub enum Command {
     Button(crate::ButtonAction),
     /// Disk usage map of the active folder.
     Map(crate::MapAction),
+    /// Clouds through rclone: list them or open one in the active panel.
+    Cloud(crate::CloudAction),
     /// Make panel 0 or 1 the active one (for scripts and profiles).
     FocusPanel(usize),
     /// Saved synchronization profiles.
@@ -726,6 +729,7 @@ impl Command {
             "syncprofile" | "sprofile" => {
                 crate::syncprofiles::parse_syncprofile(rest).map(Command::SyncProfile)
             }
+            "cloud" | "chmura" => crate::cloud::parse_cloud(rest).map(Command::Cloud),
             "map" => crate::diskmap::parse_map(rest).map(Command::Map),
             "button" | "btn" => crate::buttons::parse_button(rest).map(Command::Button),
             "macro" | "mac" => crate::macros::parse_macro(rest).map(Command::Macro),

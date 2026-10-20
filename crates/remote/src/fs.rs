@@ -38,6 +38,8 @@ pub enum Protocol {
     FtpsExplicit,
     /// FTP inside TLS from the first byte (usually port 990).
     FtpsImplicit,
+    /// A cloud through the `rclone` program; the site's host is the name of the remote.
+    Rclone,
 }
 
 impl Protocol {
@@ -46,6 +48,8 @@ impl Protocol {
             Protocol::Sftp => 22,
             Protocol::Ftp | Protocol::FtpsExplicit => 21,
             Protocol::FtpsImplicit => 990,
+            // No port: rclone has its own configuration.
+            Protocol::Rclone => 0,
         }
     }
 
@@ -56,6 +60,7 @@ impl Protocol {
             Protocol::Ftp => "ftp",
             Protocol::FtpsExplicit => "ftps",
             Protocol::FtpsImplicit => "ftps-implicit",
+            Protocol::Rclone => "rclone",
         }
     }
 
@@ -65,6 +70,7 @@ impl Protocol {
             "ftp" => Some(Protocol::Ftp),
             "ftps" | "ftps-explicit" => Some(Protocol::FtpsExplicit),
             "ftps-implicit" => Some(Protocol::FtpsImplicit),
+            "rclone" | "cloud" | "chmura" => Some(Protocol::Rclone),
             _ => None,
         }
     }
@@ -75,6 +81,7 @@ impl Protocol {
             Protocol::Ftp => "FTP (bez szyfrowania)",
             Protocol::FtpsExplicit => "FTPS (jawny, AUTH TLS)",
             Protocol::FtpsImplicit => "FTPS (niejawny, port 990)",
+            Protocol::Rclone => "Chmura (rclone)",
         }
     }
 }

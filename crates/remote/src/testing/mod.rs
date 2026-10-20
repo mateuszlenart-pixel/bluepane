@@ -4,6 +4,7 @@
 
 mod ftp_server;
 mod memory;
+mod rclone;
 mod sftp_server;
 
 use std::path::{Path, PathBuf};
@@ -43,4 +44,5 @@ pub fn active_transfers(root: impl AsRef<Path>) -> usize {
 
 pub use ftp_server::{start_ftp, FtpServer, FtpSettings, Tls};
 pub use memory::{FakeBitwarden, MemoryKeys, MemoryServices};
+pub use rclone::FakeRclone;
 pub use sftp_server::{start, write_file, Settings, TestServer};

@@ -27,7 +27,10 @@ use std::time::Duration;
 
 use crate::ftp::FtpConnection;
 use crate::secrets::{bitwarden_create, bitwarden_secret, SecretServices, KEYRING_SERVICE};
-use crate::{Auth, ConnectParams, KnownHosts, Protocol, RemoteError, RemoteFs, SftpConnection};
+use crate::{
+    Auth, ConnectParams, KnownHosts, Protocol, RcloneFs, RcloneRunner, RemoteError, RemoteFs,
+    SftpConnection, SystemRclone,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SecretStore {
@@ -78,6 +81,14 @@ impl Site {
         if self.name.trim().is_empty() || self.name.contains(['\n', ']', '[']) {
             return Some("nazwa witryny jest pusta albo zawiera niedozwolone znaki".into());
         }
+        if self.protocol == Protocol::Rclone {
+            // The host is the name of a remote in rclone's configuration: it may hold spaces,
+            // but not what rclone uses to tell a remote from a path.
+            if self.host.trim().is_empty() || self.host.contains([':', '/', '\\']) {
+                return Some("podaj nazwę chmury z rclone (np. gdrive)".into());
+            }
+            return None;
+        }
         if self.host.trim().is_empty() || self.host.contains(char::is_whitespace) {
             return Some("podaj adres serwera (bez spacji)".into());
         }
@@ -100,6 +111,7 @@ impl Site {
         trust: Option<&str>,
     ) -> Result<Arc<dyn RemoteFs>, RemoteError> {
         match self.protocol {
+            Protocol::Rclone => self.connect_cloud(Arc::new(SystemRclone::new())),
             Protocol::Sftp => {
                 let conn = SftpConnection::connect(&self.params(secret), known, trust)?;
                 Ok(Arc::new(conn))
@@ -127,6 +139,14 @@ impl Site {
                 Ok(Arc::new(conn))
             }
         }
+    }
+
+    /// Connects to the rclone remote this site names, with the given way of starting rclone.
+    pub fn connect_cloud(
+        &self,
+        runner: Arc<dyn RcloneRunner>,
+    ) -> Result<Arc<dyn RemoteFs>, RemoteError> {
+        Ok(Arc::new(RcloneFs::connect(runner, &self.host)?))
     }
 
     /// Connection parameters for SFTP; `secret` is the password or the key's passphrase.
@@ -200,6 +220,9 @@ impl Site {
 
     /// The same site without anything secret in it (for lists and status lines).
     pub fn label(&self) -> String {
+        if self.protocol == Protocol::Rclone {
+            return format!("{} (chmura {})", self.name, self.host);
+        }
         format!("{} ({}@{}:{})", self.name, self.user, self.host, self.port)
     }
 }

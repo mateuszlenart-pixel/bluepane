@@ -17,6 +17,7 @@ mod error;
 mod fs;
 mod ftp;
 mod known_hosts;
+mod rclone;
 mod secrets;
 mod sftp;
 mod sftp_transfer;
@@ -29,6 +30,9 @@ pub mod testing;
 pub use error::RemoteError;
 pub use fs::{Protocol, RemoteEntry, RemoteFs, TransferOptions};
 pub use known_hosts::{HostKeyStatus, KnownHosts};
+pub use rclone::{
+    list_remotes, CloudRemote, RcloneFs, RcloneOutput, RcloneRunner, SystemRclone, NOT_INSTALLED,
+};
 pub use secrets::{
     base64, bitwarden_available, bitwarden_create, bitwarden_responds, bitwarden_secret,
     json_string, BitwardenCli, CliOutput, KeyStore, SecretServices, SystemBitwarden, SystemKeyring,

@@ -145,7 +145,7 @@ impl FtpConnection {
                     }
                 }
             }
-            Protocol::Sftp => {
+            Protocol::Sftp | Protocol::Rclone => {
                 return Err(RemoteError::Connect("to nie jest protokół FTP".into()));
             }
         };

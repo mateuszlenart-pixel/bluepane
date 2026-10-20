@@ -108,7 +108,9 @@ impl Session {
             "protocol" => {
                 let protocol =
                     bluepane_remote::Protocol::from_word(value.trim()).ok_or_else(|| {
-                        EngineError("siteset protocol: sftp, ftp, ftps albo ftps-implicit".into())
+                        EngineError(
+                            "siteset protocol: sftp, ftp, ftps, ftps-implicit albo rclone".into(),
+                        )
                     })?;
                 // A port that was the old protocol's default follows the change.
                 if site.port == site.protocol.default_port() {
@@ -242,7 +244,11 @@ impl Session {
                 "panel pokazuje archiwum: wyjdź z niego przed połączeniem".into(),
             ));
         }
-        if password.is_none() && site.secret == SecretStore::Ask {
+        // A cloud has no login here: rclone keeps its own.
+        if password.is_none()
+            && site.secret == SecretStore::Ask
+            && site.protocol != bluepane_remote::Protocol::Rclone
+        {
             self.status = format!(
                 "Hasło do {} (Enter = połącz, Esc = anuluj; puste = bez hasła)",
                 site.label()
@@ -274,6 +280,7 @@ impl Session {
                 trust,
                 known: self.known_hosts.clone(),
                 services: self.secrets.clone(),
+                rclone: self.rclone.clone(),
             },
         ));
     }

@@ -167,6 +167,10 @@ impl Session {
         dir: Option<String>,
     ) -> Result<(), EngineError> {
         self.load_config();
+        if protocol == Protocol::Rclone {
+            // `rclone://chmura/katalog`: the cloud is the one `rclone config` named.
+            return self.cloud_connect(host, dir);
+        }
         let port = port.unwrap_or_else(|| protocol.default_port());
         let known = self.sites.sites.iter().find(|s| {
             s.host.eq_ignore_ascii_case(host)

@@ -114,6 +114,8 @@ pub enum RemoteOp {
         trust: Option<String>,
         known: sftp::KnownHosts,
         services: Arc<dyn sftp::SecretServices>,
+        /// How `rclone` is started, for sites of the cloud kind.
+        rclone: Arc<dyn sftp::RcloneRunner>,
     },
     /// Saves a site's password in the store its secret points at (Bitwarden can take a
     /// moment, so this is not done on the interface thread).
