@@ -23,11 +23,13 @@ pub enum Tool {
     Map,
     /// The duplicate finder (`dupes`).
     Dupes,
+    /// Two files side by side, or the result of a checksum check (`compare`, `checksum`).
+    Compare,
 }
 
 impl Tool {
     /// Every tool, in the order their tabs are offered.
-    pub const ALL: [Tool; 11] = [
+    pub const ALL: [Tool; 12] = [
         Tool::Pages,
         Tool::Viewer,
         Tool::Sync,
@@ -39,6 +41,7 @@ impl Tool {
         Tool::Quick,
         Tool::Map,
         Tool::Dupes,
+        Tool::Compare,
     ];
 
     /// The name shown on its tab.
@@ -55,6 +58,7 @@ impl Tool {
             Tool::Quick => "Quick View",
             Tool::Map => "Mapa zajętości",
             Tool::Dupes => "Duplikaty",
+            Tool::Compare => "Porównanie",
         }
     }
 
@@ -72,6 +76,7 @@ impl Tool {
             Tool::Quick => "quick",
             Tool::Map => "map close",
             Tool::Dupes => "dupes close",
+            Tool::Compare => "compare close",
         }
     }
 
@@ -89,6 +94,7 @@ impl Tool {
             Tool::Quick => session.quick.is_some() && session.quick_in_tab(),
             Tool::Map => session.diskmap.is_some(),
             Tool::Dupes => session.duplicates.is_some(),
+            Tool::Compare => session.compare.is_some(),
         }
     }
 }
@@ -145,6 +151,10 @@ mod tests {
             }
             Tool::Map => s.run_line("map").unwrap(),
             Tool::Dupes => s.run_line("dupes").unwrap(),
+            Tool::Compare => {
+                s.run_line("select a.txt").unwrap();
+                s.run_line("checksum create sha256").unwrap();
+            }
         };
         for tool in Tool::ALL {
             open(&mut s, tool);

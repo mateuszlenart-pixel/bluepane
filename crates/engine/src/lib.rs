@@ -7,6 +7,7 @@
 mod buttons;
 mod command;
 mod command_help;
+mod compare;
 mod context_menu;
 mod dirsize;
 mod diskmap;
@@ -74,6 +75,10 @@ pub use command::{
     SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,
 };
 pub use command_help::{command_help, commands_markdown, CommandHelp, COMMAND_HELP};
+pub use compare::{
+    Algo, ChecksumAction, CompareAction, CompareView, DiffRow, Outcome as CompareOutcome, RowKind,
+    SumLine, SumStatus,
+};
 pub use context_menu::MenuItem;
 pub use dirsize::{DirSizes, PanelStats};
 pub use diskmap::{squarify, DiskMap, MapAction, MapItem, MapTile};

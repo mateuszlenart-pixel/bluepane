@@ -199,6 +199,18 @@ Makro (zob. „Makra i skrypty”) może się uruchamiać samo o zadanej porze, 
 - „Do kosza” (`dupes trash`) przenosi zaznaczone kopie do kosza. Jeśli w jakiejś grupie zaznaczono wszystkie kopie, komenda odmawia: jedna musi zostać.
 - Działa tylko na katalogu na dysku (nie w archiwum ani na serwerze).
 
+## Porównanie plików i sumy kontrolne
+
+`compare` (alias `cmp`) porównuje dwa pliki w zakładce „Porównanie”: dwa zaznaczone w panelu albo plik pod kursorem z plikiem pod kursorem w drugim panelu. Pliki są czytane **dopiero po komendzie**, w tle.
+
+- **Tekst** (do 4 MB) leży obok siebie: linie zmienione są żółte, tylko po lewej czerwone, tylko po prawej zielone. `F8` / „Następna różnica” i `F7` / „Poprzednia różnica” skaczą między blokami różnic. Linie są porównywane bez końców wierszy, więc pliki różniące się tylko CRLF/LF albo końcowym znakiem nowej linii są uznane za identyczne. Gdy środek (po odcięciu wspólnego początku i końca) jest bardzo duży i różny, pokazuje się jako jeden zmieniony blok.
+- **Binarne** (z bajtem zerowym) i pliki powyżej 4 MB: komunikat o pierwszym różniącym się bajcie (offset dziesiętny i szesnastkowy) z kontekstem w hex albo informacja, że krótszy plik jest początkiem dłuższego.
+
+`checksum` (alias `cksum`):
+- `checksum create sha256` / `md5` zapisuje obok pliku `nazwa.sha256` albo `nazwa.md5` (dla kilku zaznaczonych plików `SHA256SUMS` / `MD5SUMS` w katalogu panelu) w formacie `suma  nazwa`. Istniejącego pliku nigdy nie nadpisuje.
+- `checksum verify` na pliku `.sha256` / `.md5` (albo na pliku, który ma taki obok) sprawdza wszystkie wymienione pliki i pokazuje: zgodny, ZMIENIONY, brak pliku, nie do odczytu. Rozumie też format BSD (`SHA256 (nazwa) = suma`), znacznik trybu binarnego `*`, komentarze `#` i wiersze z samą sumą (dotyczą pliku, od którego pochodzi nazwa pliku z sumą).
+- Działa tylko na plikach na dysku. Do MD5 doszła zależność `md-5` (RustCrypto, ta sama rodzina co `sha2`).
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie
