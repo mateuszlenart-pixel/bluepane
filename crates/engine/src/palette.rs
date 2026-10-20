@@ -124,6 +124,7 @@ impl Session {
 
     pub(crate) fn palette_open(&mut self, query: String) {
         self.jump = None;
+        self.quickbox = None;
         self.palette = Some(Palette { query, selected: 0 });
     }
 
@@ -169,7 +170,7 @@ impl Session {
         }
     }
 
-    fn remember_command(&mut self, name: &str) {
+    pub(crate) fn remember_command(&mut self, name: &str) {
         self.recent_commands.retain(|r| r != name);
         self.recent_commands.insert(0, name.to_string());
         self.recent_commands.truncate(RECENT_MAX);

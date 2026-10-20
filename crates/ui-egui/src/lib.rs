@@ -217,6 +217,7 @@ impl BluepaneUi {
         self.context_menu_popup(&ctx);
         self.palette_dialog(&ctx);
         self.jump_dialog(&ctx);
+        self.box_dialog(&ctx);
         match &self.session.pending {
             // F2 edits the name in its row; the dialog is the fallback when the row is not shown.
             Some(Pending::Input {

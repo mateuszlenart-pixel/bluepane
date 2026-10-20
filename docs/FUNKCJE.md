@@ -100,6 +100,17 @@ Chowany pasek po lewej stronie okna zbiera punkty wejścia w jednym miejscu; kli
 
 Sekcje bez wierszy są ukryte. Komendy: `places` (pokazuje i chowa pasek), `fav`. Udziałów sieciowych ze skanera (Ctrl+N) w pasku jeszcze nie ma.
 
+## Jedna skrzynka (Ctrl+K)
+
+Jedno pole, jedna lista: **komendy** (jak w palecie F1, najwyżej pięć najlepiej pasujących), **miejsca** (jak w „Skocz do”: katalogi z historii, zakładki, serwery) i **pliki bieżącego katalogu** (nazwy zawierające wpisane słowa; polskie litery można pomijać, nazwy nigdy się przez to nie zmieniają). Każdy wiersz ma z przodu swoje źródło (Komenda, Katalog, Zakładka, Serwer, Plik, Folder). Bez wpisanego tekstu pokazuje ostatnie komendy i najczęściej odwiedzane katalogi.
+
+- `>tekst`: tylko komendy (cała lista).
+- `?wzorzec`: jedyny wiersz „Szukaj”; Enter uruchamia głębokie szukanie w bieżącym katalogu (okno `find`, można anulować). Nic nie jest skanowane w tle.
+- Enter na pliku ustawia na nim kursor, na komendzie z argumentem wpisuje ją do linii poleceń, na miejscu przechodzi tam.
+- F1 (paleta) i Ctrl+P („Skocz do”) działają jak dawniej, jako skróty do samych komend i samych miejsc.
+
+Komenda: `box [tekst]`, `box query <tekst>`, `box move <n>`, `box run`, `box close`.
+
 ## „Skocz do” (Ctrl+P)
 
 Jedno pole szukania nad miejscami, do których chodzisz najczęściej. Lista składa się z:

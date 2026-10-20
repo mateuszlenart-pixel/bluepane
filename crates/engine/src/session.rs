@@ -295,6 +295,8 @@ pub struct Session {
     pub favorites: crate::Favorites,
     /// The "jump to" list, while it is open (Ctrl+P).
     pub jump: Option<crate::Palette>,
+    /// The one search box, while it is open (Ctrl+K).
+    pub quickbox: Option<crate::Palette>,
     /// The folders visited so far (for the "jump to" ranking).
     pub visits: crate::Visits,
     pub(crate) last_visit: [Option<PathBuf>; 2],
@@ -456,6 +458,7 @@ impl Session {
             queue_open: false,
             palette: None,
             jump: None,
+            quickbox: None,
             after_connect: None,
             menu_requested: false,
             key_sheet_open: None,
@@ -617,6 +620,12 @@ impl Session {
                 crate::PaletteAction::Close => self.jump = None,
                 crate::PaletteAction::Move(by) => self.jump_move(by),
                 crate::PaletteAction::Run => self.jump_run()?,
+            },
+            Command::Box(action) => match action {
+                crate::PaletteAction::Query(text) => self.box_set_query(text),
+                crate::PaletteAction::Close => self.quickbox = None,
+                crate::PaletteAction::Move(by) => self.box_move(by),
+                crate::PaletteAction::Run => self.box_run()?,
             },
             Command::Go(text) => self.omnibox(&text)?,
             Command::DragTo(remove, target) => self.drag_to(remove, target)?,

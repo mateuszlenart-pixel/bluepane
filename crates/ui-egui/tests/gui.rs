@@ -466,6 +466,20 @@ fn a_layout_is_saved_by_name_reset_and_loaded_again() {
 }
 
 #[test]
+fn the_one_box_shows_commands_and_files_and_enter_goes_to_the_file() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "box a.txt");
+    harness.get_by_label_contains("Plik  a.txt");
+    command(&mut harness, "box move 1000");
+    command(&mut harness, "box run");
+    harness.run_steps(2);
+    let session = harness.state_mut().session_mut();
+    assert!(session.quickbox.is_none());
+    assert_eq!(session.active_panel().current().unwrap().name, "a.txt");
+}
+
+#[test]
 fn a_workspace_is_saved_with_its_layout_and_loaded_again() {
     let (_tmp, mut harness) = window();
     harness.run_steps(2);

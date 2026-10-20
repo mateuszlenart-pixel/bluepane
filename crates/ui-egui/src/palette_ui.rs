@@ -73,6 +73,34 @@ impl BluepaneUi {
         }
     }
 
+    pub(crate) fn box_dialog(&mut self, ctx: &egui::Context) {
+        let Some(open) = self.session.quickbox.clone() else {
+            return;
+        };
+        let rows: Vec<PickRow> = self
+            .session
+            .box_entries()
+            .into_iter()
+            .map(|entry| PickRow {
+                text: entry.label,
+                tag: Some(entry.kind),
+                strong: false,
+            })
+            .collect();
+        let hint =
+            "Komenda, miejsce albo plik…  (> tylko komendy, ?wzorzec głęboko szuka, Enter, Esc)";
+        let lines = self.pick_window(
+            ctx,
+            ("Skrzynka", "box", hint, "Nic nie pasuje"),
+            &open.query,
+            open.selected,
+            &rows,
+        );
+        for line in lines {
+            let _ = self.session.run_line(&line);
+        }
+    }
+
     /// Draws the search field and the rows; returns the command lines the input asks for.
     /// `names` is (window title, command, hint, text when nothing matches).
     fn pick_window(

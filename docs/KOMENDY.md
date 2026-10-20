@@ -175,4 +175,5 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | Komenda | Opis |
 | --- | --- |
 | `palette [tekst]\|query <tekst>\|move <n>\|run\|close` | paleta komend: szukanie wśród wszystkich komend z opisem; Enter uruchamia zaznaczoną, a taką, która wymaga argumentu, wpisuje do wiersza poleceń (F1) |
+| `box [tekst]\|query <tekst>\|move <n>\|run\|close` | Jedna skrzynka: komendy, miejsca i pliki bieżącego katalogu w jednej liście; „>” zawęża do komend, „?wzorzec” uruchamia głębokie szukanie w katalogu (Ctrl+K) |
 | `jump [tekst]\|query <tekst>\|move <n>\|run\|close` | „Skocz do”: katalogi wybierane według częstości i świeżości odwiedzin, zakładki aktywnego panelu i zapisane serwery; Enter przechodzi tam w aktywnym panelu (Ctrl+P) |

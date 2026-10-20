@@ -150,6 +150,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(LOOK, "density", "density [compact|comfortable]", "wiersze listy zwarte albo wygodne; bez argumentu przełącza; zapisuje się w `settings.conf`"),
     h(LOOK, "keys", "keys [ctrl|alt|shift]", "ściąga klawiszy: wszystkie skróty (także własne z `bind`) z opisami; z argumentem tylko te z Ctrl, Alt albo Shift (?, albo przytrzymaj Ctrl lub Alt)"),
     h(PAL, "palette", "palette [tekst]|query <tekst>|move <n>|run|close", "paleta komend: szukanie wśród wszystkich komend z opisem; Enter uruchamia zaznaczoną, a taką, która wymaga argumentu, wpisuje do wiersza poleceń (F1)"),
+    h(PAL, "box", "box [tekst]|query <tekst>|move <n>|run|close", "Jedna skrzynka: komendy, miejsca i pliki bieżącego katalogu w jednej liście; „>” zawęża do komend, „?wzorzec” uruchamia głębokie szukanie w katalogu (Ctrl+K)"),
     h(PAL, "jump", "jump [tekst]|query <tekst>|move <n>|run|close", "„Skocz do”: katalogi wybierane według częstości i świeżości odwiedzin, zakładki aktywnego panelu i zapisane serwery; Enter przechodzi tam w aktywnym panelu (Ctrl+P)"),
 ];
 
