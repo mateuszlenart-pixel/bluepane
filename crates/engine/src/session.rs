@@ -664,6 +664,7 @@ impl Session {
             Command::Workspace(action) => self.workspace_action(action)?,
             Command::Macro(action) => self.macro_action(action)?,
             Command::Button(action) => self.button_action(action)?,
+            Command::Schedule(action) => self.schedule_action(action)?,
             Command::Layout(words) => self.layout_command(&words)?,
             Command::Columns(word) => self.set_columns(word)?,
             Command::ColumnWidth(args) => self.set_column_width(&args)?,

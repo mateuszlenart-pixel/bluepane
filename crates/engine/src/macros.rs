@@ -71,6 +71,15 @@ impl Session {
             .ok_or_else(|| EngineError("nie ma katalogu konfiguracji".into()))
     }
 
+    pub(crate) fn macro_path(&self, name: &str) -> Result<PathBuf, EngineError> {
+        self.macro_file(name)
+    }
+
+    /// A macro name checked for use in a file name.
+    pub(crate) fn macro_name(&self, name: &str) -> Result<String, EngineError> {
+        check_name(name)
+    }
+
     fn macro_file(&self, name: &str) -> Result<PathBuf, EngineError> {
         Ok(self.macros_dir()?.join(format!("{name}.{EXTENSION}")))
     }
