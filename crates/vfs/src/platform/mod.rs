@@ -48,6 +48,23 @@ pub(crate) fn launch_plan(editor: Option<&str>, path: &Path) -> (String, Vec<OsS
 
 /// Opens a file outside bluepane: with `editor` (a command line such as `code -w`) when
 /// given, otherwise with the system's default application. Does not wait for it to close.
+/// Starts a program in `dir` without waiting for it (output discarded). No shell is involved,
+/// so the arguments reach the program exactly as given, whatever characters they hold.
+pub fn spawn_program(program: &str, args: &[String], dir: &Path) -> io::Result<()> {
+    let mut child = std::process::Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| io::Error::new(e.kind(), format!("{program}: {e}")))?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 pub fn open_external(path: &Path, editor: Option<&str>) -> io::Result<()> {
     let (program, args) = launch_plan(editor, path);
     let mut child = std::process::Command::new(&program)

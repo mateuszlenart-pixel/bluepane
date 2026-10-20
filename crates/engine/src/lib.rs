@@ -4,6 +4,7 @@
 //! through [`Session::execute`] / [`Session::run_line`], so everything is testable
 //! without a window.
 
+mod buttons;
 mod command;
 mod command_help;
 mod context_menu;
@@ -64,6 +65,7 @@ pub use bluepane_sync::{
     Variant as SyncVariant,
 };
 pub use bluepane_vfs::{Share, ShareKind};
+pub use buttons::{Button, ButtonAction, ButtonLaunch};
 pub use command::{
     parse_size, Command, NameFormat, PackArgs, PaletteAction, QueueMove, QuickAction, SpeedLimit,
     SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,

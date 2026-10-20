@@ -163,6 +163,15 @@ Makro to zapisany ciąg poleceń. `macro record Porządki` zaczyna nagrywanie (w
 - Makro może wywołać inne makro (do 4 poziomów, żeby pętla nie zawiesiła programu).
 - Bez okna: `bluepane-cli run-script <lewy> <prawy> <skrypt.bp> [argumenty]`. Nie ma okna konfliktów (istniejący plik jest pomijany), a `delete` wymaga w skrypcie następnej linii `confirm`.
 
+## Własne przyciski narzędzi
+
+Własny przycisk uruchamia zewnętrzny program z parametrami. Zastępuje wtyczki, bo nie wczytuje żadnego kodu: tylko startuje program. Przyciski leżą w `buttons.conf` w katalogu konfiguracji (jeden w wierszu: `Nazwa = program argumenty`) i mają osobny rząd pod klawiszami funkcyjnymi; widać je też w polu Ctrl+K (rodzaj „Przycisk”, wystarczy zacząć pisać nazwę, także bez polskich liter).
+
+- `button add Edytor = code %f` dodaje (albo zastępuje) przycisk; `button list`, `button delete <nazwa>`, `button run <nazwa>`. Skrót: `btn`. Plik `buttons.conf` można też edytować ręcznie.
+- Parametry: `%f` pełna ścieżka pliku pod kursorem, `%n` sama nazwa, `%d` katalog aktywnego panelu, `%o` katalog drugiego panelu, `%s` zaznaczone pliki (albo plik pod kursorem), każdy jako osobny argument, gdy `%s` jest osobnym słowem; `%%` to znak procentu. Cudzysłowy zachowują spacje w jednym słowie: `foto "C:\Program Files\x" %s`.
+- Program startuje w katalogu aktywnego panelu, bez powłoki: nazwy plików ze spacjami, średnikami czy `&` trafiają do programu bez zmian i nic się nie interpretuje. Przycisk działa na katalogu na dysku (nie w archiwum ani na serwerze).
+- Błąd uruchomienia (np. brak programu) pokazuje pasek stanu z nazwą programu.
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

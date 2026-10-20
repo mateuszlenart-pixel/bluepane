@@ -603,3 +603,24 @@ fn a_filter_with_criteria_narrows_the_list_and_the_footer_counts_it() {
     command(&mut harness, "filter");
     harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
 }
+
+#[test]
+fn own_buttons_get_a_row_and_a_click_starts_the_program() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(
+        &mut harness,
+        "button add Zażółć = no-such-program-bluepane %f",
+    );
+    harness.get_by_label("Zażółć").click();
+    harness.run_steps(4);
+    let session = harness.state_mut().session_mut();
+    assert!(session.status_is_error, "{}", session.status);
+    assert!(
+        session.status.contains("no-such-program-bluepane"),
+        "{}",
+        session.status
+    );
+    command(&mut harness, "button delete Zażółć");
+    assert!(harness.query_by_label("Zażółć").is_none());
+}

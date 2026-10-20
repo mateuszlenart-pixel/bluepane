@@ -218,6 +218,29 @@ impl BluepaneUi {
         if let Some(line) = line {
             self.dispatch(line);
         }
+        self.own_buttons_bar(ui);
+    }
+
+    /// The row of the user's own buttons (`buttons.conf`); absent while there are none.
+    fn own_buttons_bar(&mut self, ui: &mut egui::Ui) {
+        if self.session.buttons.is_empty() {
+            return;
+        }
+        let mut run: Option<String> = None;
+        ui.horizontal_wrapped(|ui| {
+            for button in &self.session.buttons {
+                if ui
+                    .button(&button.name)
+                    .on_hover_text(&button.line)
+                    .clicked()
+                {
+                    run = Some(button.name.clone());
+                }
+            }
+        });
+        if let Some(name) = run {
+            self.dispatch(&format!("button run {name}"));
+        }
     }
 }
 
