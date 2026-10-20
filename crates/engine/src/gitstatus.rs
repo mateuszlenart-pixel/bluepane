@@ -79,13 +79,20 @@ fn git(folder: &Path, args: &[&str]) -> Option<Vec<u8>> {
 }
 
 fn ask_git(folder: &Path) -> Option<Marks> {
-    let root = git(folder, &["rev-parse", "--show-toplevel"])?;
-    let root = PathBuf::from(String::from_utf8_lossy(&root).trim_end());
+    // Where `folder` stands inside the repository ("" at the top, else "sub/dir/"). Paths are
+    // matched relative to the folder, so the spelling of the absolute path (forward slashes,
+    // short names on Windows) does not matter.
+    let prefix = git(folder, &["rev-parse", "--show-prefix"])?;
+    let prefix = String::from_utf8_lossy(&prefix).trim_end().to_string();
     let status = git(
         folder,
         &["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
     )?;
-    Some(parse_porcelain(&root, &String::from_utf8_lossy(&status)))
+    Some(parse_porcelain(
+        folder,
+        &prefix,
+        &String::from_utf8_lossy(&status),
+    ))
 }
 
 /// The letter for a two-letter porcelain status: `?` new, `U` conflict, `D` deleted, `A`
@@ -113,8 +120,9 @@ fn weight(letter: char) -> u8 {
     }
 }
 
-/// Reads `git status --porcelain=v1 -z`; the paths are relative to `root`.
-fn parse_porcelain(root: &Path, text: &str) -> Marks {
+/// Reads `git status --porcelain=v1 -z`: the paths are relative to the repository root, and
+/// `prefix` is where `folder` stands in it. Changes outside the folder are of no interest.
+fn parse_porcelain(folder: &Path, prefix: &str, text: &str) -> Marks {
     let mut marks = Marks::new();
     let mut parts = text.split('\0').filter(|p| !p.is_empty());
     while let Some(part) = parts.next() {
@@ -127,18 +135,23 @@ fn parse_porcelain(root: &Path, text: &str) -> Marks {
         if x == 'R' || x == 'C' {
             let _ = parts.next();
         }
+        let Some(inside) = name.strip_prefix(prefix) else {
+            continue;
+        };
         let mark = letter(x, y);
-        let mut path = root.join(name.trim_end_matches('/'));
-        let mut first = true;
-        // The file itself and every folder above it, up to the repository root.
-        loop {
-            let entry = marks.entry(path.clone()).or_insert(mark);
-            if !first && weight(mark) > weight(*entry) {
-                *entry = mark;
-            }
-            first = false;
-            if !path.pop() || path == root {
-                break;
+        // The entry itself and every folder between it and `folder`.
+        let mut path = folder.to_path_buf();
+        let mut paths = Vec::new();
+        for component in inside.split('/').filter(|c| !c.is_empty()) {
+            path.push(component);
+            paths.push(path.clone());
+        }
+        for (depth, path) in paths.into_iter().enumerate() {
+            let is_entry_itself = !inside.trim_end_matches('/').is_empty()
+                && depth + 1 == inside.trim_end_matches('/').split('/').count();
+            let slot = marks.entry(path).or_insert(mark);
+            if !is_entry_itself && weight(mark) > weight(*slot) {
+                *slot = mark;
             }
         }
     }
@@ -206,21 +219,34 @@ mod tests {
 
     #[test]
     fn porcelain_output_gives_letters_for_files_and_the_folders_above() {
-        let root = Path::new("/repo");
+        let folder = Path::new("/repo");
         let text = " M src/a.rs\0?? new.txt\0A  src/deep/b.rs\0 D gone.txt\0R  new_name.rs\0old_name.rs\0UU merge.rs\0";
-        let marks = parse_porcelain(root, text);
-        assert_eq!(marks[&root.join("src/a.rs")], 'M');
-        assert_eq!(marks[&root.join("new.txt")], '?');
-        assert_eq!(marks[&root.join("src/deep/b.rs")], 'A');
-        assert_eq!(marks[&root.join("gone.txt")], 'D');
-        assert_eq!(marks[&root.join("new_name.rs")], 'R');
-        assert_eq!(marks[&root.join("merge.rs")], 'U');
-        assert!(!marks.contains_key(&root.join("old_name.rs")));
-        // A folder shows the most serious change inside; the root itself is not marked.
-        assert_eq!(marks[&root.join("src")], 'M');
-        assert_eq!(marks[&root.join("src/deep")], 'A');
-        assert!(!marks.contains_key(root));
-        assert!(parse_porcelain(root, "").is_empty());
+        let marks = parse_porcelain(folder, "", text);
+        assert_eq!(marks[&folder.join("src").join("a.rs")], 'M');
+        assert_eq!(marks[&folder.join("new.txt")], '?');
+        assert_eq!(marks[&folder.join("src").join("deep").join("b.rs")], 'A');
+        assert_eq!(marks[&folder.join("gone.txt")], 'D');
+        assert_eq!(marks[&folder.join("new_name.rs")], 'R');
+        assert_eq!(marks[&folder.join("merge.rs")], 'U');
+        assert!(!marks.contains_key(&folder.join("old_name.rs")));
+        // A folder shows the most serious change inside; the folder itself is not marked.
+        assert_eq!(marks[&folder.join("src")], 'M');
+        assert_eq!(marks[&folder.join("src").join("deep")], 'A');
+        assert!(!marks.contains_key(folder));
+        assert!(parse_porcelain(folder, "", "").is_empty());
+    }
+
+    #[test]
+    fn inside_a_subfolder_only_its_own_changes_count_and_paths_are_relative_to_it() {
+        let folder = Path::new("/repo/sub");
+        let text = " M sub/x.txt\0 M other/y.txt\0?? sub/dir/z.txt\0";
+        let marks = parse_porcelain(folder, "sub/", text);
+        assert_eq!(marks[&folder.join("x.txt")], 'M');
+        assert_eq!(marks[&folder.join("dir")], '?');
+        assert_eq!(marks.len(), 3);
+        // Untracked folders are reported with a trailing slash.
+        let marks = parse_porcelain(folder, "sub/", "?? sub/newdir/\0");
+        assert_eq!(marks[&folder.join("newdir")], '?');
     }
 
     #[test]
