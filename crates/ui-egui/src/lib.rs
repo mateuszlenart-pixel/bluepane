@@ -7,6 +7,7 @@ mod bottom_ui;
 mod context_ui;
 mod dock_ui;
 mod drag_ui;
+mod dupes_ui;
 mod find_ui;
 mod grid_ui;
 mod keys_ui;

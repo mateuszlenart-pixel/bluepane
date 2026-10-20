@@ -21,11 +21,13 @@ pub enum Tool {
     Quick,
     /// The disk usage map (`map`).
     Map,
+    /// The duplicate finder (`dupes`).
+    Dupes,
 }
 
 impl Tool {
     /// Every tool, in the order their tabs are offered.
-    pub const ALL: [Tool; 10] = [
+    pub const ALL: [Tool; 11] = [
         Tool::Pages,
         Tool::Viewer,
         Tool::Sync,
@@ -36,6 +38,7 @@ impl Tool {
         Tool::Find,
         Tool::Quick,
         Tool::Map,
+        Tool::Dupes,
     ];
 
     /// The name shown on its tab.
@@ -51,6 +54,7 @@ impl Tool {
             Tool::Find => "Szukanie",
             Tool::Quick => "Quick View",
             Tool::Map => "Mapa zajętości",
+            Tool::Dupes => "Duplikaty",
         }
     }
 
@@ -67,6 +71,7 @@ impl Tool {
             Tool::Find => "findclose",
             Tool::Quick => "quick",
             Tool::Map => "map close",
+            Tool::Dupes => "dupes close",
         }
     }
 
@@ -83,6 +88,7 @@ impl Tool {
             Tool::Find => session.find.as_ref().is_some_and(|f| f.visible),
             Tool::Quick => session.quick.is_some() && session.quick_in_tab(),
             Tool::Map => session.diskmap.is_some(),
+            Tool::Dupes => session.duplicates.is_some(),
         }
     }
 }
@@ -138,6 +144,7 @@ mod tests {
                 s.run_line("quick").unwrap();
             }
             Tool::Map => s.run_line("map").unwrap(),
+            Tool::Dupes => s.run_line("dupes").unwrap(),
         };
         for tool in Tool::ALL {
             open(&mut s, tool);

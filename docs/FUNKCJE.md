@@ -190,6 +190,15 @@ Makro (zob. „Makra i skrypty”) może się uruchamiać samo o zadanej porze, 
 - Rysuje się do 300 największych wpisów; liczba pominiętych jest pod mapą. Puste katalogi nie mają kafelka. Dowiązania nie są śledzone, a katalog bez uprawnień liczy się jako pusty.
 - Mapa działa tylko na katalogu na dysku (nie w archiwum ani na serwerze).
 
+## Duplikaty
+
+`dupes` szuka plików o tej samej treści w katalogu aktywnego panelu i jego podkatalogach; wynik jest w zakładce „Duplikaty”. Szukanie rusza **dopiero po komendzie**, działa w tle i można je przerwać („Przerwij”, `dupes stop`; znalezione grupy zostają). Kandydaci zawężają się trzema krokami: ten sam rozmiar, ten sam skrót SHA-256, na końcu porównanie bajt po bajcie (więc kolizja skrótu nie zaszkodzi). Puste pliki i dowiązania są pomijane.
+
+- Grupy są posortowane od największej do odzyskania przestrzeni. Każda kopia ma pole wyboru (`dupes mark <grupa> <plik>`).
+- Reguły: „Zostaw najnowszą” (`dupes keep newest`), „Zostaw najstarszą” (`oldest`), „Zostaw najkrótszą ścieżkę” (`shortest`), `first` (pierwsza alfabetycznie). Reguła zaznacza wszystkie kopie oprócz jednej w każdej grupie; „Odznacz” (`dupes clear`) czyści zaznaczenie.
+- „Do kosza” (`dupes trash`) przenosi zaznaczone kopie do kosza. Jeśli w jakiejś grupie zaznaczono wszystkie kopie, komenda odmawia: jedna musi zostać.
+- Działa tylko na katalogu na dysku (nie w archiwum ani na serwerze).
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

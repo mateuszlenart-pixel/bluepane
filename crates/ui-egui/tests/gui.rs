@@ -652,3 +652,42 @@ fn the_disk_map_opens_as_a_tab_and_closes_with_its_button() {
     harness.run_steps(4);
     assert!(harness.state_mut().session_mut().diskmap.is_none());
 }
+
+#[test]
+fn duplicates_are_listed_marked_by_a_rule_and_closed() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    let dir = harness.state_mut().session_mut().active_panel().location();
+    std::fs::write(dir.join("kopia-a.txt"), "ta sama treść ąę").unwrap();
+    std::fs::write(dir.join("kopia-b.txt"), "ta sama treść ąę").unwrap();
+    command(&mut harness, "dupes");
+    for _ in 0..200 {
+        harness.run_steps(2);
+        let running = harness
+            .state_mut()
+            .session_mut()
+            .duplicates
+            .as_ref()
+            .unwrap()
+            .is_running();
+        if !running {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    harness.run_steps(4);
+    harness.get_by_label("Duplikaty");
+    harness.get_by_label_contains("Grupa 1");
+    harness.get_by_label("Zostaw najnowszą").click();
+    harness.run_steps(4);
+    let marked = harness
+        .state_mut()
+        .session_mut()
+        .dup_summary()
+        .unwrap()
+        .marked;
+    assert_eq!(marked, 1);
+    harness.get_by_label("Zamknij (Esc)").click();
+    harness.run_steps(4);
+    assert!(harness.state_mut().session_mut().duplicates.is_none());
+}

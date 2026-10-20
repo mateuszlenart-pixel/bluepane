@@ -342,6 +342,7 @@ impl BluepaneUi {
             Tool::Find => self.find_ui(ui),
             Tool::Quick => self.quick_ui(ui, 0),
             Tool::Map => self.map_ui(ui),
+            Tool::Dupes => self.dupes_ui(ui),
         }
     }
 
@@ -362,6 +363,7 @@ impl BluepaneUi {
             Tool::Find => self.find_keys(pressed),
             Tool::Rename => self.rename_keys(pressed),
             Tool::Map => self.map_keys(pressed),
+            Tool::Dupes => self.dupes_keys(pressed),
             Tool::Quick => {
                 for key in pressed {
                     let line = match key.as_str() {
