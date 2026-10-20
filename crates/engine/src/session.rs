@@ -308,6 +308,7 @@ pub struct Session {
     pub recent_commands: Vec<String>,
     /// The disk usage map, while it is open.
     pub diskmap: Option<crate::DiskMap>,
+    pub duplicates: Option<crate::Duplicates>,
     /// Own tool buttons (`buttons.conf`).
     pub buttons: Vec<crate::Button>,
     pub(crate) recording: Option<crate::macros::Recording>,
@@ -482,6 +483,7 @@ impl Session {
             last_visit: [None, None],
             recent_commands: Vec::new(),
             diskmap: None,
+            duplicates: None,
             buttons: Vec::new(),
             recording: None,
             macro_depth: 0,
@@ -668,6 +670,7 @@ impl Session {
             Command::Macro(action) => self.macro_action(action)?,
             Command::Button(action) => self.button_action(action)?,
             Command::Map(action) => self.map_action(action)?,
+            Command::Dupes(action) => self.dup_action(action)?,
             Command::Schedule(action) => self.schedule_action(action)?,
             Command::Layout(words) => self.layout_command(&words)?,
             Command::Columns(word) => self.set_columns(word)?,

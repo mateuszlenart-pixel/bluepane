@@ -88,6 +88,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "macro",
     "button",
     "map",
+    "dupes",
     "schedule",
     "layout",
     "columns",
@@ -352,6 +353,8 @@ pub enum Command {
     Button(crate::ButtonAction),
     /// Disk usage map of the active folder.
     Map(crate::MapAction),
+    /// Duplicate finder for the active folder.
+    Dupes(crate::DupAction),
     /// Run a macro at a given time through the system scheduler.
     Schedule(crate::ScheduleAction),
     /// Window layouts: list, reset, save, load, delete.
@@ -667,6 +670,9 @@ impl Command {
                 _ => Err(EngineError("viewmode: użycie: viewmode [list|grid]".into())),
             },
             "schedule" | "sched" => crate::schedule::parse_schedule(rest).map(Command::Schedule),
+            "dupes" | "dup" | "duplicates" => {
+                crate::duplicates::parse_dupes(rest).map(Command::Dupes)
+            }
             "map" => crate::diskmap::parse_map(rest).map(Command::Map),
             "button" | "btn" => crate::buttons::parse_button(rest).map(Command::Button),
             "macro" | "mac" => crate::macros::parse_macro(rest).map(Command::Macro),
