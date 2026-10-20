@@ -152,6 +152,17 @@ Obszar roboczy to zapamiętany układ pracy: katalogi i zakładki obu paneli (z 
 - Przy przywracaniu katalogi, których już nie ma, są pomijane, a pasek stanu mówi, ile ich było.
 - **Sesja:** przy zamknięciu okna zapisuje się ostatni stan jako ukryty obszar, a przy starcie wraca (chyba że podasz katalogi w wierszu poleceń). Wyłączenie: `workspace restore off` (zapisuje `restore = off` w `settings.conf`); `workspace restore on` włącza z powrotem.
 
+## Makra i skrypty
+
+Makro to zapisany ciąg poleceń. `macro record Porządki` zaczyna nagrywanie (w pasku stanu świeci „● Nagrywam”), potem pracujesz jak zwykle, a `macro stop` zapisuje plik `macros/Porządki.bp` w katalogu konfiguracji. Nagrywają się polecenia z wiersza poleceń, skrótów klawiszy, palety i pola Ctrl+K; **kliknięcia myszą w wiersze listy nie są nagrywane** (zamiast nich użyj `cursor`, `select`, klawiszy). Nie nagrywają się same polecenia `macro`, `box`, `palette`, `jump`, `keys` i `help`.
+
+- `macro play <nazwa> [argumenty]` odtwarza makro i staje na pierwszym poleceniu, które się nie powiedzie. Nazwę ze spacjami zakończ średnikiem: `macro play Moje makro; arg1 arg2`.
+- `macro list`, `macro show <nazwa>` (pokazuje polecenia), `macro edit <nazwa>` (otwiera skrypt w edytorze), `macro delete <nazwa>`, `macro discard` (porzuca trwające nagrywanie). Skrót: `mac`.
+- Skrypt to zwykły tekst: jedno polecenie w wierszu, puste wiersze i wiersze zaczynające się od `#` są pomijane. Można go napisać ręcznie.
+- Parametry w wierszu: `%1`..`%9` to argumenty z `macro play`, `%d` katalog aktywnego panelu, `%o` katalog drugiego panelu, `%f` nazwa pod kursorem, `%%` znak procentu. Wartości liczą się tuż przed wykonaniem danego wiersza.
+- Makro może wywołać inne makro (do 4 poziomów, żeby pętla nie zawiesiła programu).
+- Bez okna: `bluepane-cli run-script <lewy> <prawy> <skrypt.bp> [argumenty]`. Nie ma okna konfliktów (istniejący plik jest pomijany), a `delete` wymaga w skrypcie następnej linii `confirm`.
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

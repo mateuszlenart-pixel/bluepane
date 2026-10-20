@@ -85,6 +85,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "drop",
     "viewmode",
     "workspace",
+    "macro",
     "layout",
     "columns",
     "density",
@@ -342,6 +343,8 @@ pub enum Command {
     PanelView(Option<crate::PanelView>),
     /// Workspaces: the tabs of both panels and the layout, saved by name.
     Workspace(crate::WorkspaceAction),
+    /// Macros: record command lines into a script and play them back.
+    Macro(crate::MacroAction),
     /// Window layouts: list, reset, save, load, delete.
     Layout(String),
     /// Show or hide a column of the file list (`None` lists them).
@@ -654,6 +657,7 @@ impl Command {
                 "grid" => Ok(Command::PanelView(Some(crate::PanelView::Grid))),
                 _ => Err(EngineError("viewmode: użycie: viewmode [list|grid]".into())),
             },
+            "macro" | "mac" => crate::macros::parse_macro(rest).map(Command::Macro),
             "workspace" | "ws" => crate::workspace::parse_workspace(rest).map(Command::Workspace),
             "layout" => Ok(Command::Layout(rest.to_string())),
             "columns" => Ok(Command::Columns(Some(rest.to_string()).filter(|r| !r.is_empty()))),

@@ -306,6 +306,8 @@ pub struct Session {
     pub(crate) last_visit: [Option<PathBuf>; 2],
     /// Commands chosen in the palette, newest first.
     pub recent_commands: Vec<String>,
+    pub(crate) recording: Option<crate::macros::Recording>,
+    pub(crate) macro_depth: u8,
     /// Text the front end should put in the command line (taken with `take`).
     pub command_prefill: Option<String>,
     /// Jobs that ended and were not shown to the user yet (`take_notices`).
@@ -475,6 +477,8 @@ impl Session {
             visits: crate::Visits::default(),
             last_visit: [None, None],
             recent_commands: Vec::new(),
+            recording: None,
+            macro_depth: 0,
             command_prefill: None,
             notices: Vec::new(),
             finished: VecDeque::new(),
@@ -544,7 +548,13 @@ impl Session {
     /// Parses and executes a command line. On error the message is also put in `status`.
     pub fn run_line(&mut self, line: &str) -> Result<(), EngineError> {
         match Command::parse(line) {
-            Ok(command) => self.execute(command),
+            Ok(command) => {
+                let result = self.execute(command);
+                if result.is_ok() {
+                    self.record_line(line);
+                }
+                result
+            }
             Err(err) => {
                 self.status = err.0.clone();
                 self.status_is_error = true;
@@ -649,6 +659,7 @@ impl Session {
                 };
             }
             Command::Workspace(action) => self.workspace_action(action)?,
+            Command::Macro(action) => self.macro_action(action)?,
             Command::Layout(words) => self.layout_command(&words)?,
             Command::Columns(word) => self.set_columns(word)?,
             Command::ColumnWidth(args) => self.set_column_width(&args)?,

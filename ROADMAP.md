@@ -220,7 +220,7 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 
 #### Etap 13: automatyzacja (wykorzystanie modelu komend)
 
-- [ ] 13a **Nagrywanie makr**: zapis wykonanych komend do pliku `.bp`; odtwarzanie skrótem, z palety i z `bluepane-cli run-script`; edycja makra jako tekstu; makra z parametrami (zaznaczenie, katalog drugiego panelu)
+- [x] 13a **Nagrywanie makr**: zapis wykonanych komend do pliku `.bp`; odtwarzanie skrótem, z palety i z `bluepane-cli run-script`; edycja makra jako tekstu; makra z parametrami (zaznaczenie, katalog drugiego panelu)
 - [ ] 13b **Własne przyciski narzędzi**: zewnętrzne programy z parametrami `%f` (plik), `%d` (katalog), `%s` (zaznaczone), `%o` (drugi panel); w osobnym rzędzie przycisków i w palecie; zastępują wtyczki bez kodu wtyczek
 - [x] 13c ~~Dziennik operacji z cofaniem~~ — **odrzucone przez właściciela (2026-10-16)**; zostaje tylko `mrundo` dla zmiany nazw
 - [ ] 13d Harmonogram: makro albo profil synchronizacji uruchamiane o zadanej porze (przez `bluepane-cli` i zadanie systemu: cron / Harmonogram zadań Windows; bluepane tylko je zakłada i pokazuje)
