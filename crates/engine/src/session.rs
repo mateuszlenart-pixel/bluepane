@@ -306,6 +306,8 @@ pub struct Session {
     pub(crate) last_visit: [Option<PathBuf>; 2],
     /// Commands chosen in the palette, newest first.
     pub recent_commands: Vec<String>,
+    /// Own tool buttons (`buttons.conf`).
+    pub buttons: Vec<crate::Button>,
     pub(crate) recording: Option<crate::macros::Recording>,
     pub(crate) macro_depth: u8,
     /// Text the front end should put in the command line (taken with `take`).
@@ -477,6 +479,7 @@ impl Session {
             visits: crate::Visits::default(),
             last_visit: [None, None],
             recent_commands: Vec::new(),
+            buttons: Vec::new(),
             recording: None,
             macro_depth: 0,
             command_prefill: None,
@@ -660,6 +663,7 @@ impl Session {
             }
             Command::Workspace(action) => self.workspace_action(action)?,
             Command::Macro(action) => self.macro_action(action)?,
+            Command::Button(action) => self.button_action(action)?,
             Command::Layout(words) => self.layout_command(&words)?,
             Command::Columns(word) => self.set_columns(word)?,
             Command::ColumnWidth(args) => self.set_column_width(&args)?,

@@ -58,6 +58,7 @@ impl Session {
         self.load_recent_commands(dir);
         self.load_visits(dir);
         self.load_favorites(dir);
+        self.load_buttons(dir);
         let (settings, warnings) = crate::settings::load(&dir.join("settings.conf"));
         self.use_settings(settings);
         if !warnings.is_empty() {

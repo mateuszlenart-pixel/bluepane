@@ -32,7 +32,7 @@ pub enum BoxTarget {
 /// One row of the box.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoxEntry {
-    /// "Komenda", "Katalog", "Zakładka", "Serwer", "Plik", "Folder" or "Szukaj".
+    /// "Komenda", "Przycisk", "Katalog", "Zakładka", "Serwer", "Plik", "Folder" or "Szukaj".
     pub kind: &'static str,
     pub label: String,
     pub target: BoxTarget,
@@ -104,6 +104,21 @@ impl Session {
         );
         if only_commands {
             return out;
+        }
+
+        if !empty {
+            let folded = fold(text);
+            out.extend(
+                self.buttons
+                    .iter()
+                    .filter(|b| fold(&b.name).contains(&folded))
+                    .take(COMMANDS_SHOWN)
+                    .map(|b| BoxEntry {
+                        kind: "Przycisk",
+                        label: format!("{}  ({})", b.name, b.line),
+                        target: BoxTarget::Line(format!("button run {}", b.name)),
+                    }),
+            );
         }
 
         let place_limit = if empty { EMPTY_PLACES } else { PLACES_SHOWN };

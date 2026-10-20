@@ -15,7 +15,7 @@ use std::time::SystemTime;
 
 pub use platform::{
     config_dir, copy_symlink, extended_path, file_mode, home_dir, make_writable, neighbours,
-    open_external, run_hidden, set_mode, volumes,
+    open_external, run_hidden, set_mode, spawn_program, volumes,
 };
 
 /// How full the drive holding a path is.
@@ -146,6 +146,16 @@ pub fn list_dir(path: &Path) -> io::Result<Vec<Entry>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_program_starts_without_a_shell_and_a_missing_one_is_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let me = std::env::current_exe().unwrap();
+        let args = vec!["--list".to_string(), "Zażółć; rm -rf *".to_string()];
+        spawn_program(me.to_str().unwrap(), &args, dir.path()).unwrap();
+        let err = spawn_program("no-such-program-bluepane", &[], dir.path()).unwrap_err();
+        assert!(err.to_string().contains("no-such-program-bluepane"));
+    }
 
     #[test]
     fn disk_space_of_a_real_folder_is_sane_and_of_a_missing_one_is_none() {
