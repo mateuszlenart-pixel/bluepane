@@ -4,7 +4,10 @@ use std::path::PathBuf;
 
 use regex::{NoExpand, Regex, RegexBuilder};
 
+use std::sync::Arc;
+
 use crate::mask::{Mask, Source};
+use crate::Meta;
 
 /// Local time of a file's modification, already broken down by the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +26,17 @@ pub struct Item {
     pub path: PathBuf,
     pub is_dir: bool,
     pub modified: Option<Stamp>,
+    /// What was read from inside the file, filled in only when a mask asks for it
+    /// (see [`needs_meta`]).
+    pub meta: Option<Arc<Meta>>,
+}
+
+/// True when a mask of `settings` uses `[EXIF:...]` or `[TAG:...]`, so the files have to be
+/// read for it. A mask that does not parse needs nothing (the plan reports that error).
+pub fn needs_meta(settings: &Settings) -> bool {
+    [&settings.name_mask, &settings.ext_mask]
+        .iter()
+        .any(|text| Mask::parse(text).is_ok_and(|m| m.needs_meta()))
 }
 
 /// Letter case applied after the mask and the search and replace.
@@ -197,6 +211,7 @@ fn build_name(
         ext,
         parent: &parent,
         modified: item.modified.as_ref(),
+        meta: item.meta.as_deref(),
         counter,
         counter_digits,
     };
@@ -371,6 +386,7 @@ mod tests {
                 minute: 30,
                 second: 0,
             }),
+            meta: None,
         }
     }
 
@@ -591,5 +607,55 @@ mod tests {
         let items = [item("/nonexistent/a.txt"), item("/nonexistent/b.txt")];
         let p = plan(&items, &s, &overrides).unwrap();
         assert_eq!(names(&p), ["custom.dat", "x.txt"]);
+    }
+
+    #[test]
+    fn masks_with_exif_and_tag_fields_use_the_data_of_each_file() {
+        let taken = |day| Meta {
+            taken: Some(Stamp {
+                year: 2026,
+                month: 10,
+                day,
+                hour: 7,
+                minute: 5,
+                second: 9,
+            }),
+            artist: Some("Zespół".into()),
+            title: Some("Zażółć".into()),
+            track: Some(2),
+            ..Meta::default()
+        };
+        let mut a = item("/p/IMG_1.jpg");
+        a.meta = Some(Arc::new(taken(4)));
+        let mut b = item("/p/IMG_2.jpg");
+        b.meta = Some(Arc::new(taken(5)));
+        // No data read for this one (or nothing to read): the field is empty.
+        let c = item("/p/IMG_3.jpg");
+        let settings = Settings {
+            name_mask: "[EXIF:YMD]_[N]".into(),
+            ..Settings::default()
+        };
+        assert!(needs_meta(&settings));
+        let result = plan(&[a.clone(), b, c], &settings, &HashMap::new()).unwrap();
+        assert_eq!(
+            names(&result),
+            ["2026-10-04_IMG_1.jpg", "2026-10-05_IMG_2.jpg", "_IMG_3.jpg"]
+        );
+        let tags = Settings {
+            name_mask: "[TAG:track] [TAG:artist] - [TAG:title]".into(),
+            ..Settings::default()
+        };
+        let result = plan(&[a], &tags, &HashMap::new()).unwrap();
+        assert_eq!(names(&result), ["02 Zespół - Zażółć.jpg"]);
+        assert!(!needs_meta(&Settings::default()));
+        assert!(plan(
+            &[],
+            &Settings {
+                name_mask: "[TAG:nope]".into(),
+                ..Settings::default()
+            },
+            &HashMap::new()
+        )
+        .is_err());
     }
 }

@@ -231,7 +231,7 @@ Porządek na dysku:
 - [x] 14a **Mapa zajętości** (kafelki jak WizTree) dla katalogu, na bazie `dirsize`; klik w kafelek wchodzi do katalogu
 - [x] 14b **Duplikaty**: rozmiar → skrót → porównanie bajt po bajcie; zaznaczanie kopii regułą (najnowsza/najstarsza zostaje), usuwanie do kosza
 - [x] 14c **Porównanie dwóch plików** (tekst obok tekstu z podświetleniem różnic, dla binarnych pierwsza różnica) oraz **sumy kontrolne**: obliczanie i sprawdzanie `.sha256` / `.md5`
-- [ ] 14d Zmiana nazw z danymi z pliku: data **EXIF** zdjęcia (`[EXIF:YMD]`), tagi audio (zależności do zgody)
+- [x] 14d Zmiana nazw z danymi z pliku: data **EXIF** zdjęcia (`[EXIF:YMD]`), tagi audio (zależności do zgody)
 
 Sieć:
 - [ ] 14e **Udziały SMB jako katalog w panelu** (`smb://host/udział`) bez montowania w systemie (zależność do zgody albo `smbclient` jako proces)

@@ -8,8 +8,10 @@
 mod apply;
 mod diff;
 mod mask;
+mod meta;
 mod plan;
 
 pub use apply::{apply, undo, Renamed};
 pub use diff::{changed_spans, Span};
-pub use plan::{plan, CaseMode, Item, Plan, Row, Settings, Stamp, Status};
+pub use meta::{read_meta, Meta};
+pub use plan::{needs_meta, plan, CaseMode, Item, Plan, Row, Settings, Stamp, Status};

@@ -42,6 +42,17 @@ const NAME_TOKENS: &[(&str, &str, &str)] = &[
         "czas modyfikacji; pojedynczo: [h] [m] [s]",
     ),
     ("[P] Katalog", "[P]", "nazwa katalogu nadrzędnego"),
+    (
+        "[EXIF:YMD] Data zdjęcia",
+        "[EXIF:YMD]",
+        "data zrobienia zdjęcia z danych EXIF (też [EXIF:hms], [EXIF:YMDhms]); inne pola: [EXIF:Make], [EXIF:Model]",
+    ),
+    (
+        "[TAG:artist] Wykonawca",
+        "[TAG:artist]",
+        "tagi pliku audio: [TAG:artist] [TAG:title] [TAG:album] [TAG:track] [TAG:year] [TAG:genre]",
+    ),
+    ("[TAG:title] Tytuł", "[TAG:title]", "tytuł utworu z tagów pliku audio"),
 ];
 
 const EXT_TOKENS: &[(&str, &str, &str)] = &[

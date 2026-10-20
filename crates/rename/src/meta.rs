@@ -1,0 +1,223 @@
+//! Data read from inside a file for the masks `[EXIF:...]` and `[TAG:...]`: when a photo was
+//! taken and with what camera (EXIF), the artist, title, album and so on of an audio file.
+//! Reading happens only for files of a rename whose mask asks for such a field, and a file
+//! that has no such data (or is not that kind of file) simply has none.
+
+use std::io::BufReader;
+use std::path::Path;
+
+use crate::Stamp;
+
+/// What was found in one file.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Meta {
+    /// When the photo was taken (`DateTimeOriginal`), as written by the camera.
+    pub taken: Option<Stamp>,
+    pub make: Option<String>,
+    pub model: Option<String>,
+    pub artist: Option<String>,
+    pub title: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub track: Option<u32>,
+    pub year: Option<u32>,
+}
+
+/// Reads whatever the file offers. Never fails: an unreadable or unsupported file has no data.
+pub fn read_meta(path: &Path) -> Meta {
+    let mut meta = Meta::default();
+    read_exif(path, &mut meta);
+    read_tags(path, &mut meta);
+    meta
+}
+
+fn ascii_field(exif: &exif::Exif, tag: exif::Tag) -> Option<String> {
+    let field = exif.get_field(tag, exif::In::PRIMARY)?;
+    match &field.value {
+        exif::Value::Ascii(parts) => {
+            let text = String::from_utf8_lossy(parts.first()?)
+                .trim_matches(|c: char| c == '\0' || c.is_whitespace())
+                .to_string();
+            (!text.is_empty()).then_some(text)
+        }
+        _ => None,
+    }
+}
+
+fn read_exif(path: &Path, meta: &mut Meta) {
+    let Ok(file) = std::fs::File::open(path) else {
+        return;
+    };
+    let Ok(exif) = exif::Reader::new().read_from_container(&mut BufReader::new(file)) else {
+        return;
+    };
+    // The moment of shooting first; the others are when the file was digitized or saved.
+    for tag in [
+        exif::Tag::DateTimeOriginal,
+        exif::Tag::DateTimeDigitized,
+        exif::Tag::DateTime,
+    ] {
+        let Some(text) = ascii_field(&exif, tag) else {
+            continue;
+        };
+        if let Ok(date) = exif::DateTime::from_ascii(text.as_bytes()) {
+            meta.taken = Some(Stamp {
+                year: i32::from(date.year),
+                month: u32::from(date.month),
+                day: u32::from(date.day),
+                hour: u32::from(date.hour),
+                minute: u32::from(date.minute),
+                second: u32::from(date.second),
+            });
+            break;
+        }
+    }
+    meta.make = ascii_field(&exif, exif::Tag::Make);
+    meta.model = ascii_field(&exif, exif::Tag::Model);
+}
+
+fn read_tags(path: &Path, meta: &mut Meta) {
+    use lofty::prelude::*;
+    let Ok(file) = lofty::read_from_path(path) else {
+        return;
+    };
+    let Some(tag) = file.primary_tag().or_else(|| file.first_tag()) else {
+        return;
+    };
+    let text = |value: Option<std::borrow::Cow<'_, str>>| {
+        value
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    };
+    meta.artist = text(tag.artist());
+    meta.title = text(tag.title());
+    meta.album = text(tag.album());
+    meta.genre = text(tag.genre());
+    meta.track = tag.track();
+    meta.year = tag.year();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A JPEG with nothing but an EXIF block: Make, and DateTimeOriginal in the Exif IFD.
+    fn jpeg_with_exif(make: &str, taken: &str) -> Vec<u8> {
+        let mut make_bytes = make.as_bytes().to_vec();
+        make_bytes.push(0);
+        let mut taken_bytes = taken.as_bytes().to_vec();
+        taken_bytes.push(0);
+        // Big-endian TIFF: header (8), IFD0 with two entries (30), Make data, Exif IFD with one
+        // entry (18), DateTimeOriginal data.
+        let ifd0 = 8u32;
+        let make_at = ifd0 + 30;
+        let exif_ifd = make_at + make_bytes.len() as u32;
+        let taken_at = exif_ifd + 18;
+        let mut tiff = vec![b'M', b'M', 0, 42, 0, 0, 0, 8];
+        tiff.extend(2u16.to_be_bytes());
+        // Make: tag 0x010F, ASCII, count, offset.
+        tiff.extend(0x010Fu16.to_be_bytes());
+        tiff.extend(2u16.to_be_bytes());
+        tiff.extend((make_bytes.len() as u32).to_be_bytes());
+        tiff.extend(make_at.to_be_bytes());
+        // Pointer to the Exif IFD: tag 0x8769, LONG.
+        tiff.extend(0x8769u16.to_be_bytes());
+        tiff.extend(4u16.to_be_bytes());
+        tiff.extend(1u32.to_be_bytes());
+        tiff.extend(exif_ifd.to_be_bytes());
+        tiff.extend(0u32.to_be_bytes());
+        tiff.extend(&make_bytes);
+        tiff.extend(1u16.to_be_bytes());
+        tiff.extend(0x9003u16.to_be_bytes());
+        tiff.extend(2u16.to_be_bytes());
+        tiff.extend((taken_bytes.len() as u32).to_be_bytes());
+        tiff.extend(taken_at.to_be_bytes());
+        tiff.extend(0u32.to_be_bytes());
+        tiff.extend(&taken_bytes);
+        let mut app1 = b"Exif\0\0".to_vec();
+        app1.extend(tiff);
+        let mut jpeg = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        jpeg.extend(((app1.len() + 2) as u16).to_be_bytes());
+        jpeg.extend(app1);
+        jpeg.extend([0xFF, 0xD9]);
+        jpeg
+    }
+
+    #[test]
+    fn exif_gives_the_date_taken_and_the_camera() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("zdjęcie.jpg");
+        std::fs::write(&path, jpeg_with_exif("Canon", "2026:10:04 07:05:09")).unwrap();
+        let meta = read_meta(&path);
+        assert_eq!(
+            meta.taken,
+            Some(Stamp {
+                year: 2026,
+                month: 10,
+                day: 4,
+                hour: 7,
+                minute: 5,
+                second: 9
+            })
+        );
+        assert_eq!(meta.make.as_deref(), Some("Canon"));
+        assert_eq!(meta.model, None);
+        assert_eq!(meta.artist, None);
+    }
+
+    #[test]
+    fn files_without_data_and_missing_files_have_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let text = dir.path().join("notatki.txt");
+        std::fs::write(&text, "to nie zdjęcie ani utwór").unwrap();
+        assert_eq!(read_meta(&text), Meta::default());
+        assert_eq!(read_meta(&dir.path().join("brak.jpg")), Meta::default());
+        // Broken: starts like a JPEG but ends at once.
+        let broken = dir.path().join("zepsute.jpg");
+        std::fs::write(&broken, [0xFF, 0xD8, 0xFF]).unwrap();
+        assert_eq!(read_meta(&broken), Meta::default());
+    }
+
+    /// A WAV file with a little silence, enough for the tags to be written into it.
+    fn silent_wav() -> Vec<u8> {
+        let mut wav = b"RIFF".to_vec();
+        wav.extend((36u32 + 160).to_le_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend(16u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes()); // PCM
+        wav.extend(1u16.to_le_bytes()); // mono
+        wav.extend(8000u32.to_le_bytes());
+        wav.extend(16000u32.to_le_bytes());
+        wav.extend(2u16.to_le_bytes());
+        wav.extend(16u16.to_le_bytes());
+        wav.extend(b"data");
+        wav.extend(160u32.to_le_bytes());
+        wav.extend([0u8; 160]);
+        wav
+    }
+
+    #[test]
+    fn audio_tags_are_read_back_after_they_were_written() {
+        use lofty::config::WriteOptions;
+        use lofty::prelude::*;
+        use lofty::tag::{Tag, TagType};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("utwór.wav");
+        std::fs::write(&path, silent_wav()).unwrap();
+        let mut tag = Tag::new(TagType::RiffInfo);
+        tag.set_artist("Zespół Żółć".into());
+        tag.set_title("Gęślą jaźń".into());
+        tag.set_album("Płyta".into());
+        tag.set_track(7);
+        tag.set_genre("Rock".into());
+        tag.save_to_path(&path, WriteOptions::default()).unwrap();
+
+        let meta = read_meta(&path);
+        assert_eq!(meta.artist.as_deref(), Some("Zespół Żółć"));
+        assert_eq!(meta.title.as_deref(), Some("Gęślą jaźń"));
+        assert_eq!(meta.album.as_deref(), Some("Płyta"));
+        assert_eq!(meta.genre.as_deref(), Some("Rock"));
+        assert_eq!(meta.track, Some(7));
+        assert_eq!(meta.taken, None);
+    }
+}

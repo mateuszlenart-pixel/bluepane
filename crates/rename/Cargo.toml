@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 bluepane-ops.workspace = true
 regex.workspace = true
+kamadak-exif.workspace = true
+lofty.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
