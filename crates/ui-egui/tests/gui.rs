@@ -624,3 +624,31 @@ fn own_buttons_get_a_row_and_a_click_starts_the_program() {
     command(&mut harness, "button delete Zażółć");
     assert!(harness.query_by_label("Zażółć").is_none());
 }
+
+#[test]
+fn the_disk_map_opens_as_a_tab_and_closes_with_its_button() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "map");
+    for _ in 0..200 {
+        harness.run_steps(2);
+        if !harness
+            .state_mut()
+            .session_mut()
+            .diskmap
+            .as_ref()
+            .unwrap()
+            .is_running()
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    harness.run_steps(4);
+    harness.get_by_label("Mapa zajętości");
+    harness.get_by_label_contains("Razem");
+    harness.get_by_label("Pokaż w panelu");
+    harness.get_by_label("Zamknij (Esc)").click();
+    harness.run_steps(4);
+    assert!(harness.state_mut().session_mut().diskmap.is_none());
+}

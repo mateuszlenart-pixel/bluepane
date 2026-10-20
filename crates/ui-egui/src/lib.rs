@@ -10,6 +10,7 @@ mod drag_ui;
 mod find_ui;
 mod grid_ui;
 mod keys_ui;
+mod map_ui;
 mod omnibox_ui;
 mod pages_ui;
 mod palette_ui;

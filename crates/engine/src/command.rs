@@ -87,6 +87,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "workspace",
     "macro",
     "button",
+    "map",
     "schedule",
     "layout",
     "columns",
@@ -349,6 +350,8 @@ pub enum Command {
     Macro(crate::MacroAction),
     /// Own tool buttons: external programs with parameters.
     Button(crate::ButtonAction),
+    /// Disk usage map of the active folder.
+    Map(crate::MapAction),
     /// Run a macro at a given time through the system scheduler.
     Schedule(crate::ScheduleAction),
     /// Window layouts: list, reset, save, load, delete.
@@ -664,6 +667,7 @@ impl Command {
                 _ => Err(EngineError("viewmode: użycie: viewmode [list|grid]".into())),
             },
             "schedule" | "sched" => crate::schedule::parse_schedule(rest).map(Command::Schedule),
+            "map" => crate::diskmap::parse_map(rest).map(Command::Map),
             "button" | "btn" => crate::buttons::parse_button(rest).map(Command::Button),
             "macro" | "mac" => crate::macros::parse_macro(rest).map(Command::Macro),
             "workspace" | "ws" => crate::workspace::parse_workspace(rest).map(Command::Workspace),

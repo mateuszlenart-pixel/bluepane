@@ -228,7 +228,7 @@ formatów konfiguracji; skróty nie są konfigurowalne; brak testów GUI.
 #### Etap 14: funkcje dodatkowe
 
 Porządek na dysku:
-- [ ] 14a **Mapa zajętości** (kafelki jak WizTree) dla katalogu, na bazie `dirsize`; klik w kafelek wchodzi do katalogu
+- [x] 14a **Mapa zajętości** (kafelki jak WizTree) dla katalogu, na bazie `dirsize`; klik w kafelek wchodzi do katalogu
 - [ ] 14b **Duplikaty**: rozmiar → skrót → porównanie bajt po bajcie; zaznaczanie kopii regułą (najnowsza/najstarsza zostaje), usuwanie do kosza
 - [ ] 14c **Porównanie dwóch plików** (tekst obok tekstu z podświetleniem różnic, dla binarnych pierwsza różnica) oraz **sumy kontrolne**: obliczanie i sprawdzanie `.sha256` / `.md5`
 - [ ] 14d Zmiana nazw z danymi z pliku: data **EXIF** zdjęcia (`[EXIF:YMD]`), tagi audio (zależności do zgody)
