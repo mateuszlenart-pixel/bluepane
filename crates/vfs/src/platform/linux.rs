@@ -10,6 +10,15 @@ pub fn is_hidden(name: &str, _meta: &Metadata) -> bool {
     name.starts_with('.')
 }
 
+/// Runs a program in `dir` and collects its output (nothing is shown on screen).
+pub fn run_hidden(program: &str, args: &[&str], dir: &Path) -> io::Result<std::process::Output> {
+    std::process::Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .output()
+}
+
 /// The permission bits of a listed entry, including setuid, setgid and sticky.
 pub fn entry_mode(meta: &Metadata) -> Option<u32> {
     Some(meta.permissions().mode() & 0o7777)

@@ -196,6 +196,8 @@ impl BluepaneUi {
         let searching = self.session.find.as_ref().is_some_and(|f| f.is_running())
             || self.session.scan.as_ref().is_some_and(|v| v.is_running())
             || self.session.dir_sizes.is_running()
+            || self.session.hashes.is_running()
+            || self.session.git_status.is_running()
             || self.session.disk_usage.is_asking()
             || self.session.quick_pending()
             || self.session.thumbnails.is_working();
@@ -1139,6 +1141,8 @@ impl BluepaneUi {
             ),
             (columns.perms, None, "Prawa", Some(Column::Perms)),
             (columns.owner, None, "Właściciel", Some(Column::Owner)),
+            (columns.sha, None, "SHA-256", Some(Column::Sha)),
+            (columns.git, None, "Git", Some(Column::Git)),
             (columns.created, None, "Utworzono", Some(Column::Created)),
             (
                 columns.date,
@@ -1460,6 +1464,12 @@ impl BluepaneUi {
                             bluepane_engine::format_mode(entry.mode),
                         );
                         cell(
+                            cols.git,
+                            Align2::LEFT_CENTER,
+                            session.git_cell(index, entry),
+                        );
+                        cell(cols.sha, Align2::LEFT_CENTER, session.hash_cell(entry));
+                        cell(
                             cols.owner,
                             Align2::LEFT_CENTER,
                             entry.owner.clone().unwrap_or_default(),
@@ -1615,6 +1625,8 @@ struct Columns {
     size: Rect,
     perms: Rect,
     owner: Rect,
+    sha: Rect,
+    git: Rect,
     created: Rect,
     date: Rect,
 }
@@ -1640,6 +1652,8 @@ impl Columns {
     const DATE: f32 = 140.0;
     const PERMS: f32 = 90.0;
     const OWNER: f32 = 90.0;
+    const SHA: f32 = 150.0;
+    const GIT: f32 = 44.0;
     /// The name column never gets narrower than this while another column is shown.
     const NAME_MIN: f32 = 140.0;
 
@@ -1650,6 +1664,8 @@ impl Columns {
             Column::Modified | Column::Created => Self::DATE,
             Column::Perms => Self::PERMS,
             Column::Owner => Self::OWNER,
+            Column::Sha => Self::SHA,
+            Column::Git => Self::GIT,
         }
     }
 
@@ -1671,6 +1687,8 @@ impl Columns {
             Column::Created,
             Column::Perms,
             Column::Owner,
+            Column::Sha,
+            Column::Git,
         ] {
             if !shown.contains(&column) {
                 continue;
@@ -1695,8 +1713,10 @@ impl Columns {
         };
         let date = place(Column::Modified);
         let created = place(Column::Created);
+        let sha = place(Column::Sha);
         let owner = place(Column::Owner);
         let perms = place(Column::Perms);
+        let git = place(Column::Git);
         let size = place(Column::Size);
         let ext = place(Column::Ext);
         Columns {
@@ -1705,6 +1725,8 @@ impl Columns {
             size,
             perms,
             owner,
+            sha,
+            git,
             created,
             date,
         }

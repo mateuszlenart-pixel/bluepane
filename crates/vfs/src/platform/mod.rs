@@ -8,7 +8,7 @@ mod windows;
 #[cfg(windows)]
 pub use windows::{
     copy_symlink, entry_mode, entry_owner, extended_path, file_mode, is_hidden, make_writable,
-    neighbours, set_mode, volumes, DEFAULT_OPENER,
+    neighbours, run_hidden, set_mode, volumes, DEFAULT_OPENER,
 };
 
 #[cfg(not(windows))]
@@ -16,7 +16,7 @@ mod linux;
 #[cfg(not(windows))]
 pub use linux::{
     copy_symlink, entry_mode, entry_owner, extended_path, file_mode, is_hidden, make_writable,
-    neighbours, set_mode, volumes, DEFAULT_OPENER,
+    neighbours, run_hidden, set_mode, volumes, DEFAULT_OPENER,
 };
 
 use std::ffi::OsString;
