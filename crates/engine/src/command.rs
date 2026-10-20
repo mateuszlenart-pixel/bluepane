@@ -47,6 +47,8 @@ pub const COMMAND_NAMES: &[&str] = &[
     "copynames",
     "theme",
     "dirsize",
+    "hash",
+    "gitstatus",
     "quick",
     "bind",
     "unbind",
@@ -439,6 +441,10 @@ pub enum Command {
     Quick(QuickAction),
     /// Count the size of the selected folders (or the one under the cursor) in the background.
     DirSize,
+    /// SHA-256 of files, counted on request (`hash`).
+    Hash(crate::HashAction),
+    /// Ask git again about the folder of the active panel.
+    GitStatus,
     /// Show the colour theme and the available ones, or switch to another.
     Theme(Option<String>),
     /// Send the file edited with F4 on a server back to it (Ctrl+Shift+F4).
@@ -542,6 +548,8 @@ impl Command {
             "pageclose" => Ok(Command::PageClose),
             "theme" => Ok(Command::Theme(optional(rest))),
             "dirsize" => Ok(Command::DirSize),
+            "hash" => crate::hashes::parse_hash(rest).map(Command::Hash),
+            "gitstatus" => Ok(Command::GitStatus),
             "quick" => Command::parse_quick(rest),
             "bind" => Ok(Command::Bind(match rest.split_once(char::is_whitespace) {
                 None if rest.is_empty() => None,

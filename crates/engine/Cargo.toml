@@ -18,6 +18,7 @@ bluepane-remote.workspace = true
 bluepane-docs.workspace = true
 bluepane-netscan.workspace = true
 chrono.workspace = true
+sha2.workspace = true
 tempfile.workspace = true
 
 [dev-dependencies]

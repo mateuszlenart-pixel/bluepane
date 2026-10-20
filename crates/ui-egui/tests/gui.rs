@@ -533,6 +533,29 @@ fn permission_and_owner_columns_and_dragged_widths_leave_the_list_working() {
 }
 
 #[test]
+fn hash_and_git_columns_show_up_on_request_and_the_window_keeps_working() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "columns sha256");
+    command(&mut harness, "columns git");
+    command(&mut harness, "select a.txt");
+    command(&mut harness, "hash");
+    let start = std::time::Instant::now();
+    while harness.state_mut().session_mut().hashes.is_running() {
+        assert!(start.elapsed().as_secs() < 20, "hashing did not finish");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    harness.run_steps(3);
+    command(&mut harness, "hash copy");
+    // The window has already taken the text for the system clipboard.
+    let status = harness.state_mut().session_mut().status.clone();
+    assert!(status.contains("Skopiowano sumy"), "{status}");
+    command(&mut harness, "unselectall");
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+    command(&mut harness, "columns default");
+}
+
+#[test]
 fn a_workspace_is_saved_with_its_layout_and_loaded_again() {
     let (_tmp, mut harness) = window();
     harness.run_steps(2);

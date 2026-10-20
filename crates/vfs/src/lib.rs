@@ -15,7 +15,7 @@ use std::time::SystemTime;
 
 pub use platform::{
     config_dir, copy_symlink, extended_path, file_mode, home_dir, make_writable, neighbours,
-    open_external, set_mode, volumes,
+    open_external, run_hidden, set_mode, volumes,
 };
 
 /// How full the drive holding a path is.

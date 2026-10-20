@@ -250,6 +250,10 @@ pub struct Session {
     pub(crate) settings: crate::settings::Settings,
     /// Folder sizes counted on request.
     pub dir_sizes: crate::DirSizes,
+    /// SHA-256 sums asked for (`hash`).
+    pub hashes: crate::Hashes,
+    /// Git status of the folders shown, for the Git column.
+    pub git_status: crate::GitStatus,
     /// Cached footer text and bar scale of each panel (see `panel_stats`).
     pub(crate) stats_cache:
         std::sync::Mutex<[Option<(crate::dirsize::StatsKey, crate::PanelStats)>; 2]>,
@@ -442,6 +446,8 @@ impl Session {
             theme: crate::settings::DEFAULT_THEME.to_string(),
             settings: crate::settings::Settings::default(),
             dir_sizes: crate::DirSizes::default(),
+            hashes: crate::Hashes::default(),
+            git_status: crate::GitStatus::default(),
             stats_cache: std::sync::Mutex::default(),
             disk_usage: crate::DiskUsage::default(),
             quick: None,
@@ -554,6 +560,7 @@ impl Session {
     pub fn execute(&mut self, command: Command) -> Result<(), EngineError> {
         let result = self.execute_inner(command);
         self.note_visits();
+        self.note_git();
         match &result {
             Ok(()) => self.status_is_error = false,
             Err(err) => {
@@ -668,6 +675,8 @@ impl Session {
             Command::Limit(limit) => self.set_speed_limit(limit),
             Command::Theme(name) => self.set_theme(name)?,
             Command::DirSize => self.count_dir_sizes()?,
+            Command::Hash(action) => self.hash_action(action)?,
+            Command::GitStatus => self.refresh_git_status()?,
             Command::Quick(action) => self.quick_action(action)?,
             Command::Bind(args) => self.bind_key(args)?,
             Command::Unbind(key) => self.unbind_key(&key)?,

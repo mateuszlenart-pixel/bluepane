@@ -47,15 +47,21 @@ pub enum Column {
     Perms,
     /// The owner's name; empty where the system does not tell.
     Owner,
+    /// The first digits of the SHA-256, once `hash` has counted it.
+    Sha,
+    /// The git status letter (`M` changed, `A` added, `D` deleted, `R` renamed, `?` new, `U` conflict).
+    Git,
 }
 
 impl Column {
     /// Every column, in the order they stand in a row (left to right after the name).
-    pub const ALL: [Column; 6] = [
+    pub const ALL: [Column; 8] = [
         Column::Ext,
         Column::Size,
+        Column::Git,
         Column::Perms,
         Column::Owner,
+        Column::Sha,
         Column::Created,
         Column::Modified,
     ];
@@ -68,6 +74,8 @@ impl Column {
             Column::Created => "created",
             Column::Perms => "perms",
             Column::Owner => "owner",
+            Column::Sha => "sha256",
+            Column::Git => "git",
         }
     }
 
@@ -79,6 +87,8 @@ impl Column {
             Column::Created => "Utworzono",
             Column::Perms => "Prawa",
             Column::Owner => "Właściciel",
+            Column::Sha => "SHA-256",
+            Column::Git => "Git",
         }
     }
 
@@ -302,7 +312,7 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                     Some(column) if !columns.contains(&column) => columns.push(column),
                     Some(_) => {}
                     None => warnings.push(format!(
-                        "wiersz {number}: nie ma kolumny „{word}” (są: ext, size, date, created, perms, owner)"
+                        "wiersz {number}: nie ma kolumny „{word}” (są: ext, size, date, created, perms, owner, sha256, git)"
                     )),
                 }
             }
@@ -626,7 +636,7 @@ impl Session {
         };
         let Some(word) = word else {
             self.status = format!(
-                "Kolumny: {} (columns ext|size|date|created|perms|owner przełącza, columns default przywraca)",
+                "Kolumny: {} (columns ext|size|date|created|perms|owner|sha256|git przełącza, columns default przywraca)",
                 describe(&self.columns())
             );
             return Ok(());
@@ -636,7 +646,7 @@ impl Session {
         } else {
             let column = Column::from_word(&word).ok_or_else(|| {
                 EngineError(format!(
-                    "nie ma kolumny „{word}” (są: ext, size, date, created, perms, owner)"
+                    "nie ma kolumny „{word}” (są: ext, size, date, created, perms, owner, sha256, git)"
                 ))
             })?;
             let mut columns = self.columns();

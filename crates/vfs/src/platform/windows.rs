@@ -14,6 +14,18 @@ pub fn is_hidden(_name: &str, meta: &Metadata) -> bool {
     meta.file_attributes() & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) != 0
 }
 
+/// Runs a program in `dir` and collects its output; no console window flashes up.
+pub fn run_hidden(program: &str, args: &[&str], dir: &Path) -> io::Result<std::process::Output> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new(program)
+        .args(args)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+}
+
 /// Windows has no Unix permission bits.
 pub fn entry_mode(_meta: &Metadata) -> Option<u32> {
     None
