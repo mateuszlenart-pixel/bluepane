@@ -27,7 +27,7 @@ use crate::EngineError;
 
 /// The themes the front end has a palette for. Adding a theme means adding its name here
 /// and its palette in the front end (a test there checks that both agree).
-pub const THEMES: &[&str] = &["dark"];
+pub const THEMES: &[&str] = &["dark", "light", "system"];
 
 /// The theme used until the user picks another.
 pub const DEFAULT_THEME: &str = "dark";

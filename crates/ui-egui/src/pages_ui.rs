@@ -3,7 +3,7 @@
 //! sends `page` and `pagezoom` commands.
 
 use bluepane_engine::{Command, PageMove, PageState, PageZoom, ZoomChange};
-use egui::{Color32, RichText};
+use egui::RichText;
 
 use crate::BluepaneUi;
 
@@ -93,7 +93,7 @@ impl BluepaneUi {
                 });
             }
             PageState::Failed(error) => {
-                ui.colored_label(Color32::LIGHT_RED, error);
+                ui.colored_label(ui.visuals().error_fg_color, error);
             }
             PageState::Ready => self.page_picture(ui, zoom),
         }

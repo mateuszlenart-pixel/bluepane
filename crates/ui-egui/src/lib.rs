@@ -167,8 +167,9 @@ impl BluepaneUi {
             // egui closes the program on Ctrl+Q by default; Ctrl+Q is Quick View here.
             ctx.options_mut(|options| options.quit_shortcuts.clear());
         }
+        let system_dark = ctx.system_theme().map(|t| t == egui::Theme::Dark);
         let look = (
-            self.session.theme().to_string(),
+            theme::Theme::resolve(self.session.theme(), system_dark).to_string(),
             self.session.text_size(),
             self.session.accent(),
         );
@@ -266,7 +267,7 @@ impl BluepaneUi {
             .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
                 let color = if is_error {
-                    Color32::LIGHT_RED
+                    ui.visuals().error_fg_color
                 } else {
                     ui.visuals().weak_text_color()
                 };
@@ -421,7 +422,7 @@ impl BluepaneUi {
                     });
                 if let Some(error) = &form.error {
                     ui.add_space(4.0);
-                    ui.colored_label(Color32::LIGHT_RED, error);
+                    ui.colored_label(ui.visuals().error_fg_color, error);
                 }
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
