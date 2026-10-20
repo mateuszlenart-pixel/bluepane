@@ -715,6 +715,12 @@ impl BluepaneUi {
             self.theme.muted
         };
         self.job_bar(ui);
+        if let Some(name) = self.session.recording_macro() {
+            ui.label(
+                RichText::new(format!("● Nagrywam makro „{name}” (macro stop kończy)"))
+                    .color(self.theme.error),
+            );
+        }
         // Conflicts and name dialogs have their own window; only yes/no questions use the bar.
         let simple_question = matches!(
             self.session.pending,

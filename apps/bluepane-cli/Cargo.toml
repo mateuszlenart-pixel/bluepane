@@ -11,5 +11,8 @@ publish.workspace = true
 bluepane-engine.workspace = true
 bluepane-vfs.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true
