@@ -513,6 +513,26 @@ fn the_light_and_system_themes_can_be_chosen_and_the_window_keeps_working() {
 }
 
 #[test]
+fn permission_and_owner_columns_and_dragged_widths_leave_the_list_working() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "columns perms");
+    command(&mut harness, "columns owner");
+    command(&mut harness, "columnwidth size 150");
+    harness.run_steps(3);
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+    let session = harness.state_mut().session_mut();
+    assert_eq!(
+        session.column_width(bluepane_engine::Column::Size),
+        Some(150)
+    );
+    assert!(session.columns().contains(&bluepane_engine::Column::Perms));
+    command(&mut harness, "columnwidth reset");
+    command(&mut harness, "columns default");
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+}
+
+#[test]
 fn a_workspace_is_saved_with_its_layout_and_loaded_again() {
     let (_tmp, mut harness) = window();
     harness.run_steps(2);

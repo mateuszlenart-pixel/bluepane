@@ -131,6 +131,8 @@ mod tests {
             size: 1,
             modified: None,
             created: None,
+            mode: None,
+            owner: None,
             hidden: false,
         }
     }

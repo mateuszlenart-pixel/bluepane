@@ -14,6 +14,16 @@ pub fn is_hidden(_name: &str, meta: &Metadata) -> bool {
     meta.file_attributes() & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) != 0
 }
 
+/// Windows has no Unix permission bits.
+pub fn entry_mode(_meta: &Metadata) -> Option<u32> {
+    None
+}
+
+/// Reading the owner needs the security API; not shown on Windows.
+pub fn entry_owner(_meta: &Metadata) -> Option<String> {
+    None
+}
+
 /// Drive letters that currently exist.
 pub fn volumes() -> Vec<Volume> {
     ('A'..='Z')

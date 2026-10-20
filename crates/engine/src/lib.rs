@@ -72,7 +72,7 @@ pub use dragdrop::DropTarget;
 pub use fileclass::{class_of, class_of_name, FileClass};
 pub use filter::{FilterSpec, Only};
 pub use find::{FindForm, FindView, SearchData};
-pub use format::{format_modified, human_size, name_parts};
+pub use format::{format_mode, format_modified, human_size, name_parts};
 pub use job::{
     Answer, ArchiveJob, Event, HostPrompt, JobKind, JobSpec, PackOptions, PasswordProblem,
     RemoteJob, RemoteOp, Report, RunningJob, SyncJob,
@@ -99,7 +99,9 @@ pub use scan::{Favorite, Launch, ScanData, ScanForm, ScanServices, ScanView, Sha
 pub use session::{
     ConflictPrompt, Editor, InputKind, JobStatus, PackForm, Pending, Session, SyncView, TabStrip,
 };
-pub use settings::{normalize_key, Column, Density, DEFAULT_COLUMNS, DEFAULT_THEME, THEMES};
+pub use settings::{
+    normalize_key, Column, Density, COLUMN_WIDTH, DEFAULT_COLUMNS, DEFAULT_THEME, THEMES,
+};
 pub use thumbs::{Thumbnails, THUMB_SIZE};
 pub use tools::Tool;
 pub use viewer::{Row, ViewMode, Viewer};
