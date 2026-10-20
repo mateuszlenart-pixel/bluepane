@@ -244,6 +244,34 @@ impl BluepaneUi {
         if let Some(problem) = problem {
             ui.colored_label(ui.visuals().error_fg_color, problem);
         }
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Profil:");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.profile_name)
+                    .hint_text("nazwa do zapisania")
+                    .desired_width(160.0),
+            );
+            let name = self.profile_name.trim().to_string();
+            if ui
+                .add_enabled(
+                    !name.is_empty() && !dirty,
+                    egui::Button::new("Zapisz profil"),
+                )
+                .on_hover_text("Zapisuje oba katalogi i ustawienia jako makro sync-<nazwa>; z harmonogramu: schedule add sync-<nazwa>; daily 03:00")
+                .clicked()
+            {
+                commands.push(format!("syncprofile save {name}"));
+            }
+            for saved in self.session.sync_profiles() {
+                if ui
+                    .button(format!("Wczytaj: {saved}"))
+                    .on_hover_text("Ustawia katalogi i porównuje; plan czeka na sprawdzenie")
+                    .clicked()
+                {
+                    commands.push(format!("syncprofile run {saved}"));
+                }
+            }
+        });
 
         match &view.preview {
             None => {

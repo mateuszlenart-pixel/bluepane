@@ -740,3 +740,27 @@ fn a_comparison_of_two_text_files_shows_the_differences_and_closes() {
     harness.run_steps(4);
     assert!(harness.state_mut().session_mut().compare.is_none());
 }
+
+#[test]
+fn the_sync_tab_offers_saving_a_profile_and_loading_a_saved_one() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    {
+        let s = harness.state_mut().session_mut();
+        // The window of the tests has no config folder of its own to write into otherwise.
+        let dir = tempfile::tempdir().unwrap();
+        s.use_config_dir(dir.path());
+        std::mem::forget(dir);
+    }
+    command(&mut harness, "sync");
+    harness.run_steps(6);
+    harness.get_by_label("Zapisz profil");
+    command(&mut harness, "syncprofile save Zażółć");
+    harness.run_steps(4);
+    assert_eq!(
+        harness.state_mut().session_mut().sync_profiles(),
+        ["Zażółć"]
+    );
+    harness.run_steps(2);
+    harness.get_by_label_contains("Wczytaj: Zażółć");
+}

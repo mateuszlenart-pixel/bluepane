@@ -78,6 +78,8 @@ pub struct BluepaneUi {
     page_texture: Option<(pages_ui::TextureKey, egui::TextureHandle)>,
     /// The site being edited in the site manager.
     site_form: Option<sites_ui::SiteForm>,
+    /// The name typed for saving a synchronization profile.
+    profile_name: String,
     /// The palette in use and the name of the theme egui was last given.
     theme: theme::Theme,
     theme_applied: bool,
@@ -127,6 +129,7 @@ impl BluepaneUi {
             find_selected: 0,
             page_texture: None,
             site_form: None,
+            profile_name: String::new(),
             theme: theme::Theme::by_name(&theme_name),
             theme_applied: false,
             column_drag: None,

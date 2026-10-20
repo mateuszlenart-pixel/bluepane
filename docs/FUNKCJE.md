@@ -190,6 +190,17 @@ Makro (zob. „Makra i skrypty”) może się uruchamiać samo o zadanej porze, 
 - Rysuje się do 300 największych wpisów; liczba pominiętych jest pod mapą. Puste katalogi nie mają kafelka. Dowiązania nie są śledzone, a katalog bez uprawnień liczy się jako pusty.
 - Mapa działa tylko na katalogu na dysku (nie w archiwum ani na serwerze).
 
+## Profile synchronizacji
+
+Profil to para katalogów z ustawieniami narzędzia `sync` (wariant, sposób porównywania, tolerancja, usuwanie, wzorce „Tylko” i „Pomiń”), zapisana pod nazwą. Leży jako zwykłe makro `sync-<nazwa>` w katalogu makr, więc działa wszędzie tam, gdzie makra: `macro play`, `bluepane-cli run-script` i harmonogram.
+
+- `syncprofile save <nazwa>` zapisuje to, co jest w otwartej zakładce synchronizacji (przycisk „Zapisz profil”; ustawienia zmienione, ale jeszcze nie zastosowane przyciskiem „Porównaj”, blokują zapis). Ten sam profil pod tą samą nazwą jest aktualizowany.
+- `syncprofile run <nazwa>` (przycisk „Wczytaj: nazwa”) ustawia oba panele na zapisane katalogi i porównuje je; **plan czeka na ekranie** do sprawdzenia i dopiero „Synchronizuj” (`syncrun`) coś kopiuje albo usuwa.
+- `syncprofile list`, `syncprofile delete <nazwa>`.
+- Z harmonogramu profil działa **do końca**, bo plik kończy się poleceniem `syncrun`: `schedule add sync-<nazwa>; daily 03:00`. Usuwanie plików idzie tak, jak zapisano w profilu (domyślnie do kosza); profil z usuwaniem „Trwale” wykonuje je bez pytania, więc zapisuj go świadomie. Wpis w harmonogramie nie znika sam po usunięciu profilu: `schedule delete sync-<nazwa>`.
+- Nie są zapisywane kierunki ustawione ręcznie dla pojedynczych plików ani własne reguły kierunków. Wzorce i katalog wersji nie mogą zawierać spacji (zapis odmówi z komunikatem).
+- Do skryptów doszła komenda `panel 1|2`, która wybiera aktywny panel.
+
 ## Duplikaty
 
 `dupes` szuka plików o tej samej treści w katalogu aktywnego panelu i jego podkatalogach; wynik jest w zakładce „Duplikaty”. Szukanie rusza **dopiero po komendzie**, działa w tle i można je przerwać („Przerwij”, `dupes stop`; znalezione grupy zostają). Kandydaci zawężają się trzema krokami: ten sam rozmiar, ten sam skrót SHA-256, na końcu porównanie bajt po bajcie (więc kolizja skrótu nie zaszkodzi). Puste pliki i dowiązania są pomijane.

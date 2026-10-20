@@ -741,6 +741,8 @@ impl Session {
             Command::Edit => self.edit_file()?,
             Command::Viewer(action) => self.viewer_action(action)?,
             Command::SwitchPanel => self.active = 1 - self.active,
+            Command::FocusPanel(n) => self.active = n,
+            Command::SyncProfile(action) => self.profile_action(action)?,
             Command::Up => {
                 let panel = self.active_panel_mut();
                 if !panel.filter_backspace() {

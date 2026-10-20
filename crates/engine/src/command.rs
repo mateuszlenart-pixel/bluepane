@@ -88,6 +88,8 @@ pub const COMMAND_NAMES: &[&str] = &[
     "macro",
     "button",
     "map",
+    "panel",
+    "syncprofile",
     "compare",
     "checksum",
     "dupes",
@@ -355,6 +357,10 @@ pub enum Command {
     Button(crate::ButtonAction),
     /// Disk usage map of the active folder.
     Map(crate::MapAction),
+    /// Make panel 0 or 1 the active one (for scripts and profiles).
+    FocusPanel(usize),
+    /// Saved synchronization profiles.
+    SyncProfile(crate::ProfileAction),
     /// Compare two files.
     Compare(crate::CompareAction),
     /// Make or verify `.sha256` / `.md5` files.
@@ -681,6 +687,14 @@ impl Command {
             }
             "compare" | "cmp" => crate::compare::parse_compare(rest).map(Command::Compare),
             "checksum" | "cksum" => crate::compare::parse_checksum(rest).map(Command::Checksum),
+            "panel" => match rest.trim().to_lowercase().as_str() {
+                "1" | "left" | "l" => Ok(Command::FocusPanel(0)),
+                "2" | "right" | "r" => Ok(Command::FocusPanel(1)),
+                _ => Err(EngineError("panel: użycie: panel 1|2 (albo left|right)".into())),
+            },
+            "syncprofile" | "sprofile" => {
+                crate::syncprofiles::parse_syncprofile(rest).map(Command::SyncProfile)
+            }
             "map" => crate::diskmap::parse_map(rest).map(Command::Map),
             "button" | "btn" => crate::buttons::parse_button(rest).map(Command::Button),
             "macro" | "mac" => crate::macros::parse_macro(rest).map(Command::Macro),
