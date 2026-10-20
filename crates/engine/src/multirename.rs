@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use bluepane_rename::{CaseMode, Item, Plan, Renamed, Settings, Stamp};
@@ -41,6 +42,15 @@ pub struct RenameView {
 
 impl RenameView {
     fn replan(&mut self) {
+        // Photos and audio files are opened only when a mask asks for `[EXIF:..]` or
+        // `[TAG:..]`, and each only once while the window is open.
+        if bluepane_rename::needs_meta(&self.settings) {
+            for entry in &mut self.entries {
+                if entry.item.meta.is_none() && !entry.item.is_dir {
+                    entry.item.meta = Some(Arc::new(bluepane_rename::read_meta(&entry.item.path)));
+                }
+            }
+        }
         let items: Vec<Item> = self.entries.iter().map(|e| e.item.clone()).collect();
         match bluepane_rename::plan(&items, &self.settings, &self.overrides) {
             Ok(plan) => {
@@ -109,6 +119,7 @@ impl Session {
                     path: e.path.clone(),
                     is_dir: e.is_dir(),
                     modified: e.modified.map(stamp_of),
+                    meta: None,
                 },
                 size: e.size,
                 modified: e.modified,
@@ -441,5 +452,20 @@ mod tests {
         s.run_line("mrclose").unwrap();
         assert!(s.rename.is_none());
         assert_eq!(s.keymap.lookup("Ctrl+F2"), Some("multirename"));
+    }
+
+    #[test]
+    fn exif_and_tag_masks_work_on_files_without_such_data_and_bad_fields_are_reported() {
+        let (tmp, mut s) = session();
+        s.run_line("selectall").unwrap();
+        s.run_line("multirename").unwrap();
+        // The text files have no EXIF date: the field is empty, nothing breaks.
+        s.run_line("mrset name [EXIF:YMD]x_[N]").unwrap();
+        assert_eq!(new_names(&s), ["x_a.txt", "x_b.txt", "x_c.md"]);
+        s.run_line("mrset name [TAG:artist][N]").unwrap();
+        assert_eq!(new_names(&s), ["a.txt", "b.txt", "c.md"]);
+        assert!(s.run_line("mrset name [TAG:nope]").is_err());
+        assert!(s.run_line("mrset name [EXIF:]").is_err());
+        assert_eq!(names(tmp.path().join("left")), ["a.txt", "b.txt", "c.md"]);
     }
 }

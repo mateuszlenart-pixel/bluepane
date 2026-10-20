@@ -112,6 +112,7 @@ mod tests {
             path: path.to_path_buf(),
             is_dir: path.is_dir(),
             modified: None,
+            meta: None,
         }
     }
 

@@ -425,6 +425,7 @@ przywraca poprzednie nazwy. Kliknięcie w nową nazwę pozwala wpisać ją ręcz
   `[E]` rozszerzenie (też z zakresem), `[C]` licznik, `[C10+5:3]` licznik (start 10, krok 5, 3 cyfry),
   `[Y]` `[M]` `[D]` `[h]` `[m]` `[s]` data i czas modyfikacji (też razem: `[YMD]`, `[hms]`),
   `[P]` nazwa katalogu nadrzędnego, `[[]` i `[]]` to dosłowne nawiasy.
+- **Dane z wnętrza pliku:** `[EXIF:YMD]` to data **zrobienia zdjęcia** z EXIF (też `[EXIF:hms]`, `[EXIF:YMDhms]`, jak przy dacie modyfikacji), `[EXIF:Make]` i `[EXIF:Model]` producent i model aparatu; `[TAG:artist]`, `[TAG:title]`, `[TAG:album]`, `[TAG:genre]`, `[TAG:track]` (dwie cyfry: `03`) i `[TAG:year]` to tagi pliku audio (MP3, FLAC, OGG, M4A, WAV i inne). Pliki są otwierane **tylko wtedy, gdy maska używa takiego pola**, i każdy raz na okno. Plik bez takich danych daje pusty fragment, więc przy kilku takich plikach podgląd pokaże konflikt zamiast po cichu nadpisać; znaki niedozwolone w nazwie (`/ \ : * ? " < > |`) w tagach zamieniają się na `_`. Przykłady: `[EXIF:YMD]_[C]`, `[TAG:track] [TAG:artist] - [TAG:title]`. Dochodzą dwie zależności: `kamadak-exif` i `lofty` (obie w czystym Rust).
 - **Szukaj i zamień:** zwykły tekst albo wyrażenie regularne (RegWy; `$1` = grupa), tylko pierwsze
   trafienie (1x), opcjonalnie razem z rozszerzeniem, bez rozróżniania wielkości liter.
 - **Duża/mała:** bez zmian, WIELKIE, małe, Każdy Wyraz Wielką, Pierwsza wielka.

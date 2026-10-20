@@ -47,6 +47,9 @@ flate2 = "1"
 sevenz-rust2 = { version = "0.24", default-features = false, features = ["aes256", "compress"] }
 # Regular expressions for multi-rename search and replace.
 regex = "1"
+# Multi-rename from file data: the date and camera in a photo's EXIF, tags of audio files (both pure Rust).
+kamadak-exif = "0.6"
+lofty = "0.22"
 # SFTP over SSH (pure Rust, no C library): the async client and server run on a tokio runtime
 # that the sftp crate owns and hides behind a blocking API.
 russh = { version = "0.63", default-features = false, features = ["ring", "rsa", "flate2"] }

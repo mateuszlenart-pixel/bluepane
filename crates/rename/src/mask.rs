@@ -1,6 +1,6 @@
 //! Name masks such as `[N]_[C:3]` or `[YMD] [N1-8]`.
 
-use crate::Stamp;
+use crate::{Meta, Stamp};
 
 /// Which characters of a field to take. Positions are 1-based.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +87,51 @@ impl DatePart {
     }
 }
 
+/// A text or number read from inside the file: `[EXIF:Make]`, `[TAG:artist]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MetaField {
+    Make,
+    Model,
+    Artist,
+    Title,
+    Album,
+    Genre,
+    Track,
+    Year,
+}
+
+impl MetaField {
+    fn value(self, meta: &Meta) -> String {
+        let text = |v: &Option<String>| v.clone().unwrap_or_default();
+        match self {
+            MetaField::Make => text(&meta.make),
+            MetaField::Model => text(&meta.model),
+            MetaField::Artist => text(&meta.artist),
+            MetaField::Title => text(&meta.title),
+            MetaField::Album => text(&meta.album),
+            MetaField::Genre => text(&meta.genre),
+            // Two digits keep tracks in order when sorted by name.
+            MetaField::Track => meta.track.map(|t| format!("{t:02}")).unwrap_or_default(),
+            MetaField::Year => meta.year.map(|y| format!("{y:04}")).unwrap_or_default(),
+        }
+    }
+}
+
+/// Text from a tag can hold characters a file name cannot: they become `_`.
+fn file_safe(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() || "/\\:*?\"<>|".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Token {
     Literal(String),
@@ -95,6 +140,9 @@ pub(crate) enum Token {
     Parent(Range),
     Counter(CounterSpec),
     Date(Vec<DatePart>),
+    /// `[EXIF:YMD]`: when a photo was taken.
+    Taken(Vec<DatePart>),
+    Meta(MetaField),
 }
 
 /// A parsed mask.
@@ -107,6 +155,8 @@ pub(crate) struct Source<'a> {
     pub ext: &'a str,
     pub parent: &'a str,
     pub modified: Option<&'a Stamp>,
+    /// What was read from inside the file, if a mask asked for it.
+    pub meta: Option<&'a Meta>,
     pub counter: i64,
     pub counter_digits: usize,
 }
@@ -170,23 +220,29 @@ impl Mask {
                 }
                 Token::Date(parts) => {
                     if let Some(stamp) = src.modified {
-                        let mut prev: Option<DatePart> = None;
-                        for part in parts {
-                            if let Some(prev) = prev {
-                                out.push(match (prev.is_date(), part.is_date()) {
-                                    (true, true) => '-',
-                                    (false, false) => '.',
-                                    _ => '_',
-                                });
-                            }
-                            out.push_str(&part.value(stamp));
-                            prev = Some(*part);
-                        }
+                        push_date(&mut out, parts, stamp);
+                    }
+                }
+                Token::Taken(parts) => {
+                    if let Some(stamp) = src.meta.and_then(|m| m.taken.as_ref()) {
+                        push_date(&mut out, parts, stamp);
+                    }
+                }
+                Token::Meta(field) => {
+                    if let Some(meta) = src.meta {
+                        out.push_str(&file_safe(&field.value(meta)));
                     }
                 }
             }
         }
         out
+    }
+
+    /// True when the mask draws on data read from inside the file.
+    pub(crate) fn needs_meta(&self) -> bool {
+        self.0
+            .iter()
+            .any(|t| matches!(t, Token::Taken(_) | Token::Meta(_)))
     }
 
     /// Counter overrides in the mask, if any (the first one wins).
@@ -198,20 +254,77 @@ impl Mask {
     }
 }
 
+/// `YMDhms` letters as date parts (empty when some letter is something else).
+fn date_parts(text: &str) -> Vec<DatePart> {
+    if text.is_empty() || !text.chars().all(|c| "YMDhms".contains(c)) {
+        return Vec::new();
+    }
+    text.chars()
+        .map(|c| match c {
+            'Y' => DatePart::Year,
+            'M' => DatePart::Month,
+            'D' => DatePart::Day,
+            'h' => DatePart::Hour,
+            'm' => DatePart::Minute,
+            _ => DatePart::Second,
+        })
+        .collect()
+}
+
+/// Joins date and time parts with separators that are safe in a file name.
+fn push_date(out: &mut String, parts: &[DatePart], stamp: &Stamp) {
+    let mut prev: Option<DatePart> = None;
+    for part in parts {
+        if let Some(prev) = prev {
+            out.push(match (prev.is_date(), part.is_date()) {
+                (true, true) => '-',
+                (false, false) => '.',
+                _ => '_',
+            });
+        }
+        out.push_str(&part.value(stamp));
+        prev = Some(*part);
+    }
+}
+
+/// `[EXIF:YMD]`, `[EXIF:Make]`, `[TAG:artist]`...
+fn parse_meta_field(group: &str, name: &str, inner: &str) -> Result<Token, String> {
+    let unknown = || {
+        format!(
+            "nieznane pole w masce: [{inner}] (EXIF: YMDhms, Make, Model; TAG: artist, title, album, genre, track, year)"
+        )
+    };
+    if group.eq_ignore_ascii_case("EXIF") {
+        let parts = date_parts(name);
+        if !parts.is_empty() {
+            return Ok(Token::Taken(parts));
+        }
+        return match name.to_ascii_lowercase().as_str() {
+            "make" => Ok(Token::Meta(MetaField::Make)),
+            "model" => Ok(Token::Meta(MetaField::Model)),
+            _ => Err(unknown()),
+        };
+    }
+    match name.to_ascii_lowercase().as_str() {
+        "artist" => Ok(Token::Meta(MetaField::Artist)),
+        "title" => Ok(Token::Meta(MetaField::Title)),
+        "album" => Ok(Token::Meta(MetaField::Album)),
+        "genre" => Ok(Token::Meta(MetaField::Genre)),
+        "track" => Ok(Token::Meta(MetaField::Track)),
+        "year" => Ok(Token::Meta(MetaField::Year)),
+        _ => Err(unknown()),
+    }
+}
+
 fn parse_field(inner: &str) -> Result<Token, String> {
     let unknown = || format!("nieznane pole w masce: [{inner}]");
-    if inner.chars().all(|c| "YMDhms".contains(c)) {
-        let parts = inner
-            .chars()
-            .map(|c| match c {
-                'Y' => DatePart::Year,
-                'M' => DatePart::Month,
-                'D' => DatePart::Day,
-                'h' => DatePart::Hour,
-                'm' => DatePart::Minute,
-                _ => DatePart::Second,
-            })
-            .collect();
+    if let Some((group, name)) = inner.split_once(':') {
+        if group.eq_ignore_ascii_case("EXIF") || group.eq_ignore_ascii_case("TAG") {
+            return parse_meta_field(group, name, inner);
+        }
+    }
+    let parts = date_parts(inner);
+    if !parts.is_empty() {
         return Ok(Token::Date(parts));
     }
     let mut chars = inner.chars();
@@ -268,6 +381,7 @@ mod tests {
             ext,
             parent: "Photos",
             modified: Some(&stamp),
+            meta: None,
             counter: 7,
             counter_digits: 3,
         })
@@ -312,9 +426,71 @@ mod tests {
         assert_eq!(render("[YMDhms]", "a", ""), "2026-10-04_07.05.09");
     }
 
+    fn render_meta(mask: &str, meta: &Meta) -> String {
+        Mask::parse(mask).unwrap().render(&Source {
+            name: "IMG_1",
+            ext: "jpg",
+            parent: "P",
+            modified: None,
+            meta: Some(meta),
+            counter: 1,
+            counter_digits: 1,
+        })
+    }
+
+    #[test]
+    fn exif_and_tag_fields_come_from_the_file_and_are_safe_in_a_name() {
+        let meta = Meta {
+            taken: Some(Stamp {
+                year: 2026,
+                month: 10,
+                day: 4,
+                hour: 7,
+                minute: 5,
+                second: 9,
+            }),
+            make: Some("Canon".into()),
+            model: Some("EOS 5D".into()),
+            artist: Some("AC/DC: Żółć".into()),
+            title: Some("Gęślą?".into()),
+            album: None,
+            genre: None,
+            track: Some(3),
+            year: Some(1999),
+        };
+        assert_eq!(render_meta("[EXIF:YMD]_[N]", &meta), "2026-10-04_IMG_1");
+        assert_eq!(render_meta("[exif:YMDhms]", &meta), "2026-10-04_07.05.09");
+        assert_eq!(
+            render_meta("[EXIF:Make] [EXIF:Model]", &meta),
+            "Canon EOS 5D"
+        );
+        assert_eq!(
+            render_meta("[TAG:track] - [TAG:artist] - [TAG:title]", &meta),
+            "03 - AC_DC_ Żółć - Gęślą_"
+        );
+        assert_eq!(render_meta("[TAG:year]", &meta), "1999");
+        // A missing value is simply nothing.
+        assert_eq!(render_meta("a[TAG:album]b", &meta), "ab");
+        assert_eq!(render_meta("a[EXIF:YMD]b", &Meta::default()), "ab");
+        assert!(Mask::parse("[EXIF:YMD]").unwrap().needs_meta());
+        assert!(Mask::parse("[TAG:title]").unwrap().needs_meta());
+        assert!(!Mask::parse("[YMD][N]").unwrap().needs_meta());
+    }
+
     #[test]
     fn bad_masks_report_what_is_wrong() {
-        for bad in ["[N", "[X]", "[N0]", "[N3-x]", "[C1+x]", "[Nx]"] {
+        for bad in [
+            "[N",
+            "[X]",
+            "[N0]",
+            "[N3-x]",
+            "[C1+x]",
+            "[Nx]",
+            "[EXIF:]",
+            "[EXIF:Foo]",
+            "[TAG:YMD]",
+            "[TAG:]",
+        ] {
             assert!(Mask::parse(bad).is_err(), "{bad}");
         }
     }
