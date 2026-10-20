@@ -167,6 +167,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `workspace [list\|save <nazwa>\|load <nazwa>\|delete <nazwa>\|restore on\|off]` | obszary robocze (alias: ws): zakładki obu paneli z sortowaniem i widokiem, aktywny panel, pasek Miejsca i układ okna pod nazwą; `restore` włącza lub wyłącza powrót do poprzedniej sesji przy starcie |
 | `layout [list\|reset\|save <nazwa>\|load <nazwa>\|delete <nazwa>]` | układy okna (gdzie stoją panele i narzędzia): lista zapisanych, powrót do dwóch paneli obok siebie, zapis, wczytanie i usunięcie układu o nazwie |
 | `columns [ext\|size\|date\|created\|default]` | kolumny listy obok nazwy: bez argumentu pokazuje, z nazwą kolumny ją pokazuje albo chowa (created = data utworzenia), default przywraca; zapisuje się w `settings.conf` |
+| `appearance [textsize <80-160>\|rowheight <16-40>\|accent <#rrggbb>\|reset]` | rozmiar tekstu w procentach, wysokość wiersza listy w punktach (zastępuje gęstość) i kolor akcentu; `reset` (lub `<ustawienie> reset`) przywraca domyślne; zapisuje się w `settings.conf` |
 | `density [compact\|comfortable]` | wiersze listy zwarte albo wygodne; bez argumentu przełącza; zapisuje się w `settings.conf` |
 | `keys [ctrl\|alt\|shift]` | ściąga klawiszy: wszystkie skróty (także własne z `bind`) z opisami; z argumentem tylko te z Ctrl, Alt albo Shift (?, albo przytrzymaj Ctrl lub Alt) |
 

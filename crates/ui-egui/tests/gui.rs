@@ -480,6 +480,22 @@ fn the_one_box_shows_commands_and_files_and_enter_goes_to_the_file() {
 }
 
 #[test]
+fn appearance_settings_change_the_window_without_breaking_it() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    command(&mut harness, "appearance textsize 140");
+    command(&mut harness, "appearance rowheight 30");
+    command(&mut harness, "appearance accent #ff8800");
+    harness.run_steps(3);
+    let session = harness.state_mut().session_mut();
+    assert_eq!(session.text_size(), 140);
+    assert_eq!(session.accent(), Some([255, 136, 0]));
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+    command(&mut harness, "appearance reset");
+    harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+}
+
+#[test]
 fn a_workspace_is_saved_with_its_layout_and_loaded_again() {
     let (_tmp, mut harness) = window();
     harness.run_steps(2);

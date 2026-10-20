@@ -9,6 +9,9 @@
 //! key Ctrl+L = "cd "           (quotes keep a trailing space: the command line gets `cd `)
 //! columns = ext size date      (the columns of the file list, beside the name)
 //! density = compact            (rows of the file list: compact or comfortable)
+//! textsize = 120               (text size in percent, 80 to 160)
+//! rowheight = 26              (height of a list row in points, 16 to 40)
+//! accent = #3d8bfd            (accent colour: cursor frame, focus, links)
 //! quickview = tab              (Quick View in its own tab; `panel`: over the other panel)
 //! ```
 //!
@@ -98,6 +101,20 @@ impl Density {
     }
 }
 
+/// Allowed text sizes (percent) and row heights (points).
+pub const TEXT_SIZE: std::ops::RangeInclusive<u16> = 80..=160;
+pub const ROW_HEIGHT: std::ops::RangeInclusive<u16> = 16..=40;
+
+/// `#rrggbb` (the `#` is optional) as red, green, blue.
+pub(crate) fn parse_color(text: &str) -> Option<[u8; 3]> {
+    let hex = text.strip_prefix('#').unwrap_or(text);
+    if hex.len() != 6 || !hex.is_ascii() {
+        return None;
+    }
+    let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
+    Some([channel(0)?, channel(2)?, channel(4)?])
+}
+
 /// What the settings file holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -107,6 +124,12 @@ pub struct Settings {
     pub density: Option<Density>,
     /// Quick View in a tab of its own instead of in place of the other panel.
     pub quick_tab: Option<bool>,
+    /// Text size in percent of the normal one.
+    pub text_size: Option<u16>,
+    /// Height of a list row in points (overrides `density`).
+    pub row_height: Option<u16>,
+    /// The accent colour as red, green, blue.
+    pub accent: Option<[u8; 3]>,
     /// Put the last session back at start (default: yes).
     pub restore: Option<bool>,
     /// Keys that differ from the built-in map: `Some(line)` binds, `None` takes the key off.
@@ -264,6 +287,32 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                 }
             }
             settings.columns = Some(columns);
+        } else if left == "textsize" {
+            match right.trim().parse::<u16>() {
+                Ok(n) if TEXT_SIZE.contains(&n) => settings.text_size = Some(n),
+                _ => warnings.push(format!(
+                    "wiersz {number}: textsize to liczba od {} do {}",
+                    TEXT_SIZE.start(),
+                    TEXT_SIZE.end()
+                )),
+            }
+        } else if left == "rowheight" {
+            match right.trim().parse::<u16>() {
+                Ok(n) if ROW_HEIGHT.contains(&n) => settings.row_height = Some(n),
+                _ => warnings.push(format!(
+                    "wiersz {number}: rowheight to liczba od {} do {}",
+                    ROW_HEIGHT.start(),
+                    ROW_HEIGHT.end()
+                )),
+            }
+        } else if left == "accent" {
+            match parse_color(right.trim()) {
+                Some(rgb) => settings.accent = Some(rgb),
+                None => warnings.push(format!(
+                    "wiersz {number}: accent to kolor w postaci #rrggbb, nie „{}”",
+                    right.trim()
+                )),
+            }
         } else if left == "restore" {
             match right.trim() {
                 "on" => settings.restore = Some(true),
@@ -328,6 +377,15 @@ pub fn render(settings: &Settings) -> String {
     if let Some(columns) = &settings.columns {
         let words: Vec<&str> = columns.iter().map(|c| c.word()).collect();
         out.push_str(&format!("columns = {}\n", words.join(" ")));
+    }
+    if let Some(n) = settings.text_size {
+        out.push_str(&format!("textsize = {n}\n"));
+    }
+    if let Some(n) = settings.row_height {
+        out.push_str(&format!("rowheight = {n}\n"));
+    }
+    if let Some([r, g, b]) = settings.accent {
+        out.push_str(&format!("accent = #{r:02x}{g:02x}{b:02x}\n"));
     }
     if let Some(on) = settings.restore {
         out.push_str(&format!("restore = {}\n", if on { "on" } else { "off" }));
@@ -409,6 +467,71 @@ impl Session {
     /// Quick View opens in a tab of its own (`quick tab`) rather than over the other panel.
     pub fn quick_in_tab(&self) -> bool {
         self.settings.quick_tab.unwrap_or(false)
+    }
+
+    /// Text size in percent (100 = normal).
+    pub fn text_size(&self) -> u16 {
+        self.settings.text_size.unwrap_or(100)
+    }
+
+    /// The row height the user set, if any (otherwise the density decides).
+    pub fn row_height(&self) -> Option<u16> {
+        self.settings.row_height
+    }
+
+    /// The accent colour the user set, if any (otherwise the theme's own).
+    pub fn accent(&self) -> Option<[u8; 3]> {
+        self.settings.accent
+    }
+
+    /// `appearance` shows the settings; `appearance textsize|rowheight|accent <value>|reset`
+    /// sets one, `appearance reset` brings all back.
+    pub(crate) fn set_appearance(&mut self, args: &str) -> Result<(), EngineError> {
+        let usage = || {
+            EngineError(
+                "appearance: użycie: appearance [textsize <80-160>|rowheight <16-40>|accent <#rrggbb>|reset] [reset]"
+                    .into(),
+            )
+        };
+        let mut words = args.split_whitespace();
+        match (words.next(), words.next(), words.next()) {
+            (None, ..) => {}
+            (Some("reset"), None, _) => {
+                self.settings.text_size = None;
+                self.settings.row_height = None;
+                self.settings.accent = None;
+            }
+            (Some("textsize"), Some("reset"), None) => self.settings.text_size = None,
+            (Some("rowheight"), Some("reset"), None) => self.settings.row_height = None,
+            (Some("accent"), Some("reset"), None) => self.settings.accent = None,
+            (Some("textsize"), Some(n), None) => {
+                let n = n
+                    .trim_end_matches('%')
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|n| TEXT_SIZE.contains(n));
+                self.settings.text_size = Some(n.ok_or_else(usage)?);
+            }
+            (Some("rowheight"), Some(n), None) => {
+                let n = n.parse::<u16>().ok().filter(|n| ROW_HEIGHT.contains(n));
+                self.settings.row_height = Some(n.ok_or_else(usage)?);
+            }
+            (Some("accent"), Some(color), None) => {
+                self.settings.accent = Some(parse_color(color).ok_or_else(usage)?);
+            }
+            _ => return Err(usage()),
+        }
+        let accent = self.accent().map_or("motywu".to_string(), |[r, g, b]| {
+            format!("#{r:02x}{g:02x}{b:02x}")
+        });
+        let rows = self
+            .row_height()
+            .map_or("z gęstości".to_string(), |n| format!("{n} pt"));
+        self.status = format!(
+            "Wygląd: tekst {}%, wiersz {rows}, akcent {accent}",
+            self.text_size()
+        );
+        self.save_settings()
     }
 
     pub fn density(&self) -> Density {
@@ -699,6 +822,50 @@ mod tests {
         assert_eq!(settings.density, Some(Density::Compact));
         let again = parse(&render(&settings)).0;
         assert_eq!(again, settings);
+    }
+
+    #[test]
+    fn appearance_settings_are_checked_saved_and_reset() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("l")).unwrap();
+        let mut s = Session::new(tmp.path().join("l"), tmp.path().join("l"));
+        s.use_config_dir(&tmp.path().join("config"));
+        assert_eq!(
+            (s.text_size(), s.row_height(), s.accent()),
+            (100, None, None)
+        );
+        s.run_line("appearance textsize 120").unwrap();
+        s.run_line("appearance rowheight 28").unwrap();
+        s.run_line("appearance accent #FF8800").unwrap();
+        assert!(s.run_line("appearance textsize 300").is_err());
+        assert!(s.run_line("appearance rowheight 5").is_err());
+        assert!(s.run_line("appearance accent red").is_err());
+        assert!(s.run_line("appearance accent #12345").is_err());
+        assert!(s.run_line("appearance accent #ąąąąąą").is_err());
+        assert_eq!(
+            (s.text_size(), s.row_height(), s.accent()),
+            (120, Some(28), Some([255, 136, 0]))
+        );
+
+        let mut again = Session::new(tmp.path().join("l"), tmp.path().join("l"));
+        again.use_config_dir(&tmp.path().join("config"));
+        assert_eq!((again.text_size(), again.row_height()), (120, Some(28)));
+        again.run_line("appearance accent reset").unwrap();
+        assert_eq!(again.accent(), None);
+        again.run_line("appearance reset").unwrap();
+        assert_eq!((again.text_size(), again.row_height()), (100, None));
+        again.run_line("appearance").unwrap();
+        assert!(again.status.contains("100%"), "{}", again.status);
+    }
+
+    #[test]
+    fn a_bad_appearance_line_in_the_file_is_skipped_with_a_warning() {
+        let (settings, warnings) =
+            parse("textsize = 500\nrowheight = abc\naccent = #zzzzzz\naccent = 3d8bfd\n");
+        assert_eq!(settings.text_size, None);
+        assert_eq!(settings.row_height, None);
+        assert_eq!(settings.accent, Some([0x3d, 0x8b, 0xfd]));
+        assert_eq!(warnings.len(), 3);
     }
 
     #[test]
