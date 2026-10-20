@@ -78,6 +78,8 @@ pub struct BluepaneUi {
     /// The palette in use and the name of the theme egui was last given.
     theme: theme::Theme,
     theme_applied: bool,
+    /// The theme name, text size and accent the egui style was last built from.
+    look_applied: (String, u16, Option<[u8; 3]>),
     /// Set when a click on the empty part of a path bar asked to edit the path.
     path_edit: [bool; 2],
     /// Speed of the running job, for the bar at the bottom.
@@ -122,6 +124,7 @@ impl BluepaneUi {
             site_form: None,
             theme: theme::Theme::by_name(&theme_name),
             theme_applied: false,
+            look_applied: (String::new(), 100, None),
             path_edit: [false; 2],
             speed: bottom_ui::SpeedMeter::default(),
             dock: None,
@@ -164,9 +167,15 @@ impl BluepaneUi {
             // egui closes the program on Ctrl+Q by default; Ctrl+Q is Quick View here.
             ctx.options_mut(|options| options.quit_shortcuts.clear());
         }
-        if !self.theme_applied || self.theme.name != self.session.theme() {
-            self.theme = theme::Theme::by_name(self.session.theme());
-            self.theme.apply(&ctx);
+        let look = (
+            self.session.theme().to_string(),
+            self.session.text_size(),
+            self.session.accent(),
+        );
+        if !self.theme_applied || self.look_applied != look {
+            self.theme = theme::Theme::by_name(&look.0).with_accent(look.2);
+            self.theme.apply(&ctx, look.1);
+            self.look_applied = look;
             self.theme_applied = true;
         }
         // Text a command wants on the clipboard (`copynames`).
@@ -1068,9 +1077,12 @@ impl BluepaneUi {
         // Footer text and the size the longest bar stands for: cached by the engine.
         let stats = session.panel_stats(index);
         let (biggest, summary) = (stats.biggest, stats.summary);
-        let row_height = match self.session.density() {
-            bluepane_engine::Density::Comfortable => ui.spacing().interact_size.y,
-            bluepane_engine::Density::Compact => (ui.spacing().interact_size.y - 4.0).max(14.0),
+        let row_height = match (self.session.row_height(), self.session.density()) {
+            (Some(points), _) => f32::from(points),
+            (None, bluepane_engine::Density::Comfortable) => ui.spacing().interact_size.y,
+            (None, bluepane_engine::Density::Compact) => {
+                (ui.spacing().interact_size.y - 4.0).max(14.0)
+            }
         };
         let stride = row_height + ui.spacing().item_spacing.y;
         let cursor = panel.cursor;

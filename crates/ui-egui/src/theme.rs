@@ -90,6 +90,17 @@ impl Theme {
         }
     }
 
+    /// The same palette with the user's accent colour (cursor frame, focus, links, borders of
+    /// hovered widgets).
+    pub fn with_accent(mut self, accent: Option<[u8; 3]>) -> Theme {
+        if let Some([r, g, b]) = accent {
+            let color = rgb(r, g, b);
+            self.accent = color;
+            self.cursor_stroke = color;
+        }
+        self
+    }
+
     /// The icon and the colour of a kind of file (the colour is for the name too).
     pub fn look(&self, class: bluepane_engine::FileClass) -> (&'static str, Color32) {
         use bluepane_engine::FileClass as C;
@@ -111,7 +122,7 @@ impl Theme {
     }
 
     /// Hands the palette to egui: widgets, windows, selection and spacing.
-    pub fn apply(&self, ctx: &egui::Context) {
+    pub fn apply(&self, ctx: &egui::Context, text_percent: u16) {
         let mut style = (*ctx.global_style()).clone();
         let mut visuals = egui::Visuals::dark();
         let sharp = CornerRadius::same(3);
@@ -126,7 +137,8 @@ impl Theme {
         visuals.warn_fg_color = self.warn;
         visuals.error_fg_color = self.error;
         visuals.selection.bg_fill = self.cursor_fill;
-        visuals.selection.stroke = Stroke::new(1.0, self.cursor_stroke);
+        // Two points wide: this is also the ring around the widget the keyboard focus is on.
+        visuals.selection.stroke = Stroke::new(2.0, self.cursor_stroke);
 
         let widgets = &mut visuals.widgets;
         widgets.noninteractive.bg_fill = self.panel;
@@ -161,6 +173,13 @@ impl Theme {
         style.spacing.item_spacing = egui::vec2(6.0, 3.0);
         style.spacing.button_padding = egui::vec2(6.0, 3.0);
         style.visuals = visuals;
+        // Text sizes are scaled from egui's own defaults, so repeated calls do not compound.
+        let scale = f32::from(text_percent) / 100.0;
+        for (style_name, font) in egui::Style::default().text_styles {
+            if let Some(current) = style.text_styles.get_mut(&style_name) {
+                current.size = font.size * scale;
+            }
+        }
         ctx.set_global_style(style);
     }
 }
@@ -186,6 +205,24 @@ fn contrast(a: Color32, b: Color32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_accent_replaces_the_theme_colour_and_the_text_scale_does_not_compound() {
+        let t = Theme::dark().with_accent(Some([255, 136, 0]));
+        assert_eq!(t.accent, Color32::from_rgb(255, 136, 0));
+        assert_eq!(t.cursor_stroke, t.accent);
+        assert_eq!(Theme::dark().with_accent(None), Theme::dark());
+
+        let ctx = egui::Context::default();
+        let body =
+            |ctx: &egui::Context| ctx.global_style().text_styles[&egui::TextStyle::Body].size;
+        let normal = egui::Style::default().text_styles[&egui::TextStyle::Body].size;
+        t.apply(&ctx, 150);
+        t.apply(&ctx, 150);
+        assert!((body(&ctx) - normal * 1.5).abs() < 0.01);
+        t.apply(&ctx, 100);
+        assert!((body(&ctx) - normal).abs() < 0.01);
+    }
 
     #[test]
     fn every_theme_the_engine_offers_has_a_palette_with_the_same_name() {

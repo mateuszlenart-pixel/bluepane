@@ -644,6 +644,7 @@ impl Session {
             Command::Workspace(action) => self.workspace_action(action)?,
             Command::Layout(words) => self.layout_command(&words)?,
             Command::Columns(word) => self.set_columns(word)?,
+            Command::Appearance(args) => self.set_appearance(&args)?,
             Command::Density(word) => self.set_density(word)?,
             Command::Keys(prefix) => {
                 let prefix = prefix.unwrap_or_default();

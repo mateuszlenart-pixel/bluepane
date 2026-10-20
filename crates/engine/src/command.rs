@@ -86,6 +86,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "layout",
     "columns",
     "density",
+    "appearance",
     "keys",
     "menu",
     "open",
@@ -344,6 +345,8 @@ pub enum Command {
     Columns(Option<String>),
     /// Compact or comfortable rows (`None` switches).
     Density(Option<String>),
+    /// Text size, row height and accent colour (`appearance`).
+    Appearance(String),
     /// Show or hide the key cheat sheet; the argument keeps only Ctrl or Alt keys.
     Keys(Option<String>),
     /// Open the context menu of the active panel (Shift+F10).
@@ -643,6 +646,7 @@ impl Command {
             "workspace" | "ws" => crate::workspace::parse_workspace(rest).map(Command::Workspace),
             "layout" => Ok(Command::Layout(rest.to_string())),
             "columns" => Ok(Command::Columns(Some(rest.to_string()).filter(|r| !r.is_empty()))),
+            "appearance" => Ok(Command::Appearance(rest.to_string())),
             "density" => Ok(Command::Density(Some(rest.to_string()).filter(|r| !r.is_empty()))),
             "keys" => match rest.to_ascii_lowercase().as_str() {
                 "" => Ok(Command::Keys(None)),

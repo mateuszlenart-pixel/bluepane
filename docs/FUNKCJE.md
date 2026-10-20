@@ -123,6 +123,17 @@ Wpisane słowa muszą wszystkie pasować do ścieżki (polskie litery można pom
 
 Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jump close`. Udziałów sieciowych ze skanera na tej liście jeszcze nie ma.
 
+## Wygląd
+
+`appearance` (bez argumentów pokazuje stan) ustawia, zapisując w `settings.conf`:
+
+- `appearance textsize 80..160`: rozmiar tekstu w procentach (czcionki całego okna, także okien dialogowych),
+- `appearance rowheight 16..40`: wysokość wiersza listy w punktach (zastępuje `density`; `rowheight reset` wraca do gęstości),
+- `appearance accent #rrggbb`: kolor akcentu: ramka kursora, obwódki, linki i pierścień fokusu klawiatury (dwa punkty grubości),
+- `appearance reset` (albo `textsize reset`, `rowheight reset`, `accent reset`) przywraca domyślne.
+
+Zmiana działa od razu. Motywy: `theme` (obecnie tylko ciemne). Motyw systemowy (jasny/ciemny według systemu) czeka na jasny motyw.
+
 ## Obszary robocze i przywracanie sesji
 
 Obszar roboczy to zapamiętany układ pracy: katalogi i zakładki obu paneli (z sortowaniem i widokiem lista/siatka), aktywny panel, wybrane miejsca i układ okna (zapisany jako układ „obszar <nazwa>”). Pliki leżą w `workspaces/<nazwa>.conf` w katalogu konfiguracji; format ma numer wersji, a nowszej wersji niż znana program odmawia wczytać zamiast ją zepsuć.
