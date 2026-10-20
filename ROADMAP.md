@@ -237,7 +237,7 @@ Sieć:
 - [ ] 14e **Udziały SMB jako katalog w panelu** (`smb://host/udział`) bez montowania w systemie (zależność do zgody albo `smbclient` jako proces)
 - [ ] 14f Skaner: **Wake-on-LAN**, „dodaj jako witrynę" i „otwórz udział w panelu" jednym kliknięciem, historia skanów (nowe urządzenia oznaczone)
 - [ ] 14g Chmury przez **`rclone`** (gdy zainstalowany): WebDAV, S3, Google Drive, OneDrive jako katalogi w panelu
-- [ ] 14h Zapisane **profile synchronizacji** (para katalogów + ustawienia) i uruchamianie z harmonogramu (13d)
+- [x] 14h Zapisane **profile synchronizacji** (para katalogów + ustawienia) i uruchamianie z harmonogramu (13d)
 
 Środowisko pracy:
 - [x] 14i przeniesione do 12s (obszary robocze i przywracanie sesji, tuż po etapie 12)

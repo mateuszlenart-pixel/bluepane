@@ -43,6 +43,7 @@ mod scan;
 mod schedule;
 mod session;
 mod settings;
+mod syncprofiles;
 mod thumbs;
 mod tools;
 mod viewer;
@@ -121,6 +122,7 @@ pub use session::{
 pub use settings::{
     normalize_key, Column, Density, COLUMN_WIDTH, DEFAULT_COLUMNS, DEFAULT_THEME, THEMES,
 };
+pub use syncprofiles::ProfileAction;
 pub use thumbs::{Thumbnails, THUMB_SIZE};
 pub use tools::Tool;
 pub use viewer::{Row, ViewMode, Viewer};
