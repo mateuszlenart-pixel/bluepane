@@ -158,6 +158,70 @@ pub fn list_shares(host: &str) -> Result<Vec<Share>, String> {
     }
 }
 
+/// A share as a folder the panels can list: `\\host\name` on Windows, the GVFS mount of the
+/// share on Linux (mounted with `gio mount` when it is not yet). No login is asked for here:
+/// a share that needs one has to be opened once in the system's file manager.
+pub fn share_folder(host: &str, name: &str) -> Result<std::path::PathBuf, String> {
+    let bad = |text: &str| {
+        text.is_empty() || text.contains(['/', '\\']) || text.chars().any(char::is_control)
+    };
+    if bad(host) || bad(name) || host.contains(char::is_whitespace) {
+        return Err("niepoprawna nazwa komputera albo udziału".into());
+    }
+    if cfg!(windows) {
+        let path = std::path::PathBuf::from(unc_path(host, name));
+        return if path.exists() {
+            Ok(path)
+        } else {
+            Err(format!(
+                "udział {name} na {host} nie odpowiada albo wymaga logowania (otwórz go raz w Eksploratorze)"
+            ))
+        };
+    }
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .ok_or("brak XDG_RUNTIME_DIR: nie wiem, gdzie system montuje udziały")?;
+    let path = gvfs_path(&runtime, host, name);
+    if path.exists() {
+        return Ok(path);
+    }
+    match run("gio", &["mount", &format!("smb://{host}/{name}")]) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            Err("zainstaluj `gio` (pakiet gvfs), żeby otwierać udziały w panelu".into())
+        }
+        Err(e) => Err(format!("nie udało się uruchomić gio: {e}")),
+        Ok((success, text)) => {
+            if success && path.exists() {
+                Ok(path)
+            } else {
+                let first = text.lines().map(str::trim).find(|l| !l.is_empty());
+                Err(format!(
+                    "nie udało się zamontować udziału: {}",
+                    first.unwrap_or("brak odpowiedzi (wymaga logowania?)")
+                ))
+            }
+        }
+    }
+}
+
+/// The UNC form of a share.
+pub(crate) fn unc_path(host: &str, name: &str) -> String {
+    format!("\\\\{host}\\{name}")
+}
+
+/// Where GVFS puts a mounted share (names are lower-cased there).
+pub(crate) fn gvfs_path(
+    runtime_dir: &std::path::Path,
+    host: &str,
+    name: &str,
+) -> std::path::PathBuf {
+    runtime_dir.join("gvfs").join(format!(
+        "smb-share:server={},share={}",
+        host.to_lowercase(),
+        name.to_lowercase()
+    ))
+}
+
 /// Runs a program and returns whether it succeeded and everything it printed.
 fn run(program: &str, args: &[&str]) -> io::Result<(bool, String)> {
     let mut command = Command::new(program);
@@ -313,6 +377,27 @@ Polecenie zostało wykonane pomyślnie.
             explain_failure("Connection to host failed (Error NT_STATUS_LOGON_FAILURE)")
                 .contains("logowania")
         );
+    }
+
+    #[test]
+    fn shares_have_the_unc_and_gvfs_forms_and_odd_names_are_refused() {
+        assert_eq!(unc_path("nas", "zdjęcia"), "\\\\nas\\zdjęcia");
+        let runtime = std::path::Path::new("/run/user/1000");
+        assert_eq!(
+            gvfs_path(runtime, "NAS", "Zdjęcia"),
+            runtime
+                .join("gvfs")
+                .join("smb-share:server=nas,share=zdjęcia")
+        );
+        for (host, name) in [
+            ("", "x"),
+            ("nas", ""),
+            ("a/b", "x"),
+            ("nas", "a\\b"),
+            ("a b", "x"),
+        ] {
+            assert!(share_folder(host, name).is_err(), "{host} {name}");
+        }
     }
 
     #[test]

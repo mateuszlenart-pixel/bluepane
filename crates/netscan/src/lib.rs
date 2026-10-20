@@ -10,7 +10,9 @@
 mod range;
 mod scan;
 mod services;
+mod wake;
 
 pub use range::{local_range, parse_range, MAX_ADDRESSES};
 pub use scan::{scan, Host, ScanOptions, ScanSummary, Service};
 pub use services::{service_name, vendor_of, COMMON_PORTS, PROBE_PORTS};
+pub use wake::{magic_packet, parse_mac, send_wake, wake_targets, WAKE_PORT};

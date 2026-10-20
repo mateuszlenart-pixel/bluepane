@@ -5,7 +5,7 @@
 
 use std::net::Ipv4Addr;
 
-use bluepane_engine::{Command, ScanHost, ShareKind, ShareList};
+use bluepane_engine::{format_modified, Command, ScanHost, ShareKind, ShareList};
 use egui::{Align2, Color32, FontId, RichText};
 
 use crate::BluepaneUi;
@@ -32,6 +32,7 @@ impl BluepaneUi {
         let hosts = view.visible_hosts();
         let selected = view.selected;
         let show_favorites = view.show_favorites;
+        let show_history = view.show_history;
         let favorites = view.favorites.clone();
         let (total, summary, error) = {
             let data = view.data();
@@ -162,8 +163,12 @@ impl BluepaneUi {
             ui.label(RichText::new(text).strong());
         }
         ui.horizontal(|ui| {
-            if ui.selectable_label(!show_favorites, "Wyniki").clicked() {
+            if ui
+                .selectable_label(!show_favorites && !show_history, "Wyniki")
+                .clicked()
+            {
                 commands.push(Command::ScanFavorites(false));
+                commands.push(Command::ScanHistory(false));
             }
             if ui
                 .selectable_label(show_favorites, format!("Ulubione ({})", favorites.len()))
@@ -171,13 +176,18 @@ impl BluepaneUi {
             {
                 commands.push(Command::ScanFavorites(true));
             }
+            if ui.selectable_label(show_history, "Historia").clicked() {
+                commands.push(Command::ScanHistory(true));
+            }
         });
         ui.separator();
         if let Some(ip) = selected {
             self.scan_details(ui, ip, &mut commands);
             ui.separator();
         }
-        if show_favorites {
+        if show_history {
+            self.scan_history(ui, selected, &mut commands);
+        } else if show_favorites {
             self.scan_favorites(ui, &favorites, selected, &mut commands);
         } else {
             self.scan_rows(ui, &hosts, selected, &mut commands);
@@ -255,12 +265,17 @@ impl BluepaneUi {
                         .map(|s| s.name.as_str())
                         .collect::<Vec<_>>()
                         .join(", ");
+                    let is_new = self.session.scan.as_ref().is_some_and(|v| v.is_new(host));
                     let cells: [(f32, f32, String, Color32); 6] = [
                         (
                             0.02,
                             0.23,
-                            format!("● {}", host.name.clone().unwrap_or_default()),
-                            normal,
+                            format!(
+                                "{} {}",
+                                if is_new { "NOWE ●" } else { "●" },
+                                host.name.clone().unwrap_or_default()
+                            ),
+                            if is_new { self.theme.accent } else { normal },
                         ),
                         (0.24, 0.35, host.ip.to_string(), normal),
                         (0.36, 0.53, host.vendor.clone().unwrap_or_default(), normal),
@@ -323,6 +338,29 @@ impl BluepaneUi {
             {
                 commands.push(Command::ScanFavorite(ip));
             }
+            if ui
+                .button("Obudź (Wake-on-LAN)")
+                .on_hover_text(
+                    "wysyła pakiet budzący na adres MAC urządzenia (znany z skanu albo historii); komputer musi mieć włączone budzenie przez sieć",
+                )
+                .clicked()
+            {
+                commands.push(Command::ScanWake(ip.to_string()));
+            }
+            for (label, protocol) in [
+                ("Witryna SFTP", bluepane_engine::Protocol::Sftp),
+                ("Witryna FTP", bluepane_engine::Protocol::Ftp),
+            ] {
+                if ui
+                    .button(label)
+                    .on_hover_text(
+                        "zapisuje urządzenie jako serwer w menedżerze serwerów (potem podasz użytkownika i hasło)",
+                    )
+                    .clicked()
+                {
+                    commands.push(Command::ScanSite(ip, protocol));
+                }
+            }
         });
         if let Some(host) = &host {
             ui.horizontal_wrapped(|ui| {
@@ -376,14 +414,83 @@ impl BluepaneUi {
                         if !share.comment.is_empty() {
                             ui.label(RichText::new(&share.comment).weak());
                         }
-                        if share.kind != ShareKind::Printer && ui.small_button("Otwórz").clicked()
-                        {
-                            commands.push(Command::ScanShare(ip, share.name.clone()));
+                        if share.kind != ShareKind::Printer {
+                            if ui
+                                .small_button("W panelu")
+                                .on_hover_text("pokazuje udział w aktywnym panelu")
+                                .clicked()
+                            {
+                                commands.push(Command::ScanPanel(ip, share.name.clone()));
+                            }
+                            if ui
+                                .small_button("Otwórz")
+                                .on_hover_text("otwiera udział w menedżerze plików systemu")
+                                .clicked()
+                            {
+                                commands.push(Command::ScanShare(ip, share.name.clone()));
+                            }
                         }
                     });
                 }
             }
         }
+    }
+
+    /// The devices the scanner has seen (latest first) and the log of the last scans.
+    fn scan_history(
+        &self,
+        ui: &mut egui::Ui,
+        selected: Option<Ipv4Addr>,
+        commands: &mut Vec<Command>,
+    ) {
+        let Some(view) = self.session.scan.as_ref() else {
+            return;
+        };
+        let history = view.history();
+        if history.devices.is_empty() {
+            ui.label(
+                RichText::new(
+                    "Historia jest pusta: powstaje po pierwszym zakończonym skanie (zatrzymany skan nie jest zapamiętywany).",
+                )
+                .weak(),
+            );
+            return;
+        }
+        let mut devices = history.devices.clone();
+        devices.sort_by(|a, b| b.last_seen.cmp(&a.last_seen).then(a.ip.cmp(&b.ip)));
+        ui.label(RichText::new(format!("Znane urządzenia: {}", devices.len())).strong());
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .show(ui, |ui| {
+                for device in &devices {
+                    let label = format!(
+                        "{}  {}  {}  {}  ostatnio {}, pierwszy raz {}",
+                        device.ip,
+                        device.name,
+                        device.mac.as_deref().unwrap_or("brak MAC"),
+                        device.vendor,
+                        format_modified(Some(device.last_seen_at())),
+                        format_modified(Some(device.first_seen_at())),
+                    );
+                    if ui
+                        .selectable_label(selected == Some(device.ip), label)
+                        .clicked()
+                    {
+                        commands.push(Command::ScanSelect(device.ip));
+                    }
+                }
+                ui.separator();
+                ui.label(RichText::new("Ostatnie skany").strong());
+                for entry in history.log.iter().rev().take(20) {
+                    ui.label(format!(
+                        "{}  {}  urządzeń {}, nowych {}",
+                        format_modified(Some(entry.at())),
+                        entry.range,
+                        entry.hosts,
+                        entry.new
+                    ));
+                }
+            });
     }
 
     fn scan_favorites(

@@ -65,6 +65,9 @@ pub const COMMAND_NAMES: &[&str] = &[
     "scanshare",
     "scanopen",
     "scansite",
+    "scanwake",
+    "scanpanel",
+    "scanhistory",
     "rename",
     "stop",
     "syncrun",
@@ -436,6 +439,13 @@ pub enum Command {
     ScanOpen(std::net::Ipv4Addr, u16),
     /// Save a server for this host in the server manager, ready for a login.
     ScanSite(std::net::Ipv4Addr, bluepane_remote::Protocol),
+    /// Wake a device: Wake-on-LAN packet to the MAC address of a host (given by its IP address
+    /// or as the address itself).
+    ScanWake(String),
+    /// Open a share of a host in the active panel.
+    ScanPanel(std::net::Ipv4Addr, String),
+    /// Show the history of scans (`true`) or the scan results (`false`).
+    ScanHistory(bool),
     /// Open the queue window (Ctrl+J): what runs, what waits, what finished.
     Queue,
     QueueClose,
@@ -629,6 +639,27 @@ impl Command {
                     .ok_or_else(|| EngineError("scansite: użycie: scansite <ip> sftp|ftp|ftps".into()))?;
                 parse_ip(rest.split_whitespace().next().unwrap_or("")).map(|ip| Command::ScanSite(ip, protocol))
             }
+            "scanwake" => {
+                if rest.trim().is_empty() {
+                    Err(EngineError(
+                        "scanwake: użycie: scanwake <ip albo adres MAC>".into(),
+                    ))
+                } else {
+                    Ok(Command::ScanWake(rest.trim().to_string()))
+                }
+            }
+            "scanpanel" => {
+                let (ip, name) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+                let name = name.trim().trim_matches('"');
+                if name.is_empty() {
+                    Err(EngineError(
+                        "scanpanel: użycie: scanpanel <ip> <nazwa udziału>".into(),
+                    ))
+                } else {
+                    parse_ip(ip).map(|ip| Command::ScanPanel(ip, name.to_string()))
+                }
+            }
+            "scanhistory" => Ok(Command::ScanHistory(!matches!(rest, "off" | "0" | "nie"))),
             "queue" => Ok(Command::Queue),
             "queueclose" => Ok(Command::QueueClose),
             "queuepause" => Ok(Command::QueuePause),
