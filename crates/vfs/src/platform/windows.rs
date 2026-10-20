@@ -4,7 +4,8 @@ use std::os::windows::fs::{symlink_dir, symlink_file, MetadataExt};
 use std::path::{Path, PathBuf};
 
 use super::verbatim::{to_verbatim, LONG_PATH_THRESHOLD};
-use crate::Volume;
+use crate::schedule::{schtasks_create, schtasks_tasks, task_name};
+use crate::{ScheduleWhen, ScheduledTask, Volume};
 
 const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 const FILE_ATTRIBUTE_SYSTEM: u32 = 0x4;
@@ -112,4 +113,55 @@ pub fn neighbours() -> Vec<(std::net::Ipv4Addr, String)> {
         .output()
         .map(|out| super::arp::parse_arp_a(&String::from_utf8_lossy(&out.stdout)))
         .unwrap_or_default()
+}
+
+fn schtasks(args: &[String]) -> io::Result<std::process::Output> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new("schtasks")
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .map_err(|e| io::Error::new(e.kind(), format!("schtasks: {e}")))
+}
+
+fn schtasks_checked(args: &[String]) -> io::Result<std::process::Output> {
+    let out = schtasks(args)?;
+    if out.status.success() {
+        Ok(out)
+    } else {
+        let mut text = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        if text.is_empty() {
+            text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        }
+        Err(io::Error::other(format!("schtasks: {text}")))
+    }
+}
+
+/// Adds (or replaces) the task `bluepane\<id>` in the Task Scheduler.
+pub fn schedule_set(
+    id: &str,
+    when: ScheduleWhen,
+    program: &Path,
+    args: &[String],
+) -> io::Result<()> {
+    schtasks_checked(&schtasks_create(id, when, program, args)).map(|_| ())
+}
+
+/// Removes the task; an error when there is none.
+pub fn schedule_remove(id: &str) -> io::Result<()> {
+    let args = ["/Delete", "/F", "/TN"]
+        .map(String::from)
+        .into_iter()
+        .chain([task_name(id)])
+        .collect::<Vec<_>>();
+    schtasks_checked(&args).map(|_| ())
+}
+
+/// The tasks bluepane made in its folder of the Task Scheduler.
+pub fn schedule_list() -> io::Result<Vec<ScheduledTask>> {
+    let args = ["/Query", "/FO", "CSV", "/NH"].map(String::from).to_vec();
+    let out = schtasks_checked(&args)?;
+    Ok(schtasks_tasks(&String::from_utf8_lossy(&out.stdout)))
 }

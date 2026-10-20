@@ -5,8 +5,10 @@
 //! or `#[cfg(unix)]`.
 
 mod platform;
+mod schedule;
 mod smb;
 
+pub use schedule::{ScheduleWhen, ScheduledTask};
 pub use smb::{list_shares, open_remote_desktop, Share, ShareKind};
 
 use std::io;
@@ -15,7 +17,8 @@ use std::time::SystemTime;
 
 pub use platform::{
     config_dir, copy_symlink, extended_path, file_mode, home_dir, make_writable, neighbours,
-    open_external, run_hidden, set_mode, spawn_program, volumes,
+    open_external, run_hidden, schedule_list, schedule_remove, schedule_set, set_mode,
+    spawn_program, volumes,
 };
 
 /// How full the drive holding a path is.

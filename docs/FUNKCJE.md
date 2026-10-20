@@ -172,6 +172,15 @@ Własny przycisk uruchamia zewnętrzny program z parametrami. Zastępuje wtyczki
 - Program startuje w katalogu aktywnego panelu, bez powłoki: nazwy plików ze spacjami, średnikami czy `&` trafiają do programu bez zmian i nic się nie interpretuje. Przycisk działa na katalogu na dysku (nie w archiwum ani na serwerze).
 - Błąd uruchomienia (np. brak programu) pokazuje pasek stanu z nazwą programu.
 
+## Harmonogram makr
+
+Makro (zob. „Makra i skrypty”) może się uruchamiać samo o zadanej porze, nawet gdy bluepane jest zamknięte. Zadanie zakłada system: wpis w `crontab` użytkownika na Linuksie albo zadanie w folderze `bluepane` Harmonogramu zadań na Windows; wykonuje je `bluepane-cli run-script` (musi leżeć obok programu).
+
+- `schedule add Porządki; daily 07:30` zakłada zadanie. Pory: `hourly` (co godzinę), `daily GG:MM`, `weekly <dzień> GG:MM` (dni: `pn wt sr cz pt so nd` albo `mon tue wed thu fri sat sun`). Nazwę makra od pory oddziela średnik. Dodanie makra o tej samej nazwie zastępuje poprzedni wpis.
+- `schedule list` pokazuje zaplanowane makra, `schedule delete <makro>` usuwa wpis. Program rusza tylko własne wpisy (w cronie oznaczone `# bluepane:<nazwa>`), reszty harmonogramu nie czyta ani nie zmienia.
+- Zadanie używa katalogów, które pokazywały oba panele w chwili dodania, oraz pliku makra, więc późniejsza edycja makra zmienia następne uruchomienia. Skrypt bez okna nie ma okna konfliktów: istniejący plik jest pomijany, a `delete` wymaga linii `confirm`.
+- Skrót: `sched`. Profile synchronizacji w harmonogramie dojdą z etapem 14h.
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

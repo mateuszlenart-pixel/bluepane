@@ -3,7 +3,8 @@ use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use crate::Volume;
+use crate::schedule::{cron_line, cron_replace, cron_tasks};
+use crate::{ScheduleWhen, ScheduledTask, Volume};
 
 /// Dot-files are hidden.
 pub fn is_hidden(name: &str, _meta: &Metadata) -> bool {
@@ -118,4 +119,67 @@ pub fn neighbours() -> Vec<(std::net::Ipv4Addr, String)> {
     fs::read_to_string("/proc/net/arp")
         .map(|text| super::arp::parse_proc_net_arp(&text))
         .unwrap_or_default()
+}
+
+/// The user's crontab as text (empty when there is none).
+fn read_crontab() -> io::Result<String> {
+    let out = std::process::Command::new("crontab")
+        .arg("-l")
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|e| io::Error::new(e.kind(), format!("crontab: {e}")))?;
+    // "no crontab for user" is an error exit with nothing on stdout.
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+fn write_crontab(text: &str) -> io::Result<()> {
+    use std::io::Write;
+    let mut child = std::process::Command::new("crontab")
+        .arg("-")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| io::Error::new(e.kind(), format!("crontab: {e}")))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(text.as_bytes())?;
+    }
+    let out = child.wait_with_output()?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!(
+            "crontab: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )))
+    }
+}
+
+/// Adds (or replaces) the entry `id` in the user's crontab.
+pub fn schedule_set(
+    id: &str,
+    when: ScheduleWhen,
+    program: &Path,
+    args: &[String],
+) -> io::Result<()> {
+    let line = cron_line(id, when, program, args);
+    let (text, _) = cron_replace(&read_crontab()?, id, Some(&line));
+    write_crontab(&text)
+}
+
+/// Removes the entry `id`; an error when there is none.
+pub fn schedule_remove(id: &str) -> io::Result<()> {
+    let (text, found) = cron_replace(&read_crontab()?, id, None);
+    if !found {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "nie ma takiego zadania",
+        ));
+    }
+    write_crontab(&text)
+}
+
+/// The entries bluepane made in the user's crontab.
+pub fn schedule_list() -> io::Result<Vec<ScheduledTask>> {
+    Ok(cron_tasks(&read_crontab()?))
 }
