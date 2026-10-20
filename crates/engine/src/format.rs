@@ -5,6 +5,28 @@ use std::time::SystemTime;
 
 use chrono::{DateTime, Local, TimeZone, Utc};
 
+/// Permission bits the way `ls -l` writes them: `0o755` is `rwxr-xr-x`, and setuid, setgid and
+/// sticky show as `s`/`S`/`t`/`T` in the execute place. Empty when the system has no bits.
+pub fn format_mode(mode: Option<u32>) -> String {
+    let Some(mode) = mode else {
+        return String::new();
+    };
+    let mut out = String::with_capacity(9);
+    for (shift, special, letter) in [(6, 0o4000, 's'), (3, 0o2000, 's'), (0, 0o1000, 't')] {
+        let bits = (mode >> shift) & 0o7;
+        out.push(if bits & 0o4 != 0 { 'r' } else { '-' });
+        out.push(if bits & 0o2 != 0 { 'w' } else { '-' });
+        let execute = bits & 0o1 != 0;
+        out.push(match (mode & special != 0, execute) {
+            (true, true) => letter,
+            (true, false) => letter.to_ascii_uppercase(),
+            (false, true) => 'x',
+            (false, false) => '-',
+        });
+    }
+    out
+}
+
 /// `1536` becomes `1.5 KB`; plain bytes below 1 KB.
 pub fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
@@ -58,6 +80,17 @@ mod tests {
         assert_eq!(human_size(1023), "1023 B");
         assert_eq!(human_size(1536), "1.5 KB");
         assert_eq!(human_size(5 * 1024 * 1024), "5.0 MB");
+    }
+
+    #[test]
+    fn permission_bits_are_written_like_ls() {
+        assert_eq!(format_mode(Some(0o755)), "rwxr-xr-x");
+        assert_eq!(format_mode(Some(0o640)), "rw-r-----");
+        assert_eq!(format_mode(Some(0o4755)), "rwsr-xr-x");
+        assert_eq!(format_mode(Some(0o4644)), "rwSr--r--");
+        assert_eq!(format_mode(Some(0o1777)), "rwxrwxrwt");
+        assert_eq!(format_mode(Some(0o2750)), "rwxr-s---");
+        assert_eq!(format_mode(None), "");
     }
 
     #[test]

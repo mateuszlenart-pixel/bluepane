@@ -123,6 +123,12 @@ Wpisane słowa muszą wszystkie pasować do ścieżki (polskie litery można pom
 
 Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jump close`. Udziałów sieciowych ze skanera na tej liście jeszcze nie ma.
 
+## Kolumny listy
+
+`columns` pokazuje i chowa kolumny: `ext` (typ), `size`, `date` (zmiana), `created` (utworzenie), `perms` (prawa dostępu, np. `rwxr-xr-x`, także setuid/setgid/sticky) i `owner` (właściciel). Prawa i właściciel istnieją tylko na Linuksie; na Windows te dwie kolumny są puste. `columns default` przywraca zestaw domyślny. W wąskim panelu kolumny znikają od najmniej ważnej (prawa i właściciel pierwsze, rozmiar ostatni).
+
+**Szerokość:** przeciągnij myszą lewą granicę nagłówka kolumny (kursor zmienia się w strzałki); dwuklik na granicy przywraca domyślną szerokość. To samo robi komenda `columnwidth <kolumna> <30-400>|reset` (`columnwidth reset`: wszystkie). Szerokości zapisują się w `settings.conf` (`width size = 120`).
+
 ## Wygląd
 
 `appearance` (bez argumentów pokazuje stan) ustawia, zapisując w `settings.conf`:

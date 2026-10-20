@@ -78,6 +78,8 @@ pub struct BluepaneUi {
     /// The palette in use and the name of the theme egui was last given.
     theme: theme::Theme,
     theme_applied: bool,
+    /// The column whose border is being dragged and the width it has so far.
+    column_drag: Option<(Column, f32)>,
     /// The theme name, text size and accent the egui style was last built from.
     look_applied: (String, u16, Option<[u8; 3]>),
     /// Set when a click on the empty part of a path bar asked to edit the path.
@@ -124,6 +126,7 @@ impl BluepaneUi {
             site_form: None,
             theme: theme::Theme::by_name(&theme_name),
             theme_applied: false,
+            column_drag: None,
             look_applied: (String::new(), 100, None),
             path_edit: [false; 2],
             speed: bottom_ui::SpeedMeter::default(),
@@ -1105,6 +1108,7 @@ impl BluepaneUi {
         let mut drag_started: Option<usize> = None;
         let mut entered = None;
         let mut sort_by = None;
+        let mut column_width_line: Option<String> = None;
 
         // Column header: click to sort by that column, click again to flip the direction.
         let (header_rect, _) = ui.allocate_exact_size(
@@ -1112,14 +1116,36 @@ impl BluepaneUi {
             egui::Sense::hover(),
         );
         let shown_columns = self.session.columns();
-        let columns = Columns::split(header_rect, &shown_columns);
+        let mut widths = Widths::default();
+        for column in Column::ALL {
+            if let Some(points) = self.session.column_width(column) {
+                widths.custom.push((column, f32::from(points)));
+            }
+        }
+        if let Some((column, width)) = self.column_drag {
+            widths.custom.retain(|(c, _)| *c != column);
+            widths.custom.push((column, width));
+        }
+        let columns = Columns::split(header_rect, &shown_columns, &widths);
         let font = FontId::monospace(13.0);
-        for (rect, key, label) in [
-            (columns.name, Some(SortKey::Name), "Nazwa"),
-            (columns.ext, Some(SortKey::Ext), "Typ"),
-            (columns.size, Some(SortKey::Size), "Rozmiar"),
-            (columns.created, None, "Utworzono"),
-            (columns.date, Some(SortKey::Date), "Data"),
+        for (rect, key, label, column) in [
+            (columns.name, Some(SortKey::Name), "Nazwa", None),
+            (columns.ext, Some(SortKey::Ext), "Typ", Some(Column::Ext)),
+            (
+                columns.size,
+                Some(SortKey::Size),
+                "Rozmiar",
+                Some(Column::Size),
+            ),
+            (columns.perms, None, "Prawa", Some(Column::Perms)),
+            (columns.owner, None, "Właściciel", Some(Column::Owner)),
+            (columns.created, None, "Utworzono", Some(Column::Created)),
+            (
+                columns.date,
+                Some(SortKey::Date),
+                "Data",
+                Some(Column::Modified),
+            ),
         ] {
             // A column dropped because the panel is narrow has no title either.
             if rect.width() < 1.0 {
@@ -1155,6 +1181,50 @@ impl BluepaneUi {
                 .text(pos, align, format!("{label}{arrow}"), font.clone(), color);
             if response.clicked() {
                 sort_by = key;
+            }
+            // The left border of a column is a handle: drag to resize, double-click to reset.
+            if let Some(column) = column {
+                let handle = Rect::from_min_max(
+                    egui::pos2(rect.left() - 3.0, rect.top()),
+                    egui::pos2(rect.left() + 3.0, rect.bottom()),
+                );
+                let grip = ui.interact(
+                    handle,
+                    ui.id().with(("resize", index, label)),
+                    egui::Sense::click_and_drag(),
+                );
+                if grip.hovered() || grip.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                    ui.painter().vline(
+                        rect.left(),
+                        rect.y_range(),
+                        egui::Stroke::new(1.5, self.theme.accent),
+                    );
+                }
+                if grip.dragged() {
+                    // Dragging left widens the column (it grows toward the name).
+                    let now = self.column_drag.map_or(rect.width(), |(_, w)| w);
+                    let wanted = now - grip.drag_delta().x;
+                    self.column_drag = Some((
+                        column,
+                        wanted.clamp(
+                            f32::from(*bluepane_engine::COLUMN_WIDTH.start()),
+                            f32::from(*bluepane_engine::COLUMN_WIDTH.end()),
+                        ),
+                    ));
+                }
+                if grip.drag_stopped() {
+                    if let Some((dragged, width)) = self.column_drag.take() {
+                        column_width_line = Some(format!(
+                            "columnwidth {} {}",
+                            dragged.word(),
+                            width.round() as u16
+                        ));
+                    }
+                }
+                if grip.double_clicked() {
+                    column_width_line = Some(format!("columnwidth {} reset", column.word()));
+                }
             }
         }
 
@@ -1272,7 +1342,7 @@ impl BluepaneUi {
                         } else {
                             class_color
                         };
-                        let cols = Columns::split(rect, &shown_columns);
+                        let cols = Columns::split(rect, &shown_columns, &widths);
                         let (stem, ext) = name_parts(&entry.name, entry.is_dir());
                         let mut name = if entry.is_dir() {
                             format!("[{stem}]")
@@ -1385,6 +1455,16 @@ impl BluepaneUi {
                         cell(cols.ext, Align2::LEFT_CENTER, ext.to_string());
                         cell(cols.size, Align2::RIGHT_CENTER, size);
                         cell(
+                            cols.perms,
+                            Align2::LEFT_CENTER,
+                            bluepane_engine::format_mode(entry.mode),
+                        );
+                        cell(
+                            cols.owner,
+                            Align2::LEFT_CENTER,
+                            entry.owner.clone().unwrap_or_default(),
+                        );
+                        cell(
                             cols.created,
                             Align2::LEFT_CENTER,
                             format_modified(entry.created),
@@ -1494,6 +1574,9 @@ impl BluepaneUi {
             self.session.active = index;
             let _ = self.session.execute(Command::Sort(key, None));
         }
+        if let Some(line) = column_width_line {
+            let _ = self.session.run_line(&line);
+        }
     }
 }
 
@@ -1530,14 +1613,33 @@ struct Columns {
     name: Rect,
     ext: Rect,
     size: Rect,
+    perms: Rect,
+    owner: Rect,
     created: Rect,
     date: Rect,
+}
+
+/// The widths the user dragged the columns to; the others have the built-in ones.
+#[derive(Debug, Clone, Default)]
+struct Widths {
+    custom: Vec<(Column, f32)>,
+}
+
+impl Widths {
+    fn of(&self, column: Column) -> f32 {
+        self.custom
+            .iter()
+            .find(|(c, _)| *c == column)
+            .map_or_else(|| Columns::width(column), |(_, w)| *w)
+    }
 }
 
 impl Columns {
     const EXT: f32 = 56.0;
     const SIZE: f32 = 80.0;
     const DATE: f32 = 140.0;
+    const PERMS: f32 = 90.0;
+    const OWNER: f32 = 90.0;
     /// The name column never gets narrower than this while another column is shown.
     const NAME_MIN: f32 = 140.0;
 
@@ -1546,6 +1648,8 @@ impl Columns {
             Column::Ext => Self::EXT,
             Column::Size => Self::SIZE,
             Column::Modified | Column::Created => Self::DATE,
+            Column::Perms => Self::PERMS,
+            Column::Owner => Self::OWNER,
         }
     }
 
@@ -1553,20 +1657,27 @@ impl Columns {
     /// the type, then the date, and the creation date goes first: a column that would squeeze
     /// the name below [`Self::NAME_MIN`] is not shown (zero width at the right edge), so a
     /// narrow panel (tools docked beside it) still shows names.
-    fn split(row: Rect, shown: &[Column]) -> Columns {
+    fn split(row: Rect, shown: &[Column], widths: &Widths) -> Columns {
         let cut = |left: f32, right: f32| {
             Rect::from_min_max(egui::pos2(left, row.top()), egui::pos2(right, row.bottom()))
         };
         let mut room = row.width() - Self::NAME_MIN;
         let mut fits = true;
         let mut visible = Vec::new();
-        for column in [Column::Size, Column::Ext, Column::Modified, Column::Created] {
+        for column in [
+            Column::Size,
+            Column::Ext,
+            Column::Modified,
+            Column::Created,
+            Column::Perms,
+            Column::Owner,
+        ] {
             if !shown.contains(&column) {
                 continue;
             }
-            fits = fits && room >= Self::width(column);
+            fits = fits && room >= widths.of(column);
             if fits {
-                room -= Self::width(column);
+                room -= widths.of(column);
                 visible.push(column);
             }
         }
@@ -1574,7 +1685,7 @@ impl Columns {
         let mut right = row.right();
         let mut place = |column: Column| {
             if visible.contains(&column) {
-                let width = Self::width(column);
+                let width = widths.of(column);
                 let rect = cut(right - width, right);
                 right -= width;
                 rect
@@ -1584,12 +1695,16 @@ impl Columns {
         };
         let date = place(Column::Modified);
         let created = place(Column::Created);
+        let owner = place(Column::Owner);
+        let perms = place(Column::Perms);
         let size = place(Column::Size);
         let ext = place(Column::Ext);
         Columns {
             name: cut(row.left(), right),
             ext,
             size,
+            perms,
+            owner,
             created,
             date,
         }
@@ -1639,7 +1754,7 @@ mod tests {
     #[test]
     fn columns_tile_the_row_without_overlap() {
         let row = Rect::from_min_max(egui::pos2(10.0, 0.0), egui::pos2(500.0, 20.0));
-        let c = Columns::split(row, &bluepane_engine::DEFAULT_COLUMNS);
+        let c = Columns::split(row, &bluepane_engine::DEFAULT_COLUMNS, &Widths::default());
         assert_eq!(c.name.left(), 10.0);
         assert_eq!(c.name.right(), c.ext.left());
         assert_eq!(c.ext.right(), c.size.left());
@@ -1653,6 +1768,7 @@ mod tests {
             Columns::split(
                 Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(w, 20.0)),
                 &bluepane_engine::DEFAULT_COLUMNS,
+                &Widths::default(),
             )
         };
         // Wide: everything.
@@ -1683,9 +1799,26 @@ mod tests {
     }
 
     #[test]
+    fn a_dragged_width_replaces_the_built_in_one_and_permission_columns_fit_in() {
+        use bluepane_engine::Column;
+        let row = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(900.0, 20.0));
+        let widths = Widths {
+            custom: vec![(Column::Size, 200.0)],
+        };
+        let shown = [Column::Size, Column::Perms, Column::Owner, Column::Modified];
+        let c = Columns::split(row, &shown, &widths);
+        assert_eq!(c.size.width(), 200.0);
+        assert_eq!(c.perms.width(), Columns::PERMS);
+        assert_eq!(c.size.right(), c.perms.left());
+        assert_eq!(c.perms.right(), c.owner.left());
+        assert_eq!(c.owner.right(), c.date.left());
+        assert_eq!(c.name.right(), c.size.left());
+    }
+
+    #[test]
     fn narrow_rows_do_not_produce_inverted_columns() {
         let row = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(100.0, 20.0));
-        let c = Columns::split(row, &bluepane_engine::DEFAULT_COLUMNS);
+        let c = Columns::split(row, &bluepane_engine::DEFAULT_COLUMNS, &Widths::default());
         for rect in [c.name, c.ext, c.size, c.date] {
             assert!(rect.width() >= 0.0);
         }
@@ -1696,23 +1829,28 @@ mod tests {
         use bluepane_engine::Column;
         let all = [Column::Ext, Column::Size, Column::Created, Column::Modified];
         let row = |w: f32| Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(w, 20.0));
-        let wide = Columns::split(row(800.0), &all);
+        let wide = Columns::split(row(800.0), &all, &Widths::default());
         assert_eq!(wide.name.right(), wide.ext.left());
         assert_eq!(wide.size.right(), wide.created.left());
         assert_eq!(wide.created.right(), wide.date.left());
         assert_eq!(wide.date.right(), 800.0);
         // Not enough room for both dates: the creation date goes, the rest stays.
-        let medium = Columns::split(row(500.0), &all);
+        let medium = Columns::split(row(500.0), &all, &Widths::default());
         assert_eq!(medium.created.width(), 0.0);
         assert!(medium.date.width() > 0.0);
         // Only the name and the size: the size sits at the right edge.
-        let few = Columns::split(row(500.0), &[Column::Size]);
+        let few = Columns::split(row(500.0), &[Column::Size], &Widths::default());
         assert_eq!(few.size.right(), 500.0);
         assert_eq!(
             (few.ext.width(), few.date.width(), few.created.width()),
             (0.0, 0.0, 0.0)
         );
         // No columns at all: the name takes the whole row.
-        assert_eq!(Columns::split(row(300.0), &[]).name.width(), 300.0);
+        assert_eq!(
+            Columns::split(row(300.0), &[], &Widths::default())
+                .name
+                .width(),
+            300.0
+        );
     }
 }

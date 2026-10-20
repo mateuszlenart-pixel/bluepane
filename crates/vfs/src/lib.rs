@@ -68,6 +68,10 @@ pub struct Entry {
     pub modified: Option<SystemTime>,
     /// When the file was created, where the file system keeps it.
     pub created: Option<SystemTime>,
+    /// The permission bits (`rwxr-xr-x` is `0o755`), where the file system has them.
+    pub mode: Option<u32>,
+    /// The owner's name (the number when the name is not known), where the file system has one.
+    pub owner: Option<String>,
     pub hidden: bool,
 }
 
@@ -107,6 +111,8 @@ pub fn entry_of(path: &Path) -> io::Result<Entry> {
     };
     Ok(Entry {
         created: meta.created().ok(),
+        mode: platform::entry_mode(&meta),
+        owner: platform::entry_owner(&meta),
         hidden: platform::is_hidden(&name, &meta),
         size: if kind == EntryKind::File {
             meta.len()
@@ -196,6 +202,25 @@ mod tests {
         let copy = tmp.path().join("copy");
         copy_symlink(&link, &copy).unwrap();
         assert_eq!(std::fs::read_link(&copy).unwrap(), Path::new("target.txt"));
+    }
+
+    #[test]
+    fn a_listed_entry_carries_its_permission_bits_and_owner_where_the_system_has_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("a.txt");
+        std::fs::write(&file, "x").unwrap();
+        #[cfg(unix)]
+        {
+            set_mode(&file, 0o640).unwrap();
+            let entry = entry_of(&file).unwrap();
+            assert_eq!(entry.mode, Some(0o640));
+            assert!(entry.owner.is_some_and(|o| !o.is_empty()));
+        }
+        #[cfg(windows)]
+        {
+            let entry = entry_of(&file).unwrap();
+            assert_eq!((entry.mode, entry.owner), (None, None));
+        }
     }
 
     #[cfg(unix)]

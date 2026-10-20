@@ -8,6 +8,7 @@
 //! key F9 =                     (takes F9 off: nothing happens)
 //! key Ctrl+L = "cd "           (quotes keep a trailing space: the command line gets `cd `)
 //! columns = ext size date      (the columns of the file list, beside the name)
+//! width size = 90              (width of a list column in points, 30 to 400; set by dragging)
 //! density = compact            (rows of the file list: compact or comfortable)
 //! textsize = 120               (text size in percent, 80 to 160)
 //! rowheight = 26              (height of a list row in points, 16 to 40)
@@ -42,11 +43,22 @@ pub enum Column {
     Modified,
     /// When the file was created (where the file system keeps it).
     Created,
+    /// The permission bits (`rwxr-xr-x`); where the file system has none the cell is empty.
+    Perms,
+    /// The owner's name; empty where the system does not tell.
+    Owner,
 }
 
 impl Column {
     /// Every column, in the order they stand in a row (left to right after the name).
-    pub const ALL: [Column; 4] = [Column::Ext, Column::Size, Column::Created, Column::Modified];
+    pub const ALL: [Column; 6] = [
+        Column::Ext,
+        Column::Size,
+        Column::Perms,
+        Column::Owner,
+        Column::Created,
+        Column::Modified,
+    ];
 
     pub fn word(self) -> &'static str {
         match self {
@@ -54,6 +66,8 @@ impl Column {
             Column::Size => "size",
             Column::Modified => "date",
             Column::Created => "created",
+            Column::Perms => "perms",
+            Column::Owner => "owner",
         }
     }
 
@@ -63,6 +77,8 @@ impl Column {
             Column::Size => "Rozmiar",
             Column::Modified => "Data",
             Column::Created => "Utworzono",
+            Column::Perms => "Prawa",
+            Column::Owner => "Właściciel",
         }
     }
 
@@ -103,6 +119,8 @@ impl Density {
 
 /// Allowed text sizes (percent) and row heights (points).
 pub const TEXT_SIZE: std::ops::RangeInclusive<u16> = 80..=160;
+/// Allowed width of a dragged column, in points.
+pub const COLUMN_WIDTH: std::ops::RangeInclusive<u16> = 30..=400;
 pub const ROW_HEIGHT: std::ops::RangeInclusive<u16> = 16..=40;
 
 /// `#rrggbb` (the `#` is optional) as red, green, blue.
@@ -122,6 +140,8 @@ pub struct Settings {
     /// The list's columns beside the name, when the user changed them.
     pub columns: Option<Vec<Column>>,
     pub density: Option<Density>,
+    /// Widths of columns the user dragged, in points.
+    pub widths: Vec<(Column, u16)>,
     /// Quick View in a tab of its own instead of in place of the other panel.
     pub quick_tab: Option<bool>,
     /// Text size in percent of the normal one.
@@ -282,7 +302,7 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                     Some(column) if !columns.contains(&column) => columns.push(column),
                     Some(_) => {}
                     None => warnings.push(format!(
-                        "wiersz {number}: nie ma kolumny „{word}” (są: ext, size, date, created)"
+                        "wiersz {number}: nie ma kolumny „{word}” (są: ext, size, date, created, perms, owner)"
                     )),
                 }
             }
@@ -335,6 +355,18 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                 None => warnings.push(format!(
                     "wiersz {number}: gęstość to compact albo comfortable, nie „{}”",
                     right.trim()
+                )),
+            }
+        } else if let Some(word) = left.strip_prefix("width ") {
+            match (Column::from_word(word.trim()), right.trim().parse::<u16>()) {
+                (Some(column), Ok(n)) if COLUMN_WIDTH.contains(&n) => {
+                    settings.widths.retain(|(c, _)| *c != column);
+                    settings.widths.push((column, n));
+                }
+                _ => warnings.push(format!(
+                    "wiersz {number}: width <kolumna> = liczba od {} do {}",
+                    COLUMN_WIDTH.start(),
+                    COLUMN_WIDTH.end()
                 )),
             }
         } else if let Some(key) = left.strip_prefix("key ") {
@@ -399,6 +431,9 @@ pub fn render(settings: &Settings) -> String {
     if let Some(density) = settings.density {
         out.push_str(&format!("density = {}\n", density.word()));
     }
+    for (column, width) in &settings.widths {
+        out.push_str(&format!("width {} = {width}\n", column.word()));
+    }
     for (key, line) in &settings.keys {
         match line {
             None => out.push_str(&format!("key {key} =\n")),
@@ -453,6 +488,46 @@ impl Session {
         std::fs::create_dir_all(&dir)
             .and_then(|()| std::fs::write(dir.join("settings.conf"), render(&self.settings)))
             .map_err(|e| EngineError(format!("zmiana działa, ale nie udało się jej zapisać: {e}")))
+    }
+
+    /// The width the user gave a column by dragging, if any.
+    pub fn column_width(&self, column: Column) -> Option<u16> {
+        self.settings
+            .widths
+            .iter()
+            .find(|(c, _)| *c == column)
+            .map(|(_, w)| *w)
+    }
+
+    /// `columnwidth <column> <points>` sets a width (dragging a header border does this),
+    /// `columnwidth <column> reset` and `columnwidth reset` bring the built-in ones back.
+    pub(crate) fn set_column_width(&mut self, args: &str) -> Result<(), EngineError> {
+        let usage = || {
+            EngineError(format!(
+                "columnwidth: użycie: columnwidth <kolumna> <{}-{}>|reset",
+                COLUMN_WIDTH.start(),
+                COLUMN_WIDTH.end()
+            ))
+        };
+        let mut words = args.split_whitespace();
+        match (words.next(), words.next(), words.next()) {
+            (Some("reset"), None, _) => self.settings.widths.clear(),
+            (Some(name), Some(value), None) => {
+                let column = Column::from_word(name).ok_or_else(usage)?;
+                self.settings.widths.retain(|(c, _)| *c != column);
+                if value != "reset" {
+                    let width = value
+                        .parse::<u16>()
+                        .ok()
+                        .filter(|w| COLUMN_WIDTH.contains(w))
+                        .ok_or_else(usage)?;
+                    self.settings.widths.push((column, width));
+                }
+            }
+            _ => return Err(usage()),
+        }
+        self.status = "Szerokości kolumn zapisane".into();
+        self.save_settings()
     }
 
     /// The columns of the file list beside the name, in row order.
@@ -551,7 +626,7 @@ impl Session {
         };
         let Some(word) = word else {
             self.status = format!(
-                "Kolumny: {} (columns ext|size|date|created przełącza, columns default przywraca)",
+                "Kolumny: {} (columns ext|size|date|created|perms|owner przełącza, columns default przywraca)",
                 describe(&self.columns())
             );
             return Ok(());
@@ -561,7 +636,7 @@ impl Session {
         } else {
             let column = Column::from_word(&word).ok_or_else(|| {
                 EngineError(format!(
-                    "nie ma kolumny „{word}” (są: ext, size, date, created)"
+                    "nie ma kolumny „{word}” (są: ext, size, date, created, perms, owner)"
                 ))
             })?;
             let mut columns = self.columns();
@@ -822,6 +897,48 @@ mod tests {
         assert_eq!(settings.density, Some(Density::Compact));
         let again = parse(&render(&settings)).0;
         assert_eq!(again, settings);
+    }
+
+    #[test]
+    fn dragged_column_widths_are_checked_saved_and_reset() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("l")).unwrap();
+        let mut s = Session::new(tmp.path().join("l"), tmp.path().join("l"));
+        s.use_config_dir(&tmp.path().join("config"));
+        assert_eq!(s.column_width(Column::Size), None);
+        s.run_line("columnwidth size 120").unwrap();
+        s.run_line("columnwidth perms 90").unwrap();
+        assert!(s.run_line("columnwidth size 5").is_err());
+        assert!(s.run_line("columnwidth colour 100").is_err());
+        assert!(s.run_line("columnwidth size").is_err());
+        let mut again = Session::new(tmp.path().join("l"), tmp.path().join("l"));
+        again.use_config_dir(&tmp.path().join("config"));
+        assert_eq!(again.column_width(Column::Size), Some(120));
+        assert_eq!(again.column_width(Column::Perms), Some(90));
+        again.run_line("columnwidth size reset").unwrap();
+        assert_eq!(again.column_width(Column::Size), None);
+        again.run_line("columnwidth reset").unwrap();
+        assert_eq!(again.column_width(Column::Perms), None);
+    }
+
+    #[test]
+    fn permission_and_owner_columns_can_be_switched_on() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("l")).unwrap();
+        let mut s = Session::new(tmp.path().join("l"), tmp.path().join("l"));
+        s.use_config_dir(&tmp.path().join("config"));
+        s.run_line("columns perms").unwrap();
+        s.run_line("columns owner").unwrap();
+        assert_eq!(
+            s.columns(),
+            [
+                Column::Ext,
+                Column::Size,
+                Column::Perms,
+                Column::Owner,
+                Column::Modified
+            ]
+        );
     }
 
     #[test]

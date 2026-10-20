@@ -174,6 +174,8 @@ mod tests {
             size,
             modified: Some(SystemTime::UNIX_EPOCH + DAY * 1000 - DAY * days_old as u32),
             created: None,
+            mode: None,
+            owner: None,
             hidden: false,
         }
     }

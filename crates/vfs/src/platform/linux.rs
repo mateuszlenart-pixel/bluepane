@@ -10,6 +10,41 @@ pub fn is_hidden(name: &str, _meta: &Metadata) -> bool {
     name.starts_with('.')
 }
 
+/// The permission bits of a listed entry, including setuid, setgid and sticky.
+pub fn entry_mode(meta: &Metadata) -> Option<u32> {
+    Some(meta.permissions().mode() & 0o7777)
+}
+
+/// The user names of `/etc/passwd`, read once.
+fn user_names() -> &'static std::collections::HashMap<u32, String> {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<u32, String>> =
+        std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        fs::read_to_string("/etc/passwd")
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.split(':');
+                let name = fields.next()?;
+                let uid = fields.nth(1)?.parse().ok()?;
+                Some((uid, name.to_string()))
+            })
+            .collect()
+    })
+}
+
+/// The owner's name, or the user number when `/etc/passwd` does not know it.
+pub fn entry_owner(meta: &Metadata) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let uid = meta.uid();
+    Some(
+        user_names()
+            .get(&uid)
+            .cloned()
+            .unwrap_or_else(|| uid.to_string()),
+    )
+}
+
 /// The root plus every block-device mount from `/proc/mounts`.
 pub fn volumes() -> Vec<Volume> {
     let mut out = vec![Volume {

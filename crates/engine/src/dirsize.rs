@@ -397,6 +397,8 @@ mod tests {
                 size: i as u64,
                 modified: None,
                 created: None,
+                mode: None,
+                owner: None,
                 hidden: false,
             })
             .collect();
