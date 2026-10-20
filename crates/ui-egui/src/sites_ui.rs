@@ -338,7 +338,7 @@ impl BluepaneUi {
             });
         });
         if let Some(text) = error {
-            ui.colored_label(Color32::LIGHT_RED, text);
+            ui.colored_label(ui.visuals().error_fg_color, text);
         }
         self.site_form = Some(load.unwrap_or(form));
         for command in commands {

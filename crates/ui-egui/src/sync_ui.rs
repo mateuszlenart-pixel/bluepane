@@ -188,7 +188,7 @@ impl BluepaneUi {
         }
         if form.deletion == 2 {
             ui.colored_label(
-                Color32::LIGHT_RED,
+                ui.visuals().error_fg_color,
                 "Trwale: usunięte i nadpisane pliki znikną bez możliwości odzyskania.",
             );
         }
@@ -242,7 +242,7 @@ impl BluepaneUi {
             }
         });
         if let Some(problem) = problem {
-            ui.colored_label(Color32::LIGHT_RED, problem);
+            ui.colored_label(ui.visuals().error_fg_color, problem);
         }
 
         match &view.preview {

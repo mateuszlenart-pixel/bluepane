@@ -379,7 +379,7 @@ impl BluepaneUi {
         error: Option<&str>,
     ) {
         if let Some(error) = error {
-            ui.colored_label(Color32::LIGHT_RED, error);
+            ui.colored_label(ui.visuals().error_fg_color, error);
         } else if running {
             let (current, files) = progress.unwrap_or_default();
             ui.horizontal(|ui| {

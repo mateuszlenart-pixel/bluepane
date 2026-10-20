@@ -148,7 +148,7 @@ impl BluepaneUi {
             }
         });
         if let Some(error) = error {
-            ui.colored_label(Color32::LIGHT_RED, error);
+            ui.colored_label(ui.visuals().error_fg_color, error);
         } else if running {
             ui.label(format!("Skanowanie… znaleziono urządzeń: {total}"));
         } else if let Some(summary) = summary {
@@ -360,7 +360,7 @@ impl BluepaneUi {
                 });
             }
             Some(ShareList::Failed(why)) => {
-                ui.colored_label(Color32::LIGHT_RED, why);
+                ui.colored_label(ui.visuals().error_fg_color, why);
             }
             Some(ShareList::Ready(list)) => {
                 let visible: Vec<_> = list.iter().filter(|s| !s.is_hidden()).collect();

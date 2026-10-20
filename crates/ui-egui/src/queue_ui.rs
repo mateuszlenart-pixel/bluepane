@@ -162,7 +162,7 @@ impl BluepaneUi {
                         ui.label(format!("{}.", index + 1));
                         ui.label(&job.title);
                         let color = if job.is_error {
-                            Color32::LIGHT_RED
+                            ui.visuals().error_fg_color
                         } else {
                             ui.visuals().weak_text_color()
                         };

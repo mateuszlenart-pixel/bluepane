@@ -8,6 +8,8 @@ use egui::{Color32, CornerRadius, Stroke};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
     pub name: &'static str,
+    /// A dark palette (egui starts from its dark or light visuals accordingly).
+    pub dark: bool,
     /// Behind everything (window background).
     pub bg: Color32,
     /// The active panel.
@@ -54,6 +56,7 @@ impl Theme {
     pub fn dark() -> Theme {
         Theme {
             name: "dark",
+            dark: true,
             bg: rgb(0x12, 0x14, 0x1c),
             panel: rgb(0x1a, 0x1d, 0x28),
             panel_inactive: rgb(0x15, 0x17, 0x20),
@@ -82,11 +85,55 @@ impl Theme {
         }
     }
 
-    /// The palette named `name`; an unknown name gives the default theme.
+    /// Light: white panels, dark text, the same blue accent.
+    pub fn light() -> Theme {
+        Theme {
+            name: "light",
+            dark: false,
+            bg: rgb(0xee, 0xf0, 0xf5),
+            panel: rgb(0xff, 0xff, 0xff),
+            panel_inactive: rgb(0xf5, 0xf6, 0xfa),
+            header: rgb(0xe3, 0xe7, 0xef),
+            row_alt: rgb(0xf3, 0xf5, 0xf9),
+            hover: rgb(0xd9, 0xe2, 0xf3),
+            cursor_fill: Color32::from_rgba_premultiplied(8, 22, 40, 40),
+            cursor_stroke: rgb(0x1f, 0x6f, 0xeb),
+            cursor_fill_inactive: rgb(0xe6, 0xea, 0xf2),
+            cursor_stroke_inactive: rgb(0xb4, 0xbc, 0xcf),
+            text: rgb(0x16, 0x1b, 0x26),
+            muted: rgb(0x57, 0x60, 0x74),
+            selected: rgb(0x9a, 0x50, 0x00),
+            dir: rgb(0x0a, 0x5f, 0x94),
+            archive: rgb(0x70, 0x34, 0xb8),
+            document: rgb(0x9a, 0x45, 0x00),
+            image: rgb(0xa8, 0x1c, 0x62),
+            media: rgb(0xa0, 0x18, 0x40),
+            code: rgb(0x08, 0x6b, 0x4a),
+            executable: rgb(0x6b, 0x58, 0x00),
+            accent: rgb(0x1f, 0x6f, 0xeb),
+            border: rgb(0xc6, 0xcc, 0xdb),
+            warn: rgb(0x8a, 0x5a, 0x00),
+            error: rgb(0xb7, 0x1c, 0x1c),
+            ok: rgb(0x13, 0x6f, 0x2e),
+        }
+    }
+
+    /// The palette named `name`; an unknown name gives the default theme. `system` is not a
+    /// palette: the window resolves it with [`Theme::resolve`] first.
     pub fn by_name(name: &str) -> Theme {
         match name {
-            "dark" => Theme::dark(),
+            "light" => Theme::light(),
             _ => Theme::dark(),
+        }
+    }
+
+    /// The palette name to use for the saved theme `name`: `system` follows the operating
+    /// system's setting (`system_dark`; dark when it cannot be told).
+    pub fn resolve(name: &str, system_dark: Option<bool>) -> &str {
+        match name {
+            "system" if system_dark == Some(false) => "light",
+            "system" => "dark",
+            other => other,
         }
     }
 
@@ -124,7 +171,11 @@ impl Theme {
     /// Hands the palette to egui: widgets, windows, selection and spacing.
     pub fn apply(&self, ctx: &egui::Context, text_percent: u16) {
         let mut style = (*ctx.global_style()).clone();
-        let mut visuals = egui::Visuals::dark();
+        let mut visuals = if self.dark {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        };
         let sharp = CornerRadius::same(3);
 
         visuals.panel_fill = self.bg;
@@ -227,8 +278,13 @@ mod tests {
     #[test]
     fn every_theme_the_engine_offers_has_a_palette_with_the_same_name() {
         for name in bluepane_engine::THEMES {
-            assert_eq!(Theme::by_name(name).name, *name);
+            let resolved = Theme::resolve(name, Some(true));
+            assert_eq!(Theme::by_name(resolved).name, resolved);
         }
+        assert_eq!(Theme::resolve("system", Some(false)), "light");
+        assert_eq!(Theme::resolve("system", Some(true)), "dark");
+        assert_eq!(Theme::resolve("system", None), "dark");
+        assert_eq!(Theme::resolve("light", Some(true)), "light");
         assert!(bluepane_engine::THEMES.contains(&bluepane_engine::DEFAULT_THEME));
         assert_eq!(
             Theme::by_name("nonsense").name,
@@ -238,7 +294,7 @@ mod tests {
 
     #[test]
     fn text_in_every_theme_is_readable_on_its_backgrounds() {
-        for name in bluepane_engine::THEMES {
+        for name in ["dark", "light"] {
             let t = Theme::by_name(name);
             for background in [t.panel, t.panel_inactive, t.row_alt] {
                 for (label, colour, minimum) in [

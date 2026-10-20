@@ -496,6 +496,23 @@ fn appearance_settings_change_the_window_without_breaking_it() {
 }
 
 #[test]
+fn the_light_and_system_themes_can_be_chosen_and_the_window_keeps_working() {
+    let (_tmp, mut harness) = window();
+    harness.run_steps(2);
+    for name in ["light", "system", "dark"] {
+        command(&mut harness, &format!("theme {name}"));
+        harness.run_steps(2);
+        assert_eq!(harness.state_mut().session_mut().theme(), name);
+        harness.get_by_label_contains("2 elementy: 0 katalogów, 2 pliki");
+    }
+    assert!(harness
+        .state_mut()
+        .session_mut()
+        .run_line("theme neon")
+        .is_err());
+}
+
+#[test]
 fn a_workspace_is_saved_with_its_layout_and_loaded_again() {
     let (_tmp, mut harness) = window();
     harness.run_steps(2);
