@@ -181,6 +181,15 @@ Makro (zob. „Makra i skrypty”) może się uruchamiać samo o zadanej porze, 
 - Zadanie używa katalogów, które pokazywały oba panele w chwili dodania, oraz pliku makra, więc późniejsza edycja makra zmienia następne uruchomienia. Skrypt bez okna nie ma okna konfliktów: istniejący plik jest pomijany, a `delete` wymaga linii `confirm`.
 - Skrót: `sched`. Profile synchronizacji w harmonogramie dojdą z etapem 14h.
 
+## Mapa zajętości
+
+`map` pokazuje katalog aktywnego panelu jako kafelki o polu proporcjonalnym do rozmiaru (jak WizTree), w osobnej zakładce „Mapa zajętości”. Największe elementy są w lewym górnym rogu; katalogi mają kolor, pliki szary. Rozmiary katalogów liczą się **w tle i tylko po tej komendzie** (nic nie skanuje się samo); kafelki pojawiają się w miarę napływu wyników, a pasek nad mapą pokazuje sumę i liczbę katalogów, które jeszcze się liczą.
+
+- Klik w kafelek katalogu wchodzi do niego (liczenie zaczyna się od nowa); `Backspace` albo „W górę” wraca wyżej; „Pokaż w panelu” (`map show`) ustawia panel na katalogu mapy; `Esc` albo „Zamknij” zamyka. Najechanie na kafelek pokazuje nazwę i rozmiar.
+- Komendy: `map`, `map into <katalog>`, `map up`, `map show`, `map close`.
+- Rysuje się do 300 największych wpisów; liczba pominiętych jest pod mapą. Puste katalogi nie mają kafelka. Dowiązania nie są śledzone, a katalog bez uprawnień liczy się jako pusty.
+- Mapa działa tylko na katalogu na dysku (nie w archiwum ani na serwerze).
+
 ## Podgląd plików (F3)
 
 Podgląd czyta tylko widoczne okno pliku, więc plik wielogigabajtowy otwiera się od razu i nie

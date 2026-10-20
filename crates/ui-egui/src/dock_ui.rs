@@ -341,6 +341,7 @@ impl BluepaneUi {
             Tool::Rename => self.rename_ui(ui),
             Tool::Find => self.find_ui(ui),
             Tool::Quick => self.quick_ui(ui, 0),
+            Tool::Map => self.map_ui(ui),
         }
     }
 
@@ -360,6 +361,7 @@ impl BluepaneUi {
             Tool::Sites => self.sites_keys(pressed),
             Tool::Find => self.find_keys(pressed),
             Tool::Rename => self.rename_keys(pressed),
+            Tool::Map => self.map_keys(pressed),
             Tool::Quick => {
                 for key in pressed {
                     let line = match key.as_str() {

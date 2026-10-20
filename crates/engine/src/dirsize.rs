@@ -74,7 +74,7 @@ impl DirSizes {
 }
 
 /// Total size of the files below `root`; links are not followed. `None` when cancelled.
-fn walk(root: &Path, cancel: &AtomicBool) -> Option<u64> {
+pub(crate) fn walk(root: &Path, cancel: &AtomicBool) -> Option<u64> {
     let mut total = 0u64;
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {

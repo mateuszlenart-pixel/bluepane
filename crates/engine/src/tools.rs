@@ -19,11 +19,13 @@ pub enum Tool {
     Find,
     /// Quick View in a tab of its own (`quick tab`); otherwise it takes the other panel's place.
     Quick,
+    /// The disk usage map (`map`).
+    Map,
 }
 
 impl Tool {
     /// Every tool, in the order their tabs are offered.
-    pub const ALL: [Tool; 9] = [
+    pub const ALL: [Tool; 10] = [
         Tool::Pages,
         Tool::Viewer,
         Tool::Sync,
@@ -33,6 +35,7 @@ impl Tool {
         Tool::Rename,
         Tool::Find,
         Tool::Quick,
+        Tool::Map,
     ];
 
     /// The name shown on its tab.
@@ -47,6 +50,7 @@ impl Tool {
             Tool::Rename => "Zmiana nazw",
             Tool::Find => "Szukanie",
             Tool::Quick => "Quick View",
+            Tool::Map => "Mapa zajętości",
         }
     }
 
@@ -62,6 +66,7 @@ impl Tool {
             Tool::Rename => "mrclose",
             Tool::Find => "findclose",
             Tool::Quick => "quick",
+            Tool::Map => "map close",
         }
     }
 
@@ -77,6 +82,7 @@ impl Tool {
             Tool::Rename => session.rename.is_some(),
             Tool::Find => session.find.as_ref().is_some_and(|f| f.visible),
             Tool::Quick => session.quick.is_some() && session.quick_in_tab(),
+            Tool::Map => session.diskmap.is_some(),
         }
     }
 }
@@ -131,6 +137,7 @@ mod tests {
                 s.run_line("quick tab").unwrap();
                 s.run_line("quick").unwrap();
             }
+            Tool::Map => s.run_line("map").unwrap(),
         };
         for tool in Tool::ALL {
             open(&mut s, tool);
