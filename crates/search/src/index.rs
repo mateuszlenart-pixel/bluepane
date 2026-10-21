@@ -612,18 +612,28 @@ mod tests {
     }
 
     #[test]
-    fn hidden_files_links_and_skipped_folders_stay_out() {
+    fn links_and_skipped_folders_stay_out() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         std::fs::create_dir_all(dir.join(".git")).unwrap();
         std::fs::create_dir_all(dir.join("node_modules")).unwrap();
         std::fs::write(dir.join(".git/config"), "tajne").unwrap();
         std::fs::write(dir.join("node_modules/x.js"), "tajne").unwrap();
-        std::fs::write(dir.join(".ukryty"), "tajne").unwrap();
         std::fs::write(dir.join("widoczny.txt"), "tajne").unwrap();
         #[cfg(unix)]
         std::os::unix::fs::symlink(dir, dir.join("petla")).unwrap();
         let (index, _) = build(&[dir.to_path_buf()], None);
+        assert_eq!(names(index.search(&query("tajne"))), ["widoczny.txt"]);
+    }
+
+    /// On Windows a leading dot makes nothing hidden (that is an attribute).
+    #[cfg(unix)]
+    #[test]
+    fn dotfiles_are_hidden_on_unix_and_stay_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join(".ukryty"), "tajne").unwrap();
+        std::fs::write(tmp.path().join("widoczny.txt"), "tajne").unwrap();
+        let (index, _) = build(&[tmp.path().to_path_buf()], None);
         assert_eq!(names(index.search(&query("tajne"))), ["widoczny.txt"]);
     }
 
