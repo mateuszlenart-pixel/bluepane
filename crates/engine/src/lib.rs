@@ -43,6 +43,7 @@ mod quickbox;
 mod quickview;
 mod remote;
 mod remote_job;
+mod runcmd;
 mod scan;
 mod scanhistory;
 mod schedule;

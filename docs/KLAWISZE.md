@@ -17,6 +17,7 @@ są na razie stałe.
 | F5 do panelu z archiwum | dodaj zaznaczone pliki do archiwum (do katalogu, który tam oglądasz) |
 | F8 / F2 / F7 w archiwum | usuń z archiwum (po potwierdzeniu, bez kosza) / zmień nazwę / nowy katalog |
 | Ctrl+Shift+1 / 2 / 3 | skopiuj do schowka zaznaczone nazwy: bez rozszerzeń / z rozszerzeniami / pełne ścieżki (po jednej w linii; bez zaznaczenia: element pod kursorem) |
+| Ctrl+Shift+T | terminal systemu w katalogu aktywnego panelu |
 | Ctrl+N | skaner sieci (urządzenia w zakresie adresów IP, ich porty i usługi) |
 | Alt+Shift+Enter | `dirsize`: policz w tle rozmiar zaznaczonych katalogów (albo tego pod kursorem); wynik pojawia się w kolumnie Rozmiar i w podsumowaniu pod listą (odświeżenie F9 i operacje na plikach czyszczą policzone rozmiary) |
 | Ctrl+Q | Quick View: drugi panel pokazuje na żywo plik pod kursorem aktywnego (tekst/hex, strona PDF, tekst dokumentów); kółko przewija, Ctrl+Q zamyka; opis w [FUNKCJE.md](FUNKCJE.md) |

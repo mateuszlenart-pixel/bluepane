@@ -111,6 +111,14 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | --- | --- |
 | `watch [on\|off]` | listy w panelach odświeżają się same, gdy inny program zmieni katalog na dysku (domyślnie włączone; patrzy tylko na katalogi obu paneli, nie na archiwa ani serwery); bez argumentu pokazuje stan |
 
+## Operacje na plikach
+
+| Komenda | Opis |
+| --- | --- |
+| `terminal` | otwiera terminal systemu w katalogu aktywnego panelu (Linux: zmienna TERMINAL albo pierwszy z x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, alacritty, kitty, xterm; Windows: Windows Terminal albo zwykła konsola); tylko dla katalogów na dysku |
+| `run <program argumenty>  (albo !program argumenty)` | uruchamia program w katalogu aktywnego panelu, bez powłoki, w tle, i pokazuje jego wyjście w podglądzie; w słowach działają `%f` (ścieżka pod kursorem), `%n` (nazwa), `%d` i `%o` (katalogi paneli) oraz `%s` (zaznaczone pliki jako osobne argumenty), jak we własnych przyciskach; pipe'y i przekierowania nie działają (nie ma powłoki), wywołaj wtedy `run sh -c ...` albo `run powershell -Command ...` |
+| `runstop` | przerywa program uruchomiony przez `run` |
+
 ## Kolejka zadań
 
 | Komenda | Opis |

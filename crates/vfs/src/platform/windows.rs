@@ -15,6 +15,25 @@ pub fn is_hidden(_name: &str, meta: &Metadata) -> bool {
     meta.file_attributes() & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) != 0
 }
 
+/// Terminals to try, in order: Windows Terminal, then a plain console window.
+pub fn terminal_candidates(dir: &Path) -> Vec<(String, Vec<String>)> {
+    vec![
+        (
+            "wt.exe".to_string(),
+            vec!["-d".to_string(), dir.display().to_string()],
+        ),
+        (
+            "cmd.exe".to_string(),
+            vec![
+                "/c".to_string(),
+                "start".to_string(),
+                String::new(),
+                "cmd.exe".to_string(),
+            ],
+        ),
+    ]
+}
+
 /// Runs a program in `dir` and collects its output; no console window flashes up.
 pub fn run_hidden(program: &str, args: &[&str], dir: &Path) -> io::Result<std::process::Output> {
     use std::os::windows::process::CommandExt;

@@ -8,8 +8,8 @@ mod windows;
 #[cfg(windows)]
 pub use windows::{
     copy_symlink, entry_mode, entry_owner, extended_path, file_mode, is_hidden, make_writable,
-    neighbours, run_hidden, schedule_list, schedule_remove, schedule_set, set_mode, volumes,
-    DEFAULT_OPENER,
+    neighbours, run_hidden, schedule_list, schedule_remove, schedule_set, set_mode,
+    terminal_candidates, volumes, DEFAULT_OPENER,
 };
 
 #[cfg(not(windows))]
@@ -17,8 +17,8 @@ mod linux;
 #[cfg(not(windows))]
 pub use linux::{
     copy_symlink, entry_mode, entry_owner, extended_path, file_mode, is_hidden, make_writable,
-    neighbours, run_hidden, schedule_list, schedule_remove, schedule_set, set_mode, volumes,
-    DEFAULT_OPENER,
+    neighbours, run_hidden, schedule_list, schedule_remove, schedule_set, set_mode,
+    terminal_candidates, volumes, DEFAULT_OPENER,
 };
 
 use std::ffi::OsString;
@@ -48,8 +48,6 @@ pub(crate) fn launch_plan(editor: Option<&str>, path: &Path) -> (String, Vec<OsS
     (program, args)
 }
 
-/// Opens a file outside bluepane: with `editor` (a command line such as `code -w`) when
-/// given, otherwise with the system's default application. Does not wait for it to close.
 /// Starts a program in `dir` without waiting for it (output discarded). No shell is involved,
 /// so the arguments reach the program exactly as given, whatever characters they hold.
 pub fn spawn_program(program: &str, args: &[String], dir: &Path) -> io::Result<()> {
@@ -67,6 +65,43 @@ pub fn spawn_program(program: &str, args: &[String], dir: &Path) -> io::Result<(
     Ok(())
 }
 
+/// Opens the system's terminal in `dir`. Does not wait for it to close.
+pub fn open_terminal(dir: &Path) -> io::Result<()> {
+    for (program, args) in terminal_candidates(dir) {
+        let mut command = std::process::Command::new(&program);
+        command
+            .args(&args)
+            .current_dir(dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // `cmd /c start` opens the console in its own window; this one stays hidden.
+            if program.eq_ignore_ascii_case("cmd.exe") {
+                command.creation_flags(0x0800_0000);
+            }
+        }
+        match command.spawn() {
+            Ok(mut child) => {
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+                return Ok(());
+            }
+            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(io::Error::new(e.kind(), format!("{program}: {e}"))),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "nie znaleziono terminala (na Linuksie ustaw zmienną TERMINAL)",
+    ))
+}
+
+/// Opens a file outside bluepane: with `editor` (a command line such as `code -w`) when
+/// given, otherwise with the system's default application. Does not wait for it to close.
 pub fn open_external(path: &Path, editor: Option<&str>) -> io::Result<()> {
     let (program, args) = launch_plan(editor, path);
     let mut child = std::process::Command::new(&program)
@@ -128,6 +163,13 @@ mod tests {
     fn a_blank_editor_falls_back_to_the_default() {
         let (program, _) = launch_plan(Some("   "), Path::new("f"));
         assert_eq!(program, DEFAULT_OPENER.0);
+    }
+
+    #[test]
+    fn every_terminal_candidate_names_a_program() {
+        let list = terminal_candidates(Path::new("."));
+        assert!(!list.is_empty());
+        assert!(list.iter().all(|(program, _)| !program.is_empty()));
     }
 
     #[test]

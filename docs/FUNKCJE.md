@@ -192,6 +192,15 @@ Własny przycisk uruchamia zewnętrzny program z parametrami. Zastępuje wtyczki
 - Program startuje w katalogu aktywnego panelu, bez powłoki: nazwy plików ze spacjami, średnikami czy `&` trafiają do programu bez zmian i nic się nie interpretuje. Przycisk działa na katalogu na dysku (nie w archiwum ani na serwerze).
 - Błąd uruchomienia (np. brak programu) pokazuje pasek stanu z nazwą programu.
 
+## Terminal tutaj i polecenie z wynikiem
+
+Bluepane nie ma własnego terminala: terminal systemu zawsze będzie lepszy. Zamiast tego pomaga tam, gdzie jesteś.
+
+- `terminal` (Ctrl+Shift+T) otwiera terminal systemu w katalogu aktywnego panelu. **Linux:** zmienna `TERMINAL` (np. `kitty`), a gdy jej nie ma, pierwszy znaleziony z `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xfce4-terminal`, `alacritty`, `kitty`, `xterm`. **Windows:** Windows Terminal, a gdy go nie ma, zwykła konsola. Działa dla katalogów na dysku.
+- `run <program argumenty>` albo krócej `!program argumenty` (także w polu Ctrl+K po `>`: `>!git status`) uruchamia program w katalogu aktywnego panelu **w tle** i po jego zakończeniu pokazuje wyjście w podglądzie (Esc zamyka): polecenie, katalog, wyjście, błędy (stderr) i kod wyjścia. `runstop` przerywa program, który jeszcze działa; naraz działa jedno polecenie.
+- Słowa i znaczniki jak we własnych przyciskach: `%f` `%n` `%d` `%o` `%s`, cudzysłowy zachowują spacje. Nie ma powłoki: `;`, `&` i spacje w nazwach plików są bezpieczne, ale potoki i przekierowania trzeba wywołać jawnie: `!sh -c "ls | wc -l"` (Linux), `!powershell -Command "dir | measure"` (Windows).
+- Wyjście czytane jest jako UTF-8, a gdy to nie pasuje, jako strona kodowa Windows 1250; pokazywane jest do 2 MB z każdego strumienia. Program nie dostaje wejścia (stdin jest pusty), więc polecenia interaktywne uruchom w `terminal`.
+
 ## Harmonogram makr
 
 Makro (zob. „Makra i skrypty”) może się uruchamiać samo o zadanej porze, nawet gdy bluepane jest zamknięte. Zadanie zakłada system: wpis w `crontab` użytkownika na Linuksie albo zadanie w folderze `bluepane` Harmonogramu zadań na Windows; wykonuje je `bluepane-cli run-script` (musi leżeć obok programu).
