@@ -102,6 +102,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(QUEUE, "queuemove", "queuemove <numer> up|down|top", "zmienia kolejność oczekujących zadań"),
     h(QUEUE, "queueretry", "queueretry <numer>", "ustawia zakończone zadanie w kolejce jeszcze raz (1 = najnowsze)"),
     h(QUEUE, "queueclear", "queueclear", "czyści historię zakończonych zadań"),
+    h(NAV, "watch", "watch [on|off]", "listy w panelach odświeżają się same, gdy inny program zmieni katalog na dysku (domyślnie włączone; patrzy tylko na katalogi obu paneli, nie na archiwa ani serwery); bez argumentu pokazuje stan"),
     h(QUEUE, "limit", "limit [<prędkość>|off]", "ogranicza prędkość kopiowania i transferów, np. `limit 2m`; bez argumentu pokazuje stan"),
     h(SYNC, "sync", "sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]", "porównuje katalogi obu paneli i pokazuje, co zrobiłaby synchronizacja (Alt+S)"),
     h(SYNC, "syncrun", "syncrun", "wykonuje pokazany plan synchronizacji (F5 w oknie)"),

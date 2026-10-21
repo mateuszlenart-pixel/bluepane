@@ -13,6 +13,7 @@
 //! textsize = 120               (text size in percent, 80 to 160)
 //! rowheight = 26              (height of a list row in points, 16 to 40)
 //! accent = #3d8bfd            (accent colour: cursor frame, focus, links)
+//! watch = on                  (lists refresh themselves after changes on disk; `off` stops it)
 //! quickview = tab              (Quick View in its own tab; `panel`: over the other panel)
 //! ```
 //!
@@ -162,6 +163,8 @@ pub struct Settings {
     pub accent: Option<[u8; 3]>,
     /// Put the last session back at start (default: yes).
     pub restore: Option<bool>,
+    /// Lists refresh themselves when the folder changes on disk (default: yes).
+    pub watch: Option<bool>,
     /// Keys that differ from the built-in map: `Some(line)` binds, `None` takes the key off.
     pub keys: Vec<(String, Option<String>)>,
 }
@@ -351,6 +354,14 @@ pub fn parse(text: &str) -> (Settings, Vec<String>) {
                     "wiersz {number}: restore to on albo off, nie „{other}”"
                 )),
             }
+        } else if left == "watch" {
+            match right.trim() {
+                "on" => settings.watch = Some(true),
+                "off" => settings.watch = Some(false),
+                other => warnings.push(format!(
+                    "wiersz {number}: watch to on albo off, nie „{other}”"
+                )),
+            }
         } else if left == "quickview" {
             match right.trim() {
                 "tab" => settings.quick_tab = Some(true),
@@ -431,6 +442,9 @@ pub fn render(settings: &Settings) -> String {
     }
     if let Some(on) = settings.restore {
         out.push_str(&format!("restore = {}\n", if on { "on" } else { "off" }));
+    }
+    if let Some(on) = settings.watch {
+        out.push_str(&format!("watch = {}\n", if on { "on" } else { "off" }));
     }
     if let Some(tab) = settings.quick_tab {
         out.push_str(&format!(

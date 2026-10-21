@@ -144,6 +144,14 @@ Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jum
 
 Zmiana działa od razu. Motywy: `theme dark|light|system`.
 
+## Samoodświeżanie list
+
+Gdy inny program zmieni katalog pokazany w panelu (pobieranie, kompilacja, zapis pliku), lista odświeża się sama, a kursor zostaje na swoim pliku i zaznaczenie się nie gubi. Program prosi system o powiadomienia (inotify na Linuksie, ReadDirectoryChangesW na Windows, crate `notify`) i **patrzy tylko na katalogi dwóch aktywnych paneli**, bez podkatalogów; archiwa, serwery i listy wyników nie są obserwowane. Serię zmian czyta raz, po ćwierć sekundy ciszy. Nic nie jest skanowane w tle.
+
+- `watch off` wyłącza (zapisuje `watch = off` w `settings.conf`), `watch on` włącza z powrotem, `watch` pokazuje stan. Ręcznie odświeża F9 (`refresh`).
+- Jeśli system nie daje powiadomień (np. wyczerpany limit obserwowanych katalogów inotify), `watch` mówi o tym, a F9 nadal działa.
+- Okno, gdy nic się nie dzieje, budzi się cztery razy na sekundę, żeby odebrać powiadomienia; `watch off` to wyłącza.
+
 ## Obszary robocze i przywracanie sesji
 
 Obszar roboczy to zapamiętany układ pracy: katalogi i zakładki obu paneli (z sortowaniem i widokiem lista/siatka), aktywny panel, wybrane miejsca i układ okna (zapisany jako układ „obszar <nazwa>”). Pliki leżą w `workspaces/<nazwa>.conf` w katalogu konfiguracji; format ma numer wersji, a nowszej wersji niż znana program odmawia wczytać zamiast ją zepsuć.

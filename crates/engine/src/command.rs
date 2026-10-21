@@ -116,6 +116,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "queuedel",
     "queuemove",
     "limit",
+    "watch",
     "queueretry",
     "queueclear",
     "sitepassword",
@@ -459,6 +460,8 @@ pub enum Command {
     QueueDelete(usize),
     /// Limit the speed of copying and transfers, or show the current limit.
     Limit(SpeedLimit),
+    /// Refresh the lists by themselves when the folder changes on disk: show, on or off.
+    Watch(crate::WatchAction),
     /// Move queued job n (1-based, in the order shown) up, down or to the front.
     QueueMove(usize, QueueMove),
     /// Queue a finished job (n = 1 is the newest) once more.
@@ -670,6 +673,7 @@ impl Command {
             "queuedel" => parse_row("queuedel", rest).map(Command::QueueDelete),
             "queuemove" => parse_queue_move(rest),
             "limit" => parse_limit(rest).map(Command::Limit),
+            "watch" => crate::watch::parse_watch(rest).map(Command::Watch),
             "queueretry" => parse_row("queueretry", rest).map(Command::QueueRetry),
             "queueclear" => Ok(Command::QueueClear),
             "siteset" => parse_siteset(rest),

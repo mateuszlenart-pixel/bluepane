@@ -8,10 +8,12 @@ mod platform;
 mod process;
 mod schedule;
 mod smb;
+mod watch;
 
 pub use process::{run_cancellable, run_cancellable_env};
 pub use schedule::{ScheduleWhen, ScheduledTask};
 pub use smb::{list_shares, open_remote_desktop, share_folder, Share, ShareKind};
+pub use watch::DirWatcher;
 
 use std::io;
 use std::path::{Path, PathBuf};

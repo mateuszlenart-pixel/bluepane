@@ -92,6 +92,17 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `queuemove <numer> up\|down\|top` | zmienia kolejność oczekujących zadań |
 | `queueretry <numer>` | ustawia zakończone zadanie w kolejce jeszcze raz (1 = najnowsze) |
 | `queueclear` | czyści historię zakończonych zadań |
+
+## Panele i nawigacja
+
+| Komenda | Opis |
+| --- | --- |
+| `watch [on\|off]` | listy w panelach odświeżają się same, gdy inny program zmieni katalog na dysku (domyślnie włączone; patrzy tylko na katalogi obu paneli, nie na archiwa ani serwery); bez argumentu pokazuje stan |
+
+## Kolejka zadań
+
+| Komenda | Opis |
+| --- | --- |
 | `limit [<prędkość>\|off]` | ogranicza prędkość kopiowania i transferów, np. `limit 2m`; bez argumentu pokazuje stan |
 
 ## Synchronizacja
