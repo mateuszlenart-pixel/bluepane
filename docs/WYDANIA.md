@@ -25,14 +25,17 @@ polecenie), nigdy samo z siebie.
 | Plik | Zawartość |
 | --- | --- |
 | `bluepane-X.Y.Z-linux-x86_64.tar.gz` | `bluepane`, `bluepane-cli`, licencje, README, CHANGELOG, `docs/` (budowane na Ubuntu 22.04, działa też na starszych dystrybucjach) |
+| `bluepane-X.Y.Z-linux-amd64.deb` | paczka Debiana/Ubuntu (`sudo apt install ./plik.deb`), budowana `tools/pakiet-deb.sh` samym `dpkg-deb`: programy w `/usr/bin`, wpis w menu aplikacji, ikona, dokumentacja w `/usr/share/doc/bluepane`; zależności systemowe pobiera apt, `git`, `smbclient`, `rclone` są opcjonalne |
+| `bluepane-X.Y.Z-linux-x86_64.AppImage` | jeden plik do uruchomienia na dowolnej dystrybucji (`chmod +x` i dwuklik), budowany `tools/pakiet-appimage.sh` z `appimagetool 1.9.0` (pobierany i sprawdzany sumą SHA-256); bez wbudowanych bibliotek, korzysta z systemowych (GL, X11/Wayland) |
 | `bluepane-X.Y.Z-windows-x86_64.zip` | to samo z `.exe`, bez okna konsoli |
 | `bluepane-X.Y.Z-windows-x86_64-setup.exe` | instalator (Inno Setup, `installer/bluepane.iss`): domyślnie dla bieżącego użytkownika bez praw administratora, okno pozwala wybrać instalację dla wszystkich; skrót w menu Start (opcjonalnie na pulpicie), odinstalowanie w „Aplikacje”; ustawienia w `%APPDATA%\bluepane` zostają po odinstalowaniu |
 | `SHA256SUMS.txt` | sumy kontrolne wszystkich plików powyżej |
 
-AppImage i `.deb` dochodzą w podetapie 9d. Workflow sam sprawdza instalator: cicha instalacja do katalogu z polskimi znakami, `bluepane-cli --version`, odinstalowanie. Kod nie jest podpisany:
+Workflow sam sprawdza paczki. Instalator Windows: cicha instalacja do katalogu z polskimi znakami, `bluepane-cli --version`, odinstalowanie. `.deb`: instalacja przez `apt`, walidacja pliku `.desktop`, `--version`, usunięcie. AppImage: uruchomienie `--version`. Kod nie jest podpisany:
 Windows SmartScreen pokaże ostrzeżenie o nieznanym wydawcy („Więcej informacji” > „Uruchom mimo to”).
 
 ## Skrypty
 
 - `tools/wersja.sh [tag]`: wypisuje wersję z `Cargo.toml`; z tagiem sprawdza zgodność.
 - `tools/wydanie-notatki.sh <wersja>`: wypisuje sekcję tej wersji z `CHANGELOG.md`.
+- `tools/pakiet-deb.sh <wersja> <katalog-programów> <wyjście>` i `tools/pakiet-appimage.sh …`: budują paczki Linuksa (można uruchomić lokalnie po `cargo build --release`; zmienna `APPIMAGETOOL` wskazuje własną kopię `appimagetool`).

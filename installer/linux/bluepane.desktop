@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=bluepane
+GenericName=Menedżer plików
+GenericName[pl]=Menedżer plików
+Comment=Dwupanelowy menedżer plików
+Comment[pl]=Dwupanelowy menedżer plików w stylu Total Commandera
+Exec=bluepane %F
+Icon=bluepane
+Terminal=false
+Categories=Utility;FileTools;FileManager;
+Keywords=file;manager;commander;files;pliki;
+StartupNotify=true
