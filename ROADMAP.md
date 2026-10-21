@@ -241,7 +241,7 @@ Sieć:
 
 Środowisko pracy:
 - [x] 14i przeniesione do 12s (obszary robocze i przywracanie sesji, tuż po etapie 12)
-- [ ] 14j **Terminal jako zakładka doku** w bieżącym katalogu (zależność `portable-pty` do zgody)
+- [ ] 14j **Terminal tutaj i polecenie z wynikiem** (zamiast wbudowanego terminala, decyzja właściciela 2026-10-21; bez zależności): komenda `terminal` otwiera systemowy terminal w katalogu aktywnego panelu; `run` / `!polecenie` uruchamia program w katalogu panelu (bez powłoki, ze znacznikami `%f` `%d` `%s` jak we własnych przyciskach) i pokazuje wyjście w podglądzie; opcjonalnie wstawianie nazwy pliku pod kursorem do linii poleceń. Wbudowany terminal (`portable-pty` plus emulacja) odłożony: systemowy będzie zawsze lepszy, a koszt emulacji duży
 - [x] 14k **Obserwacja katalogów**: lista odświeża się sama po zmianach na dysku (`notify`, za zgodą; `watch on|off`)
 - [x] 14l **Git**: status plików w kolumnie (był w 12l), gałąź przy ścieżce, podstawowe akcje `git add|unstage|commit|diff|log` (`git` jako proces, bez nowej zależności)
 - [x] 14m **Szukanie z indeksem** (`index`): wyniki natychmiast, także po treści PDF/Word/Excel (tekst z crate'a `docs`), tylko na polecenie użytkownika; zapisane wyszukiwania jako wirtualne katalogi
