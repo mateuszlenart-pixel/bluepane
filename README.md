@@ -3,6 +3,20 @@
 Dwupanelowy menedżer plików w stylu Total Commandera. Rust + egui, natywny, sterowany
 klawiaturą (i myszą), działa na **Windows i Linuksie**. Projekt w fazie testów ręcznych.
 
+## Instalacja
+
+Gotowe paczki są na stronie [Releases](https://github.com/mateuszlenart-pixel/bluepane/releases) (po pierwszym wydaniu; do tego czasu patrz „Uruchomienie” niżej). Program nie sprawdza aktualizacji sam: nowe wersje pobierasz stamtąd.
+
+| System | Plik | Jak zainstalować |
+| --- | --- | --- |
+| Windows | `bluepane-X.Y.Z-windows-x86_64-setup.exe` | uruchom instalator (domyślnie dla Twojego konta, bez praw administratora); skrót w menu Start |
+| Windows | `bluepane-X.Y.Z-windows-x86_64.zip` | rozpakuj gdziekolwiek i uruchom `bluepane.exe` (wersja przenośna) |
+| Debian, Ubuntu | `bluepane-X.Y.Z-linux-amd64.deb` | `sudo apt install ./bluepane-X.Y.Z-linux-amd64.deb`; usunięcie: `sudo apt remove bluepane` |
+| Dowolny Linux | `bluepane-X.Y.Z-linux-x86_64.AppImage` | `chmod +x plik.AppImage` i uruchom; bez instalacji |
+| Dowolny Linux | `bluepane-X.Y.Z-linux-x86_64.tar.gz` | rozpakuj i uruchom `bluepane` |
+
+Kod nie jest podpisany, więc **Windows SmartScreen** może pokazać „System Windows ochronił ten komputer”: kliknij „Więcej informacji”, potem „Uruchom mimo to”. Sumę pliku sprawdzisz z `SHA256SUMS.txt` z wydania (`sha256sum -c SHA256SUMS.txt` na Linuksie, `Get-FileHash plik` w PowerShellu). Wersję pokazuje `bluepane --version` (na Windows: komenda `about` w programie albo `bluepane-cli --version`). Ustawienia leżą w `%APPDATA%\bluepane` (Windows) albo `~/.config/bluepane` (Linux) i zostają po odinstalowaniu. Opcjonalne programy: `git` (kolumna i akcje git), `smbclient` (udziały SMB), `rclone` (chmury), `ssh`. Jak budować wydania: [docs/WYDANIA.md](docs/WYDANIA.md).
+
 ## Uruchomienie
 
 Gotowe pliki do testów (bez Rusta) buduje workflow **Build testowy** w zakładce Actions na GitHubie (artefakty

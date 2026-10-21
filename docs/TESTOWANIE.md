@@ -120,7 +120,7 @@ Wygląd (czytelność, kolory, rozmiary) też zgłaszaj, nawet jeśli „działa
 
 ### Jak do tego podejść
 
-Lista jest długa (ok. 31 sekcji), więc nie przechodź jej w całości naraz. Proponowana kolejność:
+Lista jest długa (ok. 32 sekcje), więc nie przechodź jej w całości naraz. Proponowana kolejność:
 
 1. **Dym (4.0):** ok. 20 minut na każdym systemie. Jeśli tu coś nie działa, reszta ma mniejszy sens: zgłoś od razu.
 2. **Sekcje według ryzyka:** tabela niżej. Zacznij od **P1**.
@@ -141,6 +141,7 @@ Lista jest długa (ok. 31 sekcji), więc nie przechodź jej w całości naraz. P
 | 4.24 Skaner: Wake-on-LAN i udział `[Z]` | **P1** | prawdziwa sieć i urządzenia |
 | 4.25 SMB `[Z]` | **P1** | prawdziwy serwer SMB |
 | 4.26 Chmury rclone `[Z]` | **P1** | prawdziwe konto w chmurze |
+| 4.32 Instalacja z paczek | **P1** | nigdy nie sprawdzana na prawdziwej, czystej maszynie |
 | 4.17–4.20, 4.22, 4.23, 4.30 (reszta), 4.31 | P2 | nowe okna i narzędzia: wygląd, wygoda |
 | 4.1–4.16 | P2 na Windows, P3 na Linuksie | starsze funkcje; Windows nie był jeszcze sprawdzany |
 
@@ -573,6 +574,23 @@ Potrzebny zainstalowany `git`. Dane: `repozytorium-git` (jeden commit i zmiany: 
 - [ ] **Przerwanie:** `!sleep 60` (**W:** `!ping -n 60 127.0.0.1`): okno nie zamarza, pasek stanu mówi „Działa: …”; druga komenda `!ls` w tym czasie odmawia, `runstop` kończy z „Przerwano”.
 - [ ] **Archiwum i serwer:** w archiwum zip albo na serwerze `terminal` i `!ls` odmawiają czytelnym komunikatem (działają tylko na dysku).
 
+### 4.32 Instalacja z gotowych paczek na czystej maszynie (L W) · **P1**
+
+`[CI]` sprawdza na czystych runnerach: instalację cichą instalatora Windows i jej odinstalowanie, instalację `.deb` przez `apt` z usunięciem, `--version` z AppImage. **Nie** sprawdza wyglądu menu, ikony, SmartScreena ani pierwszego uruchomienia okna. Najlepiej na świeżej maszynie wirtualnej (Windows 11, Ubuntu LTS) bez Rusta i bez bluepane. Paczki: Releases, a przed pierwszym wydaniem „Run workflow” w „Wydanie” i artefakty `paczka-linux` i `paczka-windows`.
+
+- [ ] **Pobranie i suma:** pobierz plik i `SHA256SUMS.txt`, sprawdź sumę (README, „Instalacja”). Zgadza się.
+- [ ] **W: SmartScreen:** instalator pokazuje ostrzeżenie o nieznanym wydawcy; „Więcej informacji” > „Uruchom mimo to” przechodzi dalej. Zapisz, jak wygląda komunikat.
+- [ ] **W: instalator:** polski interfejs, pokazana licencja, domyślnie bez pytania o administratora; opcja skrótu na pulpicie. Po zakończeniu „Uruchom bluepane” otwiera okno.
+- [ ] **W: skrót i ikona:** skrót w menu Start ma ikonę (dwa niebieskie panele); sam `bluepane.exe` w Eksploratorze ma ikonę **domyślną** (znane ograniczenie). Okno ma własną ikonę na pasku zadań.
+- [ ] **W: instalacja w katalogu z polskimi znakami** (np. `C:\Users\Zażółć\bluepane`): program startuje, `about` pokazuje wersję 0.1.0.
+- [ ] **W: odinstalowanie:** „Aplikacje” > bluepane > Odinstaluj usuwa program i skróty; `%APPDATA%\bluepane` zostaje.
+- [ ] **W: zip przenośny:** rozpakowany gdziekolwiek uruchamia się; `bluepane-cli.exe --version` działa w terminalu.
+- [ ] **L: `.deb`:** `sudo apt install ./bluepane-…-amd64.deb` dociąga zależności bez błędów; bluepane jest w menu aplikacji z ikoną; uruchomienie z menu otwiera okno; `which bluepane` wskazuje `/usr/bin/bluepane`.
+- [ ] **L: usunięcie:** `sudo apt remove bluepane` usuwa program i wpis w menu; `~/.config/bluepane` zostaje.
+- [ ] **L: AppImage:** `chmod +x` i dwuklik albo uruchomienie z terminala otwiera okno (na dystrybucji innej niż Ubuntu, jeśli jest); `--version` w terminalu wypisuje wersję. Brak biblioteki daje komunikat systemowy: zapisz jej nazwę.
+- [ ] **L: tar.gz:** rozpakowany plik `bluepane` uruchamia się.
+- [ ] **Pierwsze uruchomienie:** bez argumentów i bez ustawień okno otwiera się w katalogu domowym lub bieżącym, dwa panele, polskie nazwy czytelne; `F1` i `Ctrl+K` działają. Opcjonalne programy (`git`, `smbclient`, `rclone`) nie są wymagane: ich brak daje czytelny komunikat tylko przy użyciu funkcji.
+
 ## 5. Wyniki
 
 Wypełnij po teście (skopiuj wiersze do wiadomości, jeśli wolisz).
@@ -611,6 +629,7 @@ Wypełnij po teście (skopiuj wiersze do wiadomości, jeśli wolisz).
 | **4.29 Indeks (P1)** |  |  | |
 | **4.30 Podgląd: kolory, Markdown, hex, szczegóły (P1 hex)** |  |  | |
 | **4.31 Terminal tutaj i polecenie z wynikiem** |  |  | |
+| **4.32 Instalacja z paczek na czystej maszynie (P1)** |  |  | |
 
 Wpisuj `OK`, `część` (z `→` co nie działa), `brak` (nie sprawdzano, np. nie ma sprzętu) albo numer błędu. Wyniki możesz
 wysyłać **partiami**, po jednej sekcji.
