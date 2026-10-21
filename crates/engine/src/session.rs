@@ -256,6 +256,12 @@ pub struct Session {
     pub git_status: crate::GitStatus,
     /// Watches the folders of the panels for changes made by other programs.
     pub(crate) watcher: bluepane_vfs::DirWatcher,
+    /// The search index and its background build.
+    pub search_index: crate::SearchIndex,
+    /// The last query asked of the index (for `index save`).
+    pub(crate) index_last_query: String,
+    /// The build count last reported in the status line.
+    pub(crate) index_version: u64,
     /// Watched folders that changed and wait to be read again.
     pub(crate) watch_changed: Vec<std::path::PathBuf>,
     /// When the first of those changes was seen.
@@ -467,6 +473,9 @@ impl Session {
             hashes: crate::Hashes::default(),
             git_status: crate::GitStatus::default(),
             watcher: bluepane_vfs::DirWatcher::new(),
+            search_index: crate::SearchIndex::default(),
+            index_last_query: String::new(),
+            index_version: 0,
             watch_changed: Vec::new(),
             watch_since: None,
             stats_cache: std::sync::Mutex::default(),
@@ -728,6 +737,7 @@ impl Session {
             Command::QueueMove(n, to) => self.queue_move(n, to)?,
             Command::Limit(limit) => self.set_speed_limit(limit),
             Command::Watch(action) => self.watch_action(action)?,
+            Command::Index(action) => self.index_action(action)?,
             Command::Theme(name) => self.set_theme(name)?,
             Command::DirSize => self.count_dir_sizes()?,
             Command::Hash(action) => self.hash_action(action)?,
@@ -1260,6 +1270,7 @@ impl Session {
         self.poll_pages();
         self.update_quick();
         self.poll_watch();
+        self.poll_index();
         loop {
             let Some(job) = &self.current else { return };
             match job.try_event() {

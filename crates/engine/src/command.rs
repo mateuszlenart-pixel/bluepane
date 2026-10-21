@@ -118,6 +118,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "queuemove",
     "limit",
     "watch",
+    "index",
     "queueretry",
     "queueclear",
     "sitepassword",
@@ -463,6 +464,8 @@ pub enum Command {
     Limit(SpeedLimit),
     /// Refresh the lists by themselves when the folder changes on disk: show, on or off.
     Watch(crate::WatchAction),
+    /// The search index: add folders, update, search, saved searches.
+    Index(crate::IndexAction),
     /// Move queued job n (1-based, in the order shown) up, down or to the front.
     QueueMove(usize, QueueMove),
     /// Queue a finished job (n = 1 is the newest) once more.
@@ -678,6 +681,7 @@ impl Command {
             "queuemove" => parse_queue_move(rest),
             "limit" => parse_limit(rest).map(Command::Limit),
             "watch" => crate::watch::parse_watch(rest).map(Command::Watch),
+            "index" | "idx" => crate::searchindex::parse_index(rest).map(Command::Index),
             "queueretry" => parse_row("queueretry", rest).map(Command::QueueRetry),
             "queueclear" => Ok(Command::QueueClear),
             "siteset" => parse_siteset(rest),

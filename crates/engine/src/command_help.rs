@@ -102,6 +102,7 @@ pub const COMMAND_HELP: &[CommandHelp] = &[
     h(QUEUE, "queuemove", "queuemove <numer> up|down|top", "zmienia kolejność oczekujących zadań"),
     h(QUEUE, "queueretry", "queueretry <numer>", "ustawia zakończone zadanie w kolejce jeszcze raz (1 = najnowsze)"),
     h(QUEUE, "queueclear", "queueclear", "czyści historię zakończonych zadań"),
+    h(FIND, "index", "index [status|add <katalog>|remove <katalog>|update|stop|clear|find <słowa>|save <nazwa> [słowa]|open <nazwa>|list|forget <nazwa>]", "indeks do natychmiastowego szukania (alias: idx): `add` (albo `add here`) dodaje katalog i buduje indeks w tle (dopiero na Twoje polecenie), `find` szuka po nazwach i treści plików (też PDF, Word, Excel) bez polskich znaków i po początku słowa, wyniki trafiają do panelu jako lista; `name:`, `text:` i `ext:` zawężają, `save`/`open` zapisują wyszukiwanie pod nazwą jako wirtualny katalog; `update` czyta tylko zmienione pliki"),
     h(NAV, "watch", "watch [on|off]", "listy w panelach odświeżają się same, gdy inny program zmieni katalog na dysku (domyślnie włączone; patrzy tylko na katalogi obu paneli, nie na archiwa ani serwery); bez argumentu pokazuje stan"),
     h(QUEUE, "limit", "limit [<prędkość>|off]", "ogranicza prędkość kopiowania i transferów, np. `limit 2m`; bez argumentu pokazuje stan"),
     h(SYNC, "sync", "sync [-twoway|-mirror|-update] [-time|-size|-content] [-tol=<s>] [-i<wzorce>] [-x<wzorce>] [-delete=trash|permanent|versions:<katalog>]", "porównuje katalogi obu paneli i pokazuje, co zrobiłaby synchronizacja (Alt+S)"),
