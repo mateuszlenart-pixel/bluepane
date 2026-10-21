@@ -49,6 +49,7 @@ mod syncprofiles;
 mod thumbs;
 mod tools;
 mod viewer;
+mod watch;
 mod workspace;
 
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
@@ -130,6 +131,7 @@ pub use syncprofiles::ProfileAction;
 pub use thumbs::{Thumbnails, THUMB_SIZE};
 pub use tools::Tool;
 pub use viewer::{Row, ViewMode, Viewer};
+pub use watch::{WatchAction, WATCH_DEBOUNCE};
 pub use workspace::WorkspaceAction;
 
 use std::fmt;

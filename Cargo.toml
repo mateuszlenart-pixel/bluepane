@@ -32,6 +32,7 @@ egui_kittest = "0.36"
 egui-phosphor = "0.14"
 # Free and total space of a drive (one safe call on Windows and Linux).
 fs4 = { version = "1", default-features = false }
+notify = "8"
 # Docking: panels and tools as tabs that can be dragged, split and saved (layout in JSON).
 egui_dock = { version = "0.21", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }

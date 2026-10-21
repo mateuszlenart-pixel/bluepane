@@ -254,6 +254,12 @@ pub struct Session {
     pub hashes: crate::Hashes,
     /// Git status of the folders shown, for the Git column.
     pub git_status: crate::GitStatus,
+    /// Watches the folders of the panels for changes made by other programs.
+    pub(crate) watcher: bluepane_vfs::DirWatcher,
+    /// Watched folders that changed and wait to be read again.
+    pub(crate) watch_changed: Vec<std::path::PathBuf>,
+    /// When the first of those changes was seen.
+    pub(crate) watch_since: Option<std::time::Instant>,
     /// Cached footer text and bar scale of each panel (see `panel_stats`).
     pub(crate) stats_cache:
         std::sync::Mutex<[Option<(crate::dirsize::StatsKey, crate::PanelStats)>; 2]>,
@@ -460,6 +466,9 @@ impl Session {
             dir_sizes: crate::DirSizes::default(),
             hashes: crate::Hashes::default(),
             git_status: crate::GitStatus::default(),
+            watcher: bluepane_vfs::DirWatcher::new(),
+            watch_changed: Vec::new(),
+            watch_since: None,
             stats_cache: std::sync::Mutex::default(),
             disk_usage: crate::DiskUsage::default(),
             quick: None,
@@ -718,6 +727,7 @@ impl Session {
             Command::QueueDelete(n) => self.queue_delete(n)?,
             Command::QueueMove(n, to) => self.queue_move(n, to)?,
             Command::Limit(limit) => self.set_speed_limit(limit),
+            Command::Watch(action) => self.watch_action(action)?,
             Command::Theme(name) => self.set_theme(name)?,
             Command::DirSize => self.count_dir_sizes()?,
             Command::Hash(action) => self.hash_action(action)?,
@@ -1248,6 +1258,7 @@ impl Session {
     pub fn poll(&mut self) {
         self.poll_pages();
         self.update_quick();
+        self.poll_watch();
         loop {
             let Some(job) = &self.current else { return };
             match job.try_event() {

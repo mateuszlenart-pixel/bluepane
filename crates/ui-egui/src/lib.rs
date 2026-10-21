@@ -209,6 +209,9 @@ impl BluepaneUi {
             || self.session.thumbnails.is_working();
         if self.session.is_busy() || searching {
             ctx.request_repaint_after(Duration::from_millis(50));
+        } else if self.session.watching() {
+            // Idle: look at what the folder watcher collected a few times a second.
+            ctx.request_repaint_after(Duration::from_millis(250));
         }
         let cmd_id = egui::Id::new(CMD_LINE_ID);
         // While any text field (command line, path bar) has focus, keys belong to it.

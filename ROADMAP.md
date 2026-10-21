@@ -242,7 +242,7 @@ Sieć:
 Środowisko pracy:
 - [x] 14i przeniesione do 12s (obszary robocze i przywracanie sesji, tuż po etapie 12)
 - [ ] 14j **Terminal jako zakładka doku** w bieżącym katalogu (zależność `portable-pty` do zgody)
-- [ ] 14k **Obserwacja katalogów**: lista odświeża się sama po zmianach na dysku (zależność `notify` do zgody)
+- [x] 14k **Obserwacja katalogów**: lista odświeża się sama po zmianach na dysku (`notify`, za zgodą; `watch on|off`)
 - [ ] 14l **Git**: status plików w kolumnie, gałąź w okruszkach, podstawowe akcje (zależność albo `git` jako proces)
 - [ ] 14m **Szukanie z indeksem**: wyniki natychmiast, także po treści PDF/Word/Excel (tekst z crate'a `docs`); zapisane wyszukiwania jako wirtualne katalogi
 - [ ] 14n **Podgląd**: kolorowanie składni kodu, renderowany Markdown, edytor hex (z zapisem przez kopię i potwierdzenie), metadane plików multimedialnych
