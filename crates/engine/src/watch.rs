@@ -54,9 +54,17 @@ impl Session {
         }
         self.watch_since = None;
         let changed = std::mem::take(&mut self.watch_changed);
+        let mut reloaded = Vec::new();
         for panel in &mut self.panels {
             if watched_folder(panel).is_some_and(|dir| changed.contains(&dir)) {
                 panel.reload();
+                reloaded.push(panel.cwd.clone());
+            }
+        }
+        // The git marks and branch follow the files (the old ones stay until git answers).
+        if self.columns().contains(&crate::settings::Column::Git) {
+            for dir in reloaded {
+                self.git_status.start(dir);
             }
         }
     }

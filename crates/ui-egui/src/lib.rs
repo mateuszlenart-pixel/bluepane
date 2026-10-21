@@ -873,6 +873,17 @@ impl BluepaneUi {
                         }
                     }
                 });
+            // The git branch of the folder (when the git column is on).
+            if let Some(branch) = self.session.git_branch(index) {
+                ui.label(
+                    RichText::new(format!("git: {branch}"))
+                        .color(theme.accent)
+                        .small(),
+                )
+                .on_hover_text(
+                    "Gałąź repozytorium (↑ do wysłania, ↓ do pobrania względem upstreamu)",
+                );
+            }
             // How full the drive is: a thin bar and the numbers.
             if let Some(space) = space {
                 let used = space.used_fraction();

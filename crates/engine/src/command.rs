@@ -49,6 +49,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "dirsize",
     "hash",
     "gitstatus",
+    "git",
     "quick",
     "bind",
     "unbind",
@@ -488,6 +489,8 @@ pub enum Command {
     Hash(crate::HashAction),
     /// Ask git again about the folder of the active panel.
     GitStatus,
+    /// Basic git actions on the files under the cursor: add, unstage, commit, diff, log.
+    Git(crate::GitAction),
     /// Show the colour theme and the available ones, or switch to another.
     Theme(Option<String>),
     /// Send the file edited with F4 on a server back to it (Ctrl+Shift+F4).
@@ -593,6 +596,7 @@ impl Command {
             "dirsize" => Ok(Command::DirSize),
             "hash" => crate::hashes::parse_hash(rest).map(Command::Hash),
             "gitstatus" => Ok(Command::GitStatus),
+            "git" => crate::gitstatus::parse_git(rest).map(Command::Git),
             "quick" => Command::parse_quick(rest),
             "bind" => Ok(Command::Bind(match rest.split_once(char::is_whitespace) {
                 None if rest.is_empty() => None,

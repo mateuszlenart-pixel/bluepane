@@ -93,7 +93,7 @@ pub use fileclass::{class_of, class_of_name, FileClass};
 pub use filter::{FilterSpec, Only};
 pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_mode, format_modified, human_size, name_parts};
-pub use gitstatus::GitStatus;
+pub use gitstatus::{GitAction, GitStatus};
 pub use hashes::{HashAction, Hashes};
 pub use job::{
     Answer, ArchiveJob, Event, HostPrompt, JobKind, JobSpec, PackOptions, PasswordProblem,

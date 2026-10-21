@@ -801,3 +801,37 @@ fn the_scanner_offers_history_wake_and_site_buttons_for_a_selected_host() {
             .show_history
     );
 }
+
+#[test]
+fn the_git_branch_shows_beside_the_path_once_the_git_column_is_on() {
+    let (tmp, mut harness) = window();
+    let left = tmp.path().join("left");
+    let git = |args: &[&str]| bluepane_vfs_run(&left, args);
+    if !git(&["init", "-q", "-b", "main"]) {
+        return; // no git on this machine
+    }
+    harness.run_steps(2);
+    assert_eq!(
+        harness.query_all_by_label_contains("git: main").count(),
+        0,
+        "nothing is asked of git until the column is on"
+    );
+    command(&mut harness, "columns git");
+    for _ in 0..300 {
+        if !harness.state_mut().session_mut().git_status.is_running() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    harness.run_steps(4);
+    harness.get_by_label_contains("git: main");
+}
+
+/// Runs the `git` program in `dir`; false when it is missing or fails.
+fn bluepane_vfs_run(dir: &std::path::Path, args: &[&str]) -> bool {
+    std::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
