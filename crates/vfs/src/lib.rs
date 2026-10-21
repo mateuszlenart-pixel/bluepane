@@ -21,8 +21,8 @@ use std::time::SystemTime;
 
 pub use platform::{
     config_dir, copy_symlink, extended_path, file_mode, home_dir, make_writable, neighbours,
-    open_external, run_hidden, schedule_list, schedule_remove, schedule_set, set_mode,
-    spawn_program, volumes,
+    open_external, open_terminal, run_hidden, schedule_list, schedule_remove, schedule_set,
+    set_mode, spawn_program, volumes,
 };
 
 /// How full the drive holding a path is.

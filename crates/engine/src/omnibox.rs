@@ -56,6 +56,10 @@ pub fn classify(text: &str) -> Result<Target, EngineError> {
             Ok(Target::Command(command.to_string()))
         };
     }
+    if text.starts_with('!') {
+        // `!program argumenty` runs a program in the folder of the panel (the `run` command).
+        return Ok(Target::Command(text.to_string()));
+    }
     if let Some(pattern) = text.strip_prefix('?') {
         let pattern = pattern.trim();
         return if pattern.is_empty() {
@@ -388,6 +392,10 @@ mod tests {
             Target::Command("sort size".into())
         );
         assert_eq!(classify("?*.pdf").unwrap(), Target::Search("*.pdf".into()));
+        assert_eq!(
+            classify("!git status").unwrap(),
+            Target::Command("!git status".into())
+        );
         assert_eq!(
             classify("/home/ala").unwrap(),
             Target::Path("/home/ala".into())

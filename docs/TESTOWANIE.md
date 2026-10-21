@@ -120,7 +120,7 @@ Wygląd (czytelność, kolory, rozmiary) też zgłaszaj, nawet jeśli „działa
 
 ### Jak do tego podejść
 
-Lista jest długa (ok. 30 sekcji), więc nie przechodź jej w całości naraz. Proponowana kolejność:
+Lista jest długa (ok. 31 sekcji), więc nie przechodź jej w całości naraz. Proponowana kolejność:
 
 1. **Dym (4.0):** ok. 20 minut na każdym systemie. Jeśli tu coś nie działa, reszta ma mniejszy sens: zgłoś od razu.
 2. **Sekcje według ryzyka:** tabela niżej. Zacznij od **P1**.
@@ -141,7 +141,7 @@ Lista jest długa (ok. 30 sekcji), więc nie przechodź jej w całości naraz. P
 | 4.24 Skaner: Wake-on-LAN i udział `[Z]` | **P1** | prawdziwa sieć i urządzenia |
 | 4.25 SMB `[Z]` | **P1** | prawdziwy serwer SMB |
 | 4.26 Chmury rclone `[Z]` | **P1** | prawdziwe konto w chmurze |
-| 4.17–4.20, 4.22, 4.23, 4.30 (reszta) | P2 | nowe okna i narzędzia: wygląd, wygoda |
+| 4.17–4.20, 4.22, 4.23, 4.30 (reszta), 4.31 | P2 | nowe okna i narzędzia: wygląd, wygoda |
 | 4.1–4.16 | P2 na Windows, P3 na Linuksie | starsze funkcje; Windows nie był jeszcze sprawdzany |
 
 ### 4.0 Dym (L W, ok. 20 minut)
@@ -562,6 +562,17 @@ Potrzebny zainstalowany `git`. Dane: `repozytorium-git` (jeden commit i zmiany: 
 - [ ] Kursor na `media/zdjecie-exif.jpg`, `details` (albo `I` w podglądzie): rozmiar, daty, oraz pola EXIF: aparat **Aparat Żółć**, model `Model gęślą 5`, data 2025:07:14 18:30:05 (polskie znaki bez ucieczek). Na `zdjecie-bez-exif.jpg` komunikat o braku danych EXIF.
 - [ ] Na `media/utwor-tagi.wav`: czas trwania 0:00:01, 8000 Hz, wykonawca `Zespół Żółć`, tytuł `Gęślą jaźń`, album `Płyta testowa`, gatunek, ścieżka 7, rok 1999. Na katalogu: komunikat „to katalog”.
 
+### 4.31 Terminal tutaj i polecenie z wynikiem (L W) · P2
+
+`[CI]` sprawdza uruchamianie programu, przechwycenie wyjścia, kod wyjścia, przerwanie i znaczniki; **nie** otwiera prawdziwego terminala.
+
+- [ ] **Terminal:** w `~/bluepane-test/nazwy` komenda `terminal` (albo Ctrl+Shift+T): otwiera się terminal systemu, a jego bieżący katalog to katalog aktywnego panelu (`pwd` / `cd`). **L:** sprawdź też z ustawioną zmienną `TERMINAL`. **W:** Windows Terminal albo zwykła konsola.
+- [ ] **Wynik:** `!ls` (**W:** `!cmd /c dir`): w podglądzie lista plików katalogu panelu, na górze `$ …`, na dole `kod wyjścia: 0`; Esc zamyka.
+- [ ] **Znaczniki i polskie znaki:** kursor na `Zażółć gęślą.txt`, `!echo %n` (**L:** `!printf "%s\n" %f`): wyjście ma pełną nazwę z polskimi literami, bez zniekształceń. W **W** sprawdź to samo z `!cmd /c echo %n` (strona kodowa konsoli może zniekształcić litery: zapisz, jak wygląda).
+- [ ] **Błąd i kod wyjścia:** `!ls nie-ma-takiego` (**W:** `!cmd /c dir nie-ma-takiego`): w podglądzie sekcja „błędy (stderr)” i niezerowy kod wyjścia; pasek stanu „Kod wyjścia …”. Nieistniejący program (`!nie-ma-programu`) daje czytelny komunikat, bez podglądu.
+- [ ] **Przerwanie:** `!sleep 60` (**W:** `!ping -n 60 127.0.0.1`): okno nie zamarza, pasek stanu mówi „Działa: …”; druga komenda `!ls` w tym czasie odmawia, `runstop` kończy z „Przerwano”.
+- [ ] **Archiwum i serwer:** w archiwum zip albo na serwerze `terminal` i `!ls` odmawiają czytelnym komunikatem (działają tylko na dysku).
+
 ## 5. Wyniki
 
 Wypełnij po teście (skopiuj wiersze do wiadomości, jeśli wolisz).
@@ -599,6 +610,7 @@ Wypełnij po teście (skopiuj wiersze do wiadomości, jeśli wolisz).
 | **4.28 Git (P1)** |  |  | |
 | **4.29 Indeks (P1)** |  |  | |
 | **4.30 Podgląd: kolory, Markdown, hex, szczegóły (P1 hex)** |  |  | |
+| **4.31 Terminal tutaj i polecenie z wynikiem** |  |  | |
 
 Wpisuj `OK`, `część` (z `→` co nie działa), `brak` (nie sprawdzano, np. nie ma sprzętu) albo numer błędu. Wyniki możesz
 wysyłać **partiami**, po jednej sekcji.

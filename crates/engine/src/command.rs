@@ -91,6 +91,9 @@ pub const COMMAND_NAMES: &[&str] = &[
     "workspace",
     "macro",
     "button",
+    "terminal",
+    "run",
+    "runstop",
     "map",
     "cloud",
     "panel",
@@ -381,6 +384,12 @@ pub enum Command {
     Macro(crate::MacroAction),
     /// Own tool buttons: external programs with parameters.
     Button(crate::ButtonAction),
+    /// Open the system terminal in the folder of the active panel.
+    Terminal,
+    /// Run a program in the folder of the active panel and show its output (`run`, `!`).
+    Run(String),
+    /// Stop the program started with `run`.
+    RunStop,
     /// Disk usage map of the active folder.
     Map(crate::MapAction),
     /// Clouds through rclone: list them or open one in the active panel.
@@ -564,6 +573,12 @@ impl Command {
     /// Parses a command line such as `copy`, `mkdir Reports` or `cd /tmp`.
     pub fn parse(line: &str) -> Result<Command, EngineError> {
         let line = line.trim();
+        if let Some(command) = line.strip_prefix('!') {
+            return match command.trim() {
+                "" => Err(EngineError("!program argumenty (albo run ...)".into())),
+                command => Ok(Command::Run(command.to_string())),
+            };
+        }
         let (head, rest) = match line.split_once(char::is_whitespace) {
             Some((head, rest)) => (head, rest.trim()),
             None => (line, ""),
@@ -765,6 +780,9 @@ impl Command {
             }
             "cloud" | "chmura" => crate::cloud::parse_cloud(rest).map(Command::Cloud),
             "map" => crate::diskmap::parse_map(rest).map(Command::Map),
+            "terminal" => Ok(Command::Terminal),
+            "run" => need_arg("program i argumenty").map(Command::Run),
+            "runstop" => Ok(Command::RunStop),
             "button" | "btn" => crate::buttons::parse_button(rest).map(Command::Button),
             "macro" | "mac" => crate::macros::parse_macro(rest).map(Command::Macro),
             "workspace" | "ws" => crate::workspace::parse_workspace(rest).map(Command::Workspace),

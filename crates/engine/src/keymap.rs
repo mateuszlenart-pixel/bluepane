@@ -52,6 +52,7 @@ impl Default for Keymap {
             ("Ctrl+Shift+Num2", "copynames file"),
             ("Ctrl+Shift+Num3", "copynames path"),
             ("Ctrl+N", "scan"),
+            ("Ctrl+Shift+T", "terminal"),
             ("Ctrl+Shift+F4", "editsend"),
             ("Alt+F7", "find"),
             // Many Linux window managers (Cinnamon, KDE, ...) take Alt+F7 for moving windows.

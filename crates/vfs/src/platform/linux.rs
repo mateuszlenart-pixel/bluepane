@@ -11,6 +11,33 @@ pub fn is_hidden(name: &str, _meta: &Metadata) -> bool {
     name.starts_with('.')
 }
 
+/// Terminal emulators to try, in order; each starts in `dir` (the working directory of the
+/// process). `$TERMINAL` (a command line) comes first when set.
+pub fn terminal_candidates(_dir: &Path) -> Vec<(String, Vec<String>)> {
+    let mut list = Vec::new();
+    if let Some(own) = std::env::var("TERMINAL")
+        .ok()
+        .filter(|t| !t.trim().is_empty())
+    {
+        let mut words = own.split_whitespace().map(str::to_string);
+        if let Some(program) = words.next() {
+            list.push((program, words.collect()));
+        }
+    }
+    for program in [
+        "x-terminal-emulator",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "alacritty",
+        "kitty",
+        "xterm",
+    ] {
+        list.push((program.to_string(), Vec::new()));
+    }
+    list
+}
+
 /// Runs a program in `dir` and collects its output (nothing is shown on screen).
 pub fn run_hidden(program: &str, args: &[&str], dir: &Path) -> io::Result<std::process::Output> {
     std::process::Command::new(program)

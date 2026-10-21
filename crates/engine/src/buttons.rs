@@ -126,19 +126,25 @@ impl Session {
             .iter()
             .find(|b| b.name.to_lowercase() == name.trim().to_lowercase())
             .ok_or_else(|| EngineError(format!("nie ma przycisku „{name}”")))?;
+        self.expand_line(&button.line)
+    }
+
+    /// Splits a command line into program and arguments and fills in `%f %n %d %o %s` from the
+    /// panels. It runs in the folder of the active panel, which must be on the disk.
+    pub(crate) fn expand_line(&self, line: &str) -> Result<ButtonLaunch, EngineError> {
         let dir = self.active_panel().location();
         if !dir.is_dir() {
             return Err(EngineError(
-                "przycisk działa w katalogu na dysku, nie w archiwum ani na serwerze".into(),
+                "działa w katalogu na dysku, nie w archiwum ani na serwerze".into(),
             ));
         }
         let other = self.panels[1 - self.active].location();
         let targets = self.active_panel().target_entries();
         let under = self.active_panel().current().filter(|e| e.name != "..");
-        let mut words = split_words(&button.line).into_iter();
+        let mut words = split_words(line).into_iter();
         let program = words
             .next()
-            .ok_or_else(|| EngineError("przycisk nie ma programu".into()))?;
+            .ok_or_else(|| EngineError("brak programu do uruchomienia".into()))?;
         let mut args = Vec::new();
         for word in words {
             if word == "%s" {

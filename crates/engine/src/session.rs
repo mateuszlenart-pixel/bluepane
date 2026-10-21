@@ -328,6 +328,8 @@ pub struct Session {
     pub compare: Option<crate::CompareView>,
     /// Own tool buttons (`buttons.conf`).
     pub buttons: Vec<crate::Button>,
+    /// The program started with `run`, while it works.
+    pub(crate) run_job: Option<crate::runcmd::RunJob>,
     pub(crate) recording: Option<crate::macros::Recording>,
     pub(crate) macro_depth: u8,
     /// Text the front end should put in the command line (taken with `take`).
@@ -511,6 +513,7 @@ impl Session {
             duplicates: None,
             compare: None,
             buttons: Vec::new(),
+            run_job: None,
             recording: None,
             macro_depth: 0,
             command_prefill: None,
@@ -706,6 +709,9 @@ impl Session {
             Command::Workspace(action) => self.workspace_action(action)?,
             Command::Macro(action) => self.macro_action(action)?,
             Command::Button(action) => self.button_action(action)?,
+            Command::Terminal => self.open_terminal_here()?,
+            Command::Run(line) => self.run_command(&line)?,
+            Command::RunStop => self.stop_run()?,
             Command::Map(action) => self.map_action(action)?,
             Command::Cloud(action) => self.cloud_action(action)?,
             Command::Compare(action) => self.compare_action(action)?,
@@ -1271,6 +1277,7 @@ impl Session {
         self.poll_pages();
         self.update_quick();
         self.poll_watch();
+        self.poll_run();
         self.poll_index();
         loop {
             let Some(job) = &self.current else { return };
