@@ -253,7 +253,7 @@ Cel: instalacja z gotowych paczek na czystej maszynie, bez Rusta i bez kompilacj
 
 - [x] 9a **Wersja i tożsamość programu**: numer wersji w jednym miejscu (workspace, 0.1.0), `bluepane --version`, komenda `about` (wersja, licencja, system, ustawienia; zestawienie bibliotek zostaje w `Cargo.lock`), ikona okna już była, plik `CHANGELOG.md`
 - [x] 9b **Wydania na GitHubie**: workflow `Wydanie` (tag `vX.Y.Z`, sprawdza zgodność z `Cargo.toml`) buduje paczki tar.gz i zip na obu systemach i dołącza je do Releases z `SHA256SUMS.txt` i notatkami z `CHANGELOG.md`; ręczne uruchomienie to próba generalna bez wydania; instrukcja w `docs/WYDANIA.md`
-- [ ] 9c **Windows**: wersja przenośna (zip) oraz instalator (MSI albo setup.exe) ze skrótem w menu Start i odinstalowaniem; opcjonalnie wpis do `winget`
+- [x] 9c **Windows**: wersja przenośna (zip, z 9b) oraz instalator Inno Setup (`installer/bluepane.iss`): skrót w menu Start, opcjonalnie na pulpicie, odinstalowanie, instalacja bez praw administratora; ikona `.ico` z istniejącej ikony okna; workflow testuje cichą instalację i odinstalowanie. Wpis do `winget` odłożony (wymaga publicznego wydania i zgłoszenia do cudzego repozytorium)
 - [ ] 9d **Linux**: AppImage i paczka `.deb` z plikiem `.desktop`, ikoną i zależnościami systemowymi (`git`, `smbclient`, `rclone` jako opcjonalne)
 - [ ] 9e **Test na czystej maszynie**: instalacja, uruchomienie, aktualizacja i odinstalowanie na świeżym Windows i Linuksie (maszyna wirtualna), lista kontrolna w `docs/TESTOWANIE.md`, instrukcja instalacji w `README.md`
 

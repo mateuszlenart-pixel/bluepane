@@ -13,6 +13,7 @@ on:
       - ".github/workflows/release.yml"
       - "tools/wersja.sh"
       - "tools/wydanie-notatki.sh"
+      - "installer/**"
       - "CHANGELOG.md"
 
 env:
@@ -82,9 +83,44 @@ jobs:
           $name = "bluepane-$env:VERSION-windows-x86_64"
           New-Item -ItemType Directory -Force "dist/$name" | Out-Null
           Copy-Item target/release/bluepane.exe, target/release/bluepane-cli.exe "dist/$name/"
-          Copy-Item LICENSE-MIT, LICENSE-APACHE, README.md, CHANGELOG.md "dist/$name/"
+          Copy-Item LICENSE-MIT, LICENSE-APACHE, README.md, CHANGELOG.md, apps/bluepane/assets/icon.ico "dist/$name/"
           Copy-Item -Recurse docs "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "$name.zip"
+      - name: Installer (Windows, Inno Setup)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            foreach ($dir in "${env:ProgramFiles(x86)}\Inno Setup 6", "$env:ProgramFiles\Inno Setup 6") {
+              if (Test-Path "$dir\ISCC.exe") { $iscc = "$dir\ISCC.exe"; break }
+            }
+          }
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          $name = "bluepane-$env:VERSION-windows-x86_64"
+          & $iscc "/DAppVersion=$env:VERSION" "/DSourceDir=$PWD\dist\$name" "/DOutDir=$PWD" installer\bluepane.iss
+          if ($LASTEXITCODE -ne 0) { throw "iscc zakończył się kodem $LASTEXITCODE" }
+          Get-ChildItem bluepane-*-setup.exe
+      - name: Installer test (silent install, run, uninstall)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem bluepane-*-setup.exe).FullName
+          $dir = Join-Path $env:RUNNER_TEMP 'Zażółć bluepane'
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$dir`"",'/TASKS=desktopicon' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "instalacja: kod $($p.ExitCode)" }
+          foreach ($f in 'bluepane.exe','bluepane-cli.exe','LICENSE-MIT','CHANGELOG.md','docs\KOMENDY.md','unins000.exe') {
+            if (-not (Test-Path "$dir\$f")) { throw "po instalacji brak pliku: $f" }
+          }
+          $v = & "$dir\bluepane-cli.exe" --version
+          if ($v -ne "bluepane-cli $env:VERSION") { throw "zła wersja po instalacji: $v" }
+          $u = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "odinstalowanie: kod $($u.ExitCode)" }
+          Start-Sleep -Seconds 3
+          if (Test-Path "$dir\bluepane.exe") { throw 'po odinstalowaniu bluepane.exe nadal jest' }
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Linux'
         with:
@@ -95,7 +131,9 @@ jobs:
         if: runner.os == 'Windows'
         with:
           name: paczka-windows
-          path: bluepane-*.zip
+          path: |
+            bluepane-*.zip
+            bluepane-*-setup.exe
           retention-days: 14
 
   release:
