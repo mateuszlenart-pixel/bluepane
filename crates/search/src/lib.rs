@@ -6,6 +6,7 @@
 //! reports progress through `bluepane_ops::Progress`. Nothing is ever written.
 
 mod encoding;
+mod index;
 mod matcher;
 mod text;
 mod walk;
@@ -14,6 +15,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 pub use encoding::decode_cp1250;
+pub use index::{fold, words_of, BuildSummary, Field, Index, IndexQuery, IndexedFile};
 pub use walk::search;
 
 /// How the bytes of a file are read as text.

@@ -146,6 +146,16 @@ Komenda: `jump [tekst]`, `jump query <tekst>`, `jump move <n>`, `jump run`, `jum
 
 Zmiana działa od razu. Motywy: `theme dark|light|system`.
 
+## Indeks do szukania (`index`)
+
+Szukanie, które odpowiada od razu: nazwy plików i słowa z ich treści są w indeksie w pamięci (i w pliku `index.dat` w katalogu konfiguracji), więc zapytanie nie czyta dysku. **Nic nie jest indeksowane, dopóki sam nie dodasz katalogu**: `index add here` (albo `index add <katalog>`) dodaje katalog i buduje indeks w tle; `index` pokazuje postęp i stan, `index stop` przerywa (zostaje poprzedni indeks).
+
+- **Co jest w indeksie:** nazwy wszystkich widocznych plików oraz słowa z treści: plików tekstowych (UTF-8 albo Windows-1250, do 8 MB) i dokumentów (PDF, Word, Excel, OpenDocument, RTF, PowerPoint; tekst z tego samego modułu co F3, do 64 MB). Pliki binarne wchodzą tylko nazwą. Pomijane: ukryte pliki, dowiązania do katalogów, `.git` i `node_modules`.
+- **Zapytanie** (`index find <słowa>`): wszystkie słowa muszą pasować. Słowo pasuje do **nazwy** (fragment) albo do **treści** (początek słowa: `dokum` znajduje „dokument”); wielkość liter i polskie znaki nie mają znaczenia (`zolw` znajduje „żółw”). `name:słowo` szuka tylko w nazwach, `text:słowo` tylko w treści, `ext:pdf` po rozszerzeniu. Wyniki trafiają do aktywnego panelu jako lista plików (Backspace wraca do katalogu), tak jak z `findpanel`.
+- **Aktualizacja:** `index update` przechodzi katalogi jeszcze raz, ale czyta tylko pliki ze zmienionym rozmiarem lub datą; usunięte znikają. Dzieje się to wyłącznie na polecenie. `index remove <katalog>` zdejmuje katalog z indeksu, `index clear` usuwa cały indeks.
+- **Zapisane wyszukiwania jako wirtualne katalogi:** `index save <nazwa> [słowa]` zapisuje zapytanie (bez słów: ostatnie), `index open <nazwa>` pokazuje jego wyniki jako katalog w panelu (za każdym razem pyta indeks na nowo, więc pokazuje aktualne pliki), `index list`, `index forget <nazwa>`. Plik `searches.conf`.
+- **Ograniczenia:** indeks jest tak świeży, jak ostatni `index update` (wyniki mogą wskazywać plik, którego już nie ma: lista panelu pomija usunięte); słowa to ciągi liter i cyfr (bez fraz w cudzysłowie, bez wyrażeń regularnych: do tego jest `find`); plik z więcej niż 20 000 różnych słów jest indeksowany do tego limitu; UTF-16 i archiwa nie wchodzą do indeksu (archiwa przeszuka `find`).
+
 ## Samoodświeżanie list
 
 Gdy inny program zmieni katalog pokazany w panelu (pobieranie, kompilacja, zapis pliku), lista odświeża się sama, a kursor zostaje na swoim pliku i zaznaczenie się nie gubi. Program prosi system o powiadomienia (inotify na Linuksie, ReadDirectoryChangesW na Windows, crate `notify`) i **patrzy tylko na katalogi dwóch aktywnych paneli**, bez podkatalogów; archiwa, serwery i listy wyników nie są obserwowane. Serię zmian czyta raz, po ćwierć sekundy ciszy. Nic nie jest skanowane w tle.

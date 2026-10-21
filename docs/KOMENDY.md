@@ -93,6 +93,12 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `queueretry <numer>` | ustawia zakończone zadanie w kolejce jeszcze raz (1 = najnowsze) |
 | `queueclear` | czyści historię zakończonych zadań |
 
+## Szukanie
+
+| Komenda | Opis |
+| --- | --- |
+| `index [status\|add <katalog>\|remove <katalog>\|update\|stop\|clear\|find <słowa>\|save <nazwa> [słowa]\|open <nazwa>\|list\|forget <nazwa>]` | indeks do natychmiastowego szukania (alias: idx): `add` (albo `add here`) dodaje katalog i buduje indeks w tle (dopiero na Twoje polecenie), `find` szuka po nazwach i treści plików (też PDF, Word, Excel) bez polskich znaków i po początku słowa, wyniki trafiają do panelu jako lista; `name:`, `text:` i `ext:` zawężają, `save`/`open` zapisują wyszukiwanie pod nazwą jako wirtualny katalog; `update` czyta tylko zmienione pliki |
+
 ## Panele i nawigacja
 
 | Komenda | Opis |

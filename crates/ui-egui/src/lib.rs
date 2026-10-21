@@ -204,6 +204,7 @@ impl BluepaneUi {
             || self.session.dir_sizes.is_running()
             || self.session.hashes.is_running()
             || self.session.git_status.is_running()
+            || self.session.search_index.is_building()
             || self.session.disk_usage.is_asking()
             || self.session.quick_pending()
             || self.session.thumbnails.is_working();
