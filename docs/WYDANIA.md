@@ -26,9 +26,10 @@ polecenie), nigdy samo z siebie.
 | --- | --- |
 | `bluepane-X.Y.Z-linux-x86_64.tar.gz` | `bluepane`, `bluepane-cli`, licencje, README, CHANGELOG, `docs/` (budowane na Ubuntu 22.04, działa też na starszych dystrybucjach) |
 | `bluepane-X.Y.Z-windows-x86_64.zip` | to samo z `.exe`, bez okna konsoli |
+| `bluepane-X.Y.Z-windows-x86_64-setup.exe` | instalator (Inno Setup, `installer/bluepane.iss`): domyślnie dla bieżącego użytkownika bez praw administratora, okno pozwala wybrać instalację dla wszystkich; skrót w menu Start (opcjonalnie na pulpicie), odinstalowanie w „Aplikacje”; ustawienia w `%APPDATA%\bluepane` zostają po odinstalowaniu |
 | `SHA256SUMS.txt` | sumy kontrolne wszystkich plików powyżej |
 
-Instalator Windows, AppImage i `.deb` dochodzą w podetapach 9c i 9d. Kod nie jest podpisany:
+AppImage i `.deb` dochodzą w podetapie 9d. Workflow sam sprawdza instalator: cicha instalacja do katalogu z polskimi znakami, `bluepane-cli --version`, odinstalowanie. Kod nie jest podpisany:
 Windows SmartScreen pokaże ostrzeżenie o nieznanym wydawcy („Więcej informacji” > „Uruchom mimo to”).
 
 ## Skrypty
