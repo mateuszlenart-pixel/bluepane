@@ -22,6 +22,7 @@ mod secrets;
 mod sftp;
 mod sftp_transfer;
 mod sites;
+mod smb;
 mod tls;
 
 #[doc(hidden)]
@@ -40,3 +41,4 @@ pub use secrets::{
 };
 pub use sftp::{Auth, ConnectParams, SftpConnection};
 pub use sites::{SecretStore, Site, Sites};
+pub use smb::{SmbFs, SmbOutput, SmbRunner, SystemSmb, SMB_NOT_INSTALLED};

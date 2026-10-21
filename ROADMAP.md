@@ -234,7 +234,7 @@ Porządek na dysku:
 - [x] 14d Zmiana nazw z danymi z pliku: data **EXIF** zdjęcia (`[EXIF:YMD]`), tagi audio (zależności do zgody)
 
 Sieć:
-- [ ] 14e **Udziały SMB jako katalog w panelu** (`smb://host/udział`) bez montowania w systemie (zależność do zgody albo `smbclient` jako proces)
+- [x] 14e **Udziały SMB jako katalog w panelu** (`smb://host/udział`) bez montowania w systemie (`smbclient` jako proces, bez nowej zależności; bez smbclienta stara droga: UNC / GVFS)
 - [x] 14f Skaner: **Wake-on-LAN**, „dodaj jako witrynę" i „otwórz udział w panelu" jednym kliknięciem, historia skanów (nowe urządzenia oznaczone)
 - [x] 14g Chmury przez **`rclone`** (gdy zainstalowany): WebDAV, S3, Google Drive, OneDrive jako katalogi w panelu
 - [x] 14h Zapisane **profile synchronizacji** (para katalogów + ustawienia) i uruchamianie z harmonogramu (13d)

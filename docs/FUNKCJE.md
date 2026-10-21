@@ -83,7 +83,7 @@ Klik w puste miejsce za okruszkami nad panelem zamienia je w pole tekstowe; Ente
 
 - **ścieżka** (też względna, wnętrze archiwum, katalog na serwerze) – przejście tam,
 - **`sftp://użytkownik@host:port/katalog`** (też `ftp://`, `ftps://`) – połączenie z serwerem i przejście do katalogu. Znaną witrynę (ten sam host, protokół, port i użytkownik) program wykorzysta, nieznaną zapisze jako `użytkownik@host` (hasło pyta przy łączeniu; dla FTP bez użytkownika jest `anonymous`; dla SFTP użytkownik jest wymagany),
-- **`smb://komputer/udział`** – otwiera udział w menedżerze plików systemu; `smb://komputer` pokazuje udziały komputera (adres IP, jak w skanerze),
+- **`smb://[użytkownik@]komputer[/udział[/katalog]]`** – udziały sieciowe SMB w panelu, patrz „Udziały SMB” niżej. Bez zainstalowanego `smbclient` otwiera sam udział tak, jak robi to system (UNC na Windows, GVFS na Linuksie); `smb://komputer` pokazuje wtedy udziały komputera (adres IP, jak w skanerze),
 - **`?maska`** – szuka plików o tej nazwie w bieżącym katalogu (otwiera okno szukania z wynikami),
 - **`>komenda`** – uruchamia komendę, np. `>sort size`.
 
@@ -356,6 +356,16 @@ Google Drive, OneDrive, S3, WebDAV i reszta chmur, które zna program **rclone**
 - Panel działa jak przy SFTP: Enter / Backspace, F5 pobiera i wysyła (także całe katalogi), F7 nowy katalog, F2 zmiana nazwy (nigdy nie zastępuje istniejącego), F8 usuwa **trwale** (kosz chmury jest sprawą rclone i samej chmury; pytanie mówi to wprost). Pobieranie idzie przez plik `.bpart`, więc przerwane nie zostawia pół pliku pod prawdziwą nazwą; postęp pobierania rośnie razem z plikiem, wysyłanie zalicza się na końcu.
 - Czego nie ma: uprawnień (`chmod`), wznawiania przerwanego pobierania i śledzenia postępu wysyłania w trakcie (to wymagałoby parsowania wyjścia rclone). Chmury bez znanego rozmiaru plików (np. dokumenty Google) pokazują 0 B.
 - Prawdziwy rclone nie jest uruchamiany w testach: sprawdzają one komendy `lsjson`, `mkdir`, `deletefile`, `rmdir`, `moveto`, `copyto` na atrapie, więc pierwszy prawdziwy test na koncie chmury jest Twój.
+
+## Udziały SMB
+
+Udział Windows / Samby jest katalogiem w panelu **bez montowania w systemie**: bluepane prosi o listę, kopiowanie i usuwanie program **smbclient** (Linux: pakiet `smbclient`; Windows: `smb://` otwiera wtedy udział przez ścieżkę UNC `\\komputer\udział`, o ile smbclient nie jest zainstalowany).
+
+- `go smb://ala@nas/dane/Zdjęcia` łączy się jako `ala` (pyta o hasło), zapisuje witrynę `ala@nas (smb)` (menedżer serwerów, Ctrl+S, ma protokół „Udziały SMB”; puste pole użytkownika to logowanie jako gość) i otwiera katalog `Zdjęcia` w udziale `dane`. Katalog główny serwera (`cd /`) to **lista udziałów** (bez ukrytych `C$`, `IPC$` i drukarek); udział jest katalogiem, jak zwykły.
+- Panel działa jak przy SFTP: Enter / Backspace, F5 pobiera i wysyła (także całe katalogi), F7 nowy katalog, F2 zmiana nazwy (nie zastępuje istniejącego; przenosić można w obrębie jednego udziału), F8 usuwa **trwale** (udział nie ma kosza; pytanie mówi to wprost). Pobieranie i wysyłanie idą przez plik `.bpart`, który po dokończeniu dostaje prawdziwą nazwę; postęp pobierania rośnie razem z plikiem, wysyłanie zalicza się na końcu.
+- Hasło idzie do smbclienta zmienną środowiskową `PASSWD`, nie w wierszu poleceń, więc nie widać go na liście procesów.
+- Czego nie ma: uprawnień (`chmod`), wznawiania przerwanego pobierania, nazw zawierających `"` albo `;` (smbclient dzieli skrypt po średnikach; takie nazwy dostają komunikat), przenoszenia między udziałami jednym ruchem (kopiuj i usuń). Daty plików są czasem serwera zinterpretowanym jako lokalny.
+- Prawdziwy serwer SMB nie jest używany w testach: sprawdzają one polecenia `-L`, `ls`, `mkdir`, `del`, `rmdir`, `rename`, `get`, `put` na atrapie, więc pierwszy prawdziwy test na udziale jest Twój.
 
 ## Kolejka zadań (Ctrl+J)
 

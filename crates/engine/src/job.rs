@@ -116,6 +116,8 @@ pub enum RemoteOp {
         services: Arc<dyn sftp::SecretServices>,
         /// How `rclone` is started, for sites of the cloud kind.
         rclone: Arc<dyn sftp::RcloneRunner>,
+        /// How `smbclient` is started, for sites of the SMB kind.
+        smb: Arc<dyn sftp::SmbRunner>,
     },
     /// Saves a site's password in the store its secret points at (Bitwarden can take a
     /// moment, so this is not done on the interface thread).

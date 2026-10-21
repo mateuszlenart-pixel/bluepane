@@ -9,7 +9,7 @@ mod process;
 mod schedule;
 mod smb;
 
-pub use process::run_cancellable;
+pub use process::{run_cancellable, run_cancellable_env};
 pub use schedule::{ScheduleWhen, ScheduledTask};
 pub use smb::{list_shares, open_remote_desktop, share_folder, Share, ShareKind};
 

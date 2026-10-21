@@ -12,7 +12,7 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `up` | wychodzi do katalogu nadrzędnego (Backspace) |
 | `enter` | wchodzi do katalogu, archiwum albo serwera pod kursorem (Enter) |
 | `cd <ścieżka>` | przechodzi do katalogu; obsługuje też ścieżki serwera i wnętrza archiwum |
-| `go <adres>` | to, co robi pole ścieżki: ścieżka, `sftp://użytkownik@host:port/katalog` (też ftp://, ftps://), `smb://komputer/udział`, `?maska` szuka plików w katalogu, `>komenda` ją uruchamia |
+| `go <adres>` | to, co robi pole ścieżki: ścieżka, `sftp://użytkownik@host:port/katalog` (też ftp://, ftps://), `smb://użytkownik@komputer/udział/katalog` (udziały SMB w panelu przez smbclient), `?maska` szuka plików w katalogu, `>komenda` ją uruchamia |
 | `back` | wraca do poprzedniego katalogu z historii panelu (Alt+←) |
 | `forward` | idzie naprzód w historii katalogów panelu (Alt+→) |
 | `volume <numer\|nazwa>` | przechodzi na dysk (alias: drive); numery jak w liście dysków (Alt+1…9) |

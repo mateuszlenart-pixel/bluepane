@@ -109,7 +109,8 @@ impl Session {
                 let protocol =
                     bluepane_remote::Protocol::from_word(value.trim()).ok_or_else(|| {
                         EngineError(
-                            "siteset protocol: sftp, ftp, ftps, ftps-implicit albo rclone".into(),
+                            "siteset protocol: sftp, ftp, ftps, ftps-implicit, rclone albo smb"
+                                .into(),
                         )
                     })?;
                 // A port that was the old protocol's default follows the change.
@@ -245,10 +246,13 @@ impl Session {
             ));
         }
         // A cloud has no login here: rclone keeps its own.
-        if password.is_none()
-            && site.secret == SecretStore::Ask
-            && site.protocol != bluepane_remote::Protocol::Rclone
-        {
+        // An SMB share opened as a guest (no user) has no password either.
+        let no_login = match site.protocol {
+            bluepane_remote::Protocol::Rclone => true,
+            bluepane_remote::Protocol::Smb => site.user.is_empty(),
+            _ => false,
+        };
+        if password.is_none() && site.secret == SecretStore::Ask && !no_login {
             self.status = format!(
                 "Hasło do {} (Enter = połącz, Esc = anuluj; puste = bez hasła)",
                 site.label()
@@ -281,6 +285,7 @@ impl Session {
                 known: self.known_hosts.clone(),
                 services: self.secrets.clone(),
                 rclone: self.rclone.clone(),
+                smb: self.smb.clone(),
             },
         ));
     }

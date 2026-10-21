@@ -28,9 +28,11 @@ pub enum Target {
         port: Option<u16>,
         dir: Option<String>,
     },
+    /// `smb://[user@]host[/share[/folder]]`: `path` is everything after the host.
     Share {
+        user: Option<String>,
         host: String,
-        name: Option<String>,
+        path: Option<String>,
     },
     /// Anything else: a local, archive or server folder for `cd`.
     Path(String),
@@ -65,9 +67,13 @@ pub fn classify(text: &str) -> Result<Target, EngineError> {
     if let Some((scheme, rest)) = text.split_once("://") {
         let scheme = scheme.to_ascii_lowercase();
         if scheme == "smb" {
-            let (host, name) = match rest.split_once('/') {
-                Some((host, name)) => (host, Some(name.trim_matches('/').to_string())),
+            let (authority, path) = match rest.split_once('/') {
+                Some((host, path)) => (host, Some(path.trim_matches('/').to_string())),
                 None => (rest, None),
+            };
+            let (user, host) = match authority.rsplit_once('@') {
+                Some((user, host)) => (Some(user.to_string()), host),
+                None => (None, authority),
             };
             if host.is_empty() {
                 return Err(EngineError(
@@ -75,8 +81,9 @@ pub fn classify(text: &str) -> Result<Target, EngineError> {
                 ));
             }
             return Ok(Target::Share {
+                user: user.filter(|u| !u.is_empty()),
                 host: host.to_string(),
-                name: name.filter(|n| !n.is_empty()),
+                path: path.filter(|p| !p.is_empty()),
             });
         }
         if let Some(protocol) = Protocol::from_word(&scheme) {
@@ -140,7 +147,7 @@ impl Session {
                 self.run_line(&format!("findset name \"{pattern}\""))?;
                 self.run_line("findrun")
             }
-            Target::Share { host, name } => self.omnibox_share(&host, name),
+            Target::Share { user, host, path } => self.omnibox_share(user, &host, path),
             Target::Server {
                 protocol,
                 user,
@@ -151,11 +158,63 @@ impl Session {
         }
     }
 
-    fn omnibox_share(&mut self, host: &str, name: Option<String>) -> Result<(), EngineError> {
-        match name {
+    /// `smb://host/share/folder`: through `smbclient` as a server in the panel when it is
+    /// installed; otherwise the share is opened the way the system does (a UNC path on
+    /// Windows, a GVFS mount on Linux), which only reaches the share, not a folder in it.
+    fn omnibox_share(
+        &mut self,
+        user: Option<String>,
+        host: &str,
+        path: Option<String>,
+    ) -> Result<(), EngineError> {
+        if self.smb.available() {
+            return self.smb_connect(user, host, path);
+        }
+        match path.as_deref().map(|p| p.split('/').next().unwrap_or(p)) {
             Some(name) => self.run_line(&format!("scanshare {host} {name}")),
             None => self.run_line(&format!("scanshares {host}")),
         }
+    }
+
+    /// Opens an SMB server in the active panel, saving it as a site on first use.
+    fn smb_connect(
+        &mut self,
+        user: Option<String>,
+        host: &str,
+        path: Option<String>,
+    ) -> Result<(), EngineError> {
+        self.load_config();
+        let port = Protocol::Smb.default_port();
+        let known = self.sites.sites.iter().find(|s| {
+            s.protocol == Protocol::Smb
+                && s.host.eq_ignore_ascii_case(host)
+                && user.as_ref().is_none_or(|u| *u == s.user)
+        });
+        let name = match known {
+            Some(site) => site.name.clone(),
+            None => {
+                let user = user.unwrap_or_default();
+                let name = if user.is_empty() {
+                    format!("{host} (smb)")
+                } else {
+                    format!("{user}@{host} (smb)")
+                };
+                let mut site = Site::new(name.clone(), host, user);
+                site.protocol = Protocol::Smb;
+                site.port = port;
+                site.secret = SecretStore::Ask;
+                if let Some(problem) = site.problem() {
+                    return Err(EngineError(format!("smb://{host}: {problem}")));
+                }
+                self.sites
+                    .upsert(site)
+                    .map_err(|e| EngineError(format!("nie udało się zapisać witryny: {e}")))?;
+                self.status = format!("Zapisano witrynę {name} (komenda sites)");
+                name
+            }
+        };
+        self.after_connect = path.map(|p| (name.clone(), format!("/{p}")));
+        self.connect_site(&name, None)
     }
 
     fn omnibox_server(
@@ -371,15 +430,25 @@ mod tests {
         assert_eq!(
             classify("smb://nas/zdjecia").unwrap(),
             Target::Share {
+                user: None,
                 host: "nas".into(),
-                name: Some("zdjecia".into())
+                path: Some("zdjecia".into())
             }
         );
         assert_eq!(
             classify("smb://192.168.1.5").unwrap(),
             Target::Share {
+                user: None,
                 host: "192.168.1.5".into(),
-                name: None
+                path: None
+            }
+        );
+        assert_eq!(
+            classify("smb://ala@nas/dane/Zdjęcia/2025/").unwrap(),
+            Target::Share {
+                user: Some("ala".into()),
+                host: "nas".into(),
+                path: Some("dane/Zdjęcia/2025".into())
             }
         );
         assert!(classify("smb://").is_err());
@@ -411,6 +480,112 @@ mod tests {
             "the search window opened"
         );
         assert!(s.run_line("go sftp://nas").is_err(), "SFTP needs a user");
+    }
+
+    fn smb_session(tmp: &Path) -> Session {
+        let mut s = session(tmp);
+        let server = tmp.join("server");
+        std::fs::create_dir_all(server.join("dane/Zdjęcia/2025")).unwrap();
+        std::fs::write(server.join("dane/zażółć.txt"), "treść").unwrap();
+        std::fs::write(server.join("dane/Zdjęcia/2025/a.jpg"), "jpg").unwrap();
+        s.smb = std::sync::Arc::new(bluepane_remote::testing::FakeSmb::new(
+            &server,
+            &["dane", "Wideo"],
+            Some(("ala", "tajne")),
+        ));
+        s
+    }
+
+    /// Types the password into the question the connection asked.
+    fn answer_password(s: &mut Session, password: &str) {
+        match s.pending.as_mut() {
+            Some(crate::session::Pending::Input { text, .. }) => *text = password.to_string(),
+            other => panic!("expected the password question, got {other:?}"),
+        }
+        s.run_line("confirm").unwrap();
+    }
+
+    #[test]
+    fn an_smb_server_lists_its_shares_and_a_share_opens_at_a_folder_asking_for_the_password() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = smb_session(tmp.path());
+        s.run_line("go smb://ala@nas/dane/Zdjęcia").unwrap();
+        assert!(s.pending.is_some(), "a user means a password question");
+        answer_password(&mut s, "tajne");
+        s.wait_idle();
+        s.wait_idle();
+        let panel = s.active_panel();
+        assert!(panel.remote.is_some(), "{}", s.status);
+        let names: Vec<&str> = panel.entries.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"2025"), "{names:?}");
+        let site = s.sites.get("ala@nas (smb)").unwrap();
+        assert_eq!(
+            (
+                site.protocol,
+                site.host.as_str(),
+                site.port,
+                site.user.as_str()
+            ),
+            (Protocol::Smb, "nas", 445, "ala")
+        );
+        // The server's root is the list of shares, without the hidden ones.
+        s.run_line("cd /").unwrap();
+        s.wait_idle();
+        let names: Vec<&str> = s
+            .active_panel()
+            .entries
+            .iter()
+            .map(|e| e.name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"dane") && names.contains(&"Wideo"),
+            "{names:?}"
+        );
+        assert!(!names.iter().any(|n| n.ends_with('$')), "{names:?}");
+        // The same server again reuses the site.
+        s.run_line("disconnect").unwrap();
+        s.run_line("go smb://ala@nas").unwrap();
+        assert_eq!(s.sites.sites.len(), 1);
+    }
+
+    #[test]
+    fn a_wrong_smb_password_is_reported_and_a_missing_smbclient_falls_back_to_the_system() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = smb_session(tmp.path());
+        s.run_line("go smb://ala@nas/dane").unwrap();
+        answer_password(&mut s, "zle");
+        s.wait_idle();
+        assert!(s.active_panel().remote.is_none());
+        assert!(
+            s.status.contains("login") || s.status.contains("hasł"),
+            "{}",
+            s.status
+        );
+
+        // Without smbclient the share goes the old way (scanshare), which names the problem.
+        #[derive(Debug)]
+        struct Missing;
+        impl bluepane_remote::SmbRunner for Missing {
+            fn available(&self) -> bool {
+                false
+            }
+            fn run(
+                &self,
+                _: &[String],
+                _: Option<&str>,
+                _: &dyn Fn() -> bool,
+            ) -> Result<Option<bluepane_remote::SmbOutput>, bluepane_remote::RemoteError>
+            {
+                unreachable!("not asked when it is not there")
+            }
+        }
+        s.smb = std::sync::Arc::new(Missing);
+        s.sites.sites.clear();
+        let _ = s.run_line("go smb://nas/dane/Zdjęcia");
+        assert!(
+            s.sites.sites.is_empty(),
+            "no site is saved for the fallback"
+        );
     }
 
     #[test]
