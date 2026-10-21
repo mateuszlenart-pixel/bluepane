@@ -111,9 +111,17 @@ fn ask_git(folder: &Path) -> (Marks, Option<String>) {
         return (Marks::new(), None);
     };
     let prefix = String::from_utf8_lossy(&prefix).trim_end().to_string();
+    // `--no-optional-locks`: this runs in the background, next to the user's own `git add` or
+    // `commit`; a plain `status` refreshes the index and could hold `index.lock` just then.
     let marks = git(
         folder,
-        &["status", "--porcelain=v1", "-z", "--untracked-files=normal"],
+        &[
+            "--no-optional-locks",
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=normal",
+        ],
     )
     .map(|status| parse_porcelain(folder, &prefix, &String::from_utf8_lossy(&status)))
     .unwrap_or_default();
