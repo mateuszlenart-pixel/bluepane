@@ -251,6 +251,8 @@ Sieć:
 
 `docs/TESTOWANIE.md` (uruchomienie na Linuksie i Windows, lista kontrolna z oczekiwanymi wynikami), `testdata/` (gotowe pliki), `tools/dane-testowe.sh` i `.ps1` (reszta danych), workflow `Build testowy` (gotowe pliki release do pobrania, nie jest to dystrybucja).
 
+Rozszerzone 2026-10-21 o etapy 11–14: `docs/TESTOWANIE.md` ma teraz **dym** (ok. 20 minut), tabelę priorytetów (P1 = nigdy nie uruchomione na Windows ani na prawdziwych danych i usługach) oraz sekcje 4.17–4.30 dla nowych narzędzi; skrypty danych tworzą pliki do kolorowania składni, Markdown, edytora hex, duplikatów, porównania, indeksu, EXIF i tagów oraz repozytorium git. Wyniki wpisuje się partiami (tabela w sekcji 5) i trafiają do etapu T.
+
 ## Znane uproszczenia szkieletu
 - Interfejs sprawdzony ręcznie na Linuksie (Linux Mint, X11, wgpu); **nie był jeszcze uruchamiany
   na Windows** (kompiluje się i przechodzi CI).

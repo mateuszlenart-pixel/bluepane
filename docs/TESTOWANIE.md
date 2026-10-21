@@ -95,9 +95,18 @@ plików chronionych w danych testowych: **`sekret`** (PDF, ZIP, 7z).
 Co gdzie jest: `dokumenty` (docx, odt, rtf, pdf, xlsx, ods, pptx, odp, PDF z hasłem),
 `archiwa` (zip, tar.gz, 7z, zip i 7z z hasłem), `teksty` (UTF-8, CP1250, kod, binarny, długi
 tekst 5000 wierszy), `nazwy` (do zmiany nazw), `synchronizacja/lewy` i `prawy`, `duzo-plikow`,
-`duze`, `rozne`.
+`duze`, `rozne`. Dla narzędzi z etapów 11–14 dochodzą: `kod` (pliki do kolorowania składni
+i `README.md` do renderowania Markdown), `hex` (256 bajtów do edytora hex), `duplikaty`,
+`porownanie` (pary do porównania i sum kontrolnych), `indeks` (teksty z polskimi znakami, także
+w Windows-1250), `media` (zdjęcia z EXIF i bez, utwory `.wav` z tagami), `zdjecia` i `muzyka`
+(kopie do zmiany nazw z EXIF i tagów) oraz `repozytorium-git` (repozytorium z jednym commitem i
+zmianami M, D, ?, A; tworzone tylko, gdy jest program `git`).
 
-Przykładowe uruchomienie: `bluepane ~/bluepane-test ~/bluepane-test/synchronizacja`.
+Przykładowe uruchomienie: `bluepane ~/bluepane-test ~/bluepane-test/synchronizacja`; do dymu
+(4.0): `bluepane ~/bluepane-test ~/bluepane-test/kod`.
+
+**Ćwicz na kopiach.** Skrypt nigdy nie nadpisuje, ale testy zmieniają dane (kosz, edytor hex,
+profile synchronizacji): jeśli coś zepsujesz, usuń `bluepane-test` i uruchom skrypt od nowa.
 
 ## 3. Jak zgłaszać błędy
 
@@ -108,6 +117,56 @@ najważniejszy jest ostatni komunikat w terminalu (Linux) albo w oknie konsoli (
 Wygląd (czytelność, kolory, rozmiary) też zgłaszaj, nawet jeśli „działa".
 
 ## 4. Lista kontrolna
+
+### Jak do tego podejść
+
+Lista jest długa (ok. 30 sekcji), więc nie przechodź jej w całości naraz. Proponowana kolejność:
+
+1. **Dym (4.0):** ok. 20 minut na każdym systemie. Jeśli tu coś nie działa, reszta ma mniejszy sens: zgłoś od razu.
+2. **Sekcje według ryzyka:** tabela niżej. Zacznij od **P1**.
+3. **Sekcje `[Z]`** (potrzebują czegoś z zewnątrz: serwera SMB, rclone, urządzenia do Wake-on-LAN) rób tylko wtedy, gdy to masz.
+4. **Wyniki wpisuj partiami** (jedna sekcja = jedna porcja, patrz 5): błędy z jednej porcji naprawiam razem, w jednym PR.
+
+**Priorytety:** **P1** = nigdy nie uruchomione na Windows albo na prawdziwych danych i usługach, tu najłatwiej o błąd; **P2** = wygląd i wygoda nowych okien (logika jest sprawdzona testami, ale tylko Ty widzisz, czy jest czytelnie); **P3** = starsze funkcje, sprawdzane już wcześniej.
+
+**`[CI]`** przy punkcie oznacza, że logikę tego punktu sprawdzają testy automatyczne na obu systemach; Ty oceniasz tylko to, co widać.
+
+| Sekcja | Priorytet | Dlaczego |
+| --- | --- | --- |
+| 4.21 Makra, przyciski, harmonogram | **P1** | `crontab` i Harmonogram zadań Windows, `bluepane-cli`; nigdy nie uruchomione na prawdziwym systemie |
+| 4.27 Samoodświeżanie list | **P1** | inotify i ReadDirectoryChangesW; zachowanie zależy od systemu |
+| 4.30 Podgląd: edytor hex | **P1** | zapis przez kopię i podmiana pliku; zachowanie plików na Windows |
+| 4.28 Git | **P1** | ścieżki i program `git` na Windows |
+| 4.29 Indeks | **P1** | czas i pamięć na dużym katalogu, prawdziwe PDF/Word |
+| 4.24 Skaner: Wake-on-LAN i udział `[Z]` | **P1** | prawdziwa sieć i urządzenia |
+| 4.25 SMB `[Z]` | **P1** | prawdziwy serwer SMB |
+| 4.26 Chmury rclone `[Z]` | **P1** | prawdziwe konto w chmurze |
+| 4.17–4.20, 4.22, 4.23, 4.30 (reszta) | P2 | nowe okna i narzędzia: wygląd, wygoda |
+| 4.1–4.16 | P2 na Windows, P3 na Linuksie | starsze funkcje; Windows nie był jeszcze sprawdzany |
+
+### 4.0 Dym (L W, ok. 20 minut)
+
+Przygotuj dane (`tools/dane-testowe`, patrz 2) i uruchom `bluepane ~/bluepane-test ~/bluepane-test/kod`. Jeśli punkt się nie powiedzie, dopisz `→` co się stało i **idź dalej** (zgłosisz po całości).
+
+- [ ] **Start:** okno się otwiera, dwa panele, ikony i polskie znaki w nazwach (`indeks/głęboko`) wyświetlają się poprawnie. (4.1)
+- [ ] **Motywy:** `theme light`, potem `theme dark`: oba czytelne (listy, okna, kolory nazw). (4.19)
+- [ ] **Operacje:** F5 kopiuje mały plik do drugiego panelu, F2 zmienia nazwę w wierszu, F8 przenosi do kosza. (4.3, 4.18)
+- [ ] **F1:** paleta komend; wpisz `sciez`: na liście jest `cd`. (4.17)
+- [ ] **Ctrl+K:** wpisz `zaz`: na liście plik `Zażółć…`; Esc zamyka. (4.17)
+- [ ] **Ctrl+P / Ctrl+B:** „Skocz do” i pasek Miejsca otwierają się i przechodzą do wybranego katalogu. (4.17)
+- [ ] **Prawy klik** na pliku: menu z „Podgląd”, „Kopiuj ścieżkę”, „Właściwości”. (4.18)
+- [ ] **Przeciąganie:** plik z lewego panelu na prawy kopiuje go. (4.18)
+- [ ] **F3** na `kod/przyklad.rs`: kolorowa składnia, w nagłówku `tekst, Rust`; `C` wyłącza kolory. (4.30)
+- [ ] **F3** na `kod/README.md`: wyrenderowany Markdown (nagłówki, lista, cytat); `M` przełącza na tekst. (4.30)
+- [ ] **F3** na `hex/maly.bin`, klawisz `E`, wpisz `ff`: bajt zmienia kolor; pierwszy Esc kończy edycję, drugi próbuje zamknąć i **ostrzega** o zmianach, trzeci zamyka; plik na dysku jest bez zmian. (4.30)
+- [ ] **Szczegóły:** kursor na `media/zdjecie-exif.jpg`, komenda `details`: widać aparat i datę. (4.30)
+- [ ] **Samoodświeżanie:** (prawy panel to `kod`) w drugim terminalu `touch ~/bluepane-test/kod/nowy.txt` (Windows: `ni $env:USERPROFILE\bluepane-test\kod\nowy.txt`): plik pojawia się na liście bez F9. (4.27)
+- [ ] **Git:** `cd ~/bluepane-test/repozytorium-git`, `columns git`: litery M, D, ?, A przy plikach i `git: main` przy ścieżce. (4.28)
+- [ ] **Indeks:** `index add here` w `indeks`, po chwili `index find zolw`: lista z `umowa.txt`. (4.29)
+- [ ] **Duplikaty:** w `duplikaty` komenda `dupes`: jedna grupa z trzema plikami. (4.22)
+- [ ] **Porównanie:** w `porownanie` zaznacz `lewy.txt` i `prawy.txt`, komenda `compare`: różnice podświetlone. (4.22)
+- [ ] **Makro:** `macro record Dym`, wpisz `sort size`, `macro stop`, `macro play Dym`: sortowanie się powtarza. (4.21)
+- [ ] **Sesja:** zamknij program i uruchom go bez argumentów: wracają katalogi i zakładki. (4.20)
 
 ### 4.1 Start i wygląd (L W)
 
@@ -124,8 +183,8 @@ Wygląd (czytelność, kolory, rozmiary) też zgłaszaj, nawet jeśli „działa
 - [ ] Na dole są dwa rzędy przycisków klawiszy funkcyjnych, żaden nie jest ucięty; zmniejsz
       i powiększ okno: rzędy dopasowują się.
 - [ ] Polskie znaki w nazwach (`Zażółć gęślą.txt`) wyświetlają się poprawnie.
-- [ ] Komenda `theme` w wierszu poleceń pokazuje motyw `dark`; `theme jasny` daje czytelny
-      błąd po polsku.
+- [ ] Komenda `theme` w wierszu poleceń wymienia motywy (`dark`, `light`, `system`); `theme light`
+      przełącza na jasny; nieznany motyw (`theme różowy`) daje czytelny błąd po polsku.
 - [ ] **W:** czy okno wygląda dobrze przy skalowaniu ekranu 125% i 150%?
 - [ ] Własne skróty: `bind ctrl+k sort name` w wierszu poleceń, Ctrl+K sortuje po nazwie; `unbind f9` wyłącza F9; `bind f9 default` przywraca; po restarcie zmiany zostają (plik `settings.conf` w katalogu ustawień; błędny wiersz w nim daje ostrzeżenie w pasku stanu, a program startuje).
 
@@ -336,28 +395,213 @@ lokalnie:
       masz obie). Skróty zarezerwowane przez menedżer okien (np. Alt+F7) są poza naszą
       kontrolą: użyj Ctrl+F.
 
+### 4.17 Paleta, „Skocz do”, Ctrl+K, Miejsca, omnibox (L W) · P2
+
+`[CI]` sprawdza dopasowanie rozmyte, ranking katalogów i parsowanie adresów; tu oceniasz wygodę i wygląd.
+
+- [ ] **F1:** wpisz `sciez` (bez polskich liter): na liście jest `cd`. Enter na komendzie z argumentem wpisuje ją do wiersza poleceń z końcową spacją. Uruchom kilka komend, zamknij program i otwórz go: ostatnio użyte są na górze.
+- [ ] **Ctrl+P:** wejdź do kilku katalogów, otwórz „Skocz do”: najczęściej i najświeżej odwiedzane są wyżej; Enter przechodzi w aktywnym panelu. Katalog, który usuniesz z dysku, znika z listy.
+- [ ] **Ctrl+K:** `zaz` pokazuje plik `Zażółć gęślą.txt` w bieżącym katalogu (wystarczy `zaz`), `>sort` tylko komendy, `?*.txt` uruchamia szukanie (okno `find`); Enter na pliku ustawia na nim kursor.
+- [ ] **Ctrl+B (Miejsca):** dyski z paskiem zajętości (kolor od 85% i 95%), `fav` dodaje bieżący katalog do ulubionych, ✕ go usuwa, ulubione przeżywają restart, „Ostatnie” pokazuje osiem ostatnich katalogów.
+- [ ] **Omnibox:** klik w puste miejsce za okruszkami zamienia je w pole. `>sort size` Enter sortuje, `?*.pdf` szuka w bieżącym katalogu, podkatalog od trzech znaków dostaje podpowiedź (klik wstawia).
+- [ ] **Okruszki:** klik w `›` między segmentami pokazuje katalogi rodzeństwa; klik w katalog przechodzi do niego.
+- [ ] **W:** okruszki i omnibox działają dla `C:\...` (pierwszy segment to `C:\`) i dla `\\serwer\udział`.
+
+### 4.18 Menu kontekstowe, przeciąganie, F2 w wierszu, powiadomienia (L W) · P2
+
+- [ ] **Prawy klik** (albo Shift+F10): na pliku (Otwórz w programie, Podgląd, Edytuj, Kopiuj/Przenieś, Zmień nazwę, Spakuj, Usuń, Kopiuj ścieżkę / nazwę, Właściwości), na katalogu (Otwórz, Otwórz w nowej zakładce, Dodaj do ulubionych), na archiwum (Otwórz archiwum, Rozpakuj do drugiego panelu, Sprawdź archiwum) i na pustym miejscu (Nowy katalog, Odśwież, Szukaj plików, Nowa zakładka...). Esc albo klik poza menu zamyka. „Właściwości” pokazuje opis w pasku stanu.
+- [ ] **Przeciąganie:** plik z jednego panelu na drugi kopiuje (jak F5), z przytrzymanym **Shift** przenosi (jak F6); upuszczenie na wiersz katalogu kopiuje do niego; przy wskaźniku widać „Kopiuj: …” albo „Przenieś: …”; **Esc** w trakcie przeciągania anuluje.
+- [ ] **Z systemu:** przeciągnij plik z menedżera plików systemu (Nautilus, Eksplorator) na panel albo na wiersz katalogu: zostaje skopiowany (nigdy przeniesiony).
+- [ ] **F2 w wierszu:** nazwa staje się polem, zaznaczona jest część bez rozszerzenia (dla katalogu cała nazwa); Enter zatwierdza, Esc anuluje, klik w inny wiersz kończy bez zmiany. Zmiana na istniejącą nazwę jest odrzucona.
+- [ ] **Powiadomienia** w prawym dolnym rogu po skończonym zadaniu: sukces znika po kilku sekundach, **błąd zostaje do ✕**; klik w powiadomienie z przyciskiem „Cofnij” cofa, gdy się da.
+- [ ] **Pasek akcji** (rząd z błyskawicą nad klawiszami funkcyjnymi): na archiwum „Rozpakuj tutaj / do podkatalogu / do drugiego panelu”, na kilku zaznaczonych plikach „Spakuj” i „Zmień nazwy zbiorowo”, na dwóch różnych katalogach „Porównaj / synchronizuj”. Gdy nic nie pasuje, rzędu nie ma.
+- [ ] **Ściąga:** `?` pokazuje skróty; przytrzymanie samego Ctrl (ok. 0,7 s) tylko te z Ctrl; puszczenie zamyka. Tytuł zakładki, do której idą klawisze, ma ikonę klawiatury.
+
+### 4.19 Wygląd, kolumny, filtr, siatka miniatur (L W) · P2
+
+- [ ] **Motywy:** `theme light`, `theme system`, `theme dark`: w każdym czytelne listy, okna dialogowe, podgląd i kolory nazw; wybór zostaje po restarcie (`settings.conf`). `theme` bez argumentu wymienia dostępne.
+- [ ] **Wygląd:** `appearance textsize 130` powiększa tekst całego okna (także dialogów), `appearance rowheight 30`, `appearance accent #e0457b` zmienia kolor ramki kursora i fokusu, `appearance reset` wraca do domyślnych; `density compact` / `comfortable`.
+- [ ] **Kolumny:** `columns created`, `columns perms`, `columns owner`, `columns sha256`. **L:** prawa (np. `rw-r--r--`) i właściciel pokazują wartości; **W:** te dwie kolumny są puste. Przeciągnij granicę nagłówka: szerokość się zmienia i zostaje po restarcie; dwuklik przywraca domyślną; `columns default` wraca do zestawu podstawowego.
+- [ ] **SHA-256:** zaznacz kilka plików w `duze` i komenda `hash`: kolumna wypełnia się w tle, okno nie zwalnia; `hash stop` przerywa; `hash copy` kopiuje wiersze `suma  nazwa`. Zmiana pliku czyści jego sumę.
+- [ ] **Filtr:** w `duzo-plikow` wpisz `plik-01`, potem `ext:txt >1k nowsze:30d`, `katalogi`: lista zawęża się, jest licznik „Widoczne N z M”, Esc czyści.
+- [ ] **Siatka miniatur (Ctrl+Shift+G)** w `zdjecia`: miniatury pojawiają się w tle (obraz z niebieskim tłem i żółtym kołem), strzałki chodzą po kafelkach; F3 na zdjęciu otwiera je w zakładce „Strony”.
+- [ ] **W:** skalowanie ekranu 125% i 150% razem z `appearance textsize`: nic nie jest ucięte ani nie nachodzi.
+
+### 4.20 Obszary robocze i sesja (L W) · P2
+
+- [ ] Ustaw po dwie zakładki w panelach, różne sortowania, w jednym panelu siatkę; `workspace save Praca`. Zmień układ, otwórz inne katalogi, potem `workspace load Praca`: wszystko wraca; `workspace list` pokazuje obszar.
+- [ ] Zamknij program i uruchom go **bez argumentów**: wracają katalogi, zakładki i układ okna z poprzedniej sesji. Z katalogami w wierszu poleceń sesja nie nadpisuje tego, co podałeś.
+- [ ] `workspace restore off` i restart: panele otwierają się w katalogu startowym; `workspace restore on` włącza z powrotem.
+- [ ] Zapisz obszar z katalogiem, który potem usuniesz z dysku, wczytaj: brakujący jest pominięty, a pasek stanu mówi, ile ich było.
+- [ ] `layout save Moj`, `layout reset`, `layout load Moj`, `layout list`: układ okna wraca do zapisanego.
+
+### 4.21 Makra, własne przyciski, harmonogram, profile synchronizacji (L W) · **P1**
+
+`[CI]` sprawdza zapis i odtwarzanie makr, parametry i budowanie wpisów harmonogramu; **nie** sprawdza prawdziwego `crontab` ani Harmonogramu zadań.
+
+- [ ] **Nagrywanie:** `macro record Porzadki`, wpisz `sort size`, `columns created`, `filter txt`, `filter` (w wierszu poleceń), `macro stop`. `macro show Porzadki` wymienia te komendy, `macro list` makro. Zmień sortowanie i kolumny ręcznie, `macro play Porzadki`: stan wraca do nagranego. W trakcie nagrywania pasek stanu świeci „● Nagrywam”.
+- [ ] **Parametry:** utwórz plik `Przejdz.bp` z jednym wierszem `cd %1` w katalogu `macros` w katalogu ustawień (patrz 1), `macro list` go pokaże, `macro play Przejdz ~/bluepane-test/nazwy` (**W:** `$env:USERPROFILE\bluepane-test\nazwy`): aktywny panel przechodzi do podanego katalogu.
+- [ ] **Bez okna:** w terminalu `./bluepane-cli run-script ~/bluepane-test ~/bluepane-test/nazwy <plik>.bp` (plik makra leży w `macros` katalogu ustawień): komendy wykonują się, a program kończy się kodem 0; błędne polecenie w skrypcie zatrzymuje go z komunikatem.
+- [ ] **Własne przyciski:** `button add Edytor = gedit %f` (**W:** `notepad %f`). Pojawia się osobny rząd przycisków pod klawiszami funkcyjnymi; klik uruchamia program na pliku pod kursorem. Plik `Zażółć gęślą.txt` (spacje i polskie znaki) trafia do programu jako **jeden** argument. Przycisk z nieistniejącym programem daje komunikat z jego nazwą. `button list`, `button delete Edytor`. Przyciski przeżywają restart.
+- [ ] **Harmonogram:** utwórz plik makra `Znacznik.bp` z wierszem `mkdir znacznik-harmonogramu` (w katalogu `macros`, jak wyżej). `schedule add Znacznik; hourly`, potem `schedule list`. **L:** `crontab -l` zawiera wiersz z `# bluepane:Znacznik`, a inne Twoje wpisy są nietknięte. **W:** w Harmonogramie zadań jest folder `bluepane` z zadaniem; inne zadania nietknięte.
+- [ ] **Czy naprawdę się wykonuje:** `schedule add Znacznik; daily GG:MM` z godziną za 2 minuty, zamknij bluepane i poczekaj. W katalogu **lewego panelu z chwili dodania zadania** powinien powstać `znacznik-harmonogramu` (zapisz, gdzie powstał, jeśli gdzie indziej). `schedule delete Znacznik` usuwa wpis (sprawdź `crontab -l` / Harmonogram zadań).
+- [ ] **Profil synchronizacji:** otwórz Alt+S w `synchronizacja/lewy` i `prawy`, ustaw wariant i „Porównaj”, w polu „Profil” wpisz nazwę i „Zapisz profil” (albo `syncprofile save Para`). Zmień katalogi w panelach, `syncprofile run Para`: panele wracają do zapisanych katalogów i plan czeka na ekranie (nic nie kopiuje się bez „Synchronizuj”). `syncprofile list`, `syncprofile delete Para`.
+- [ ] **Profil w harmonogramie:** `schedule add sync-Para; daily GG:MM` (godzina za 2 minuty): po tej porze **bez udziału okna** pliki z lewej strony pary zostały zsynchronizowane. Uwaga: profil z usuwaniem „Trwale” działa bez pytania; do próby zostaw usuwanie do kosza.
+
+### 4.22 Mapa zajętości, duplikaty, porównanie, sumy kontrolne (L W) · P2
+
+`[CI]` sprawdza algorytmy (grupowanie duplikatów, różnice, sumy); tu wygląd okien i wygoda.
+
+- [ ] **Mapa (`map`)** w `bluepane-test`: zakładka z kafelkami, pole proporcjonalne do rozmiaru (`duze` największe); klik w kafelek katalogu wchodzi do niego (`map up` wraca); okno nie zwalnia w trakcie liczenia; `map close`.
+- [ ] **Duplikaty (`dupes`)** w `duplikaty`: jedna grupa z trzema plikami `zdjecie*.txt` / `Zażółć kopia.txt`; plików `ten-sam-rozmiar.txt` (ten sam rozmiar, inna treść) **nie** ma w grupie. `dupes keep newest`: zaznaczone są dwa starsze; `dupes keep oldest` odwraca; „Do kosza” (`dupes trash`) przenosi zaznaczone do kosza i zostaje jeden. Zaznaczenie wszystkich kopii w grupie: komenda odmawia.
+- [ ] **Porównanie (`compare`)** w `porownanie`: zaznacz `lewy.txt` i `prawy.txt`: tekst obok tekstu, zmieniony wiersz żółty, brakujący po lewej czerwony/ nowy po prawej zielony; F8 / F7 skaczą między różnicami. Dla `bin1.bin` i `bin2.bin`: komunikat o pierwszym różnym bajcie (offset 2000, `0x07d0`) z kontekstem hex.
+- [ ] **Sumy:** zaznacz kilka plików w `porownanie`, `checksum create sha256`: powstaje `SHA256SUMS`; `checksum verify` na nim pokazuje „zgodny” przy każdym. Zmień jeden plik i `checksum verify` jeszcze raz: ten jeden jest „ZMIENIONY”. Drugi `checksum create sha256` nie nadpisuje istniejącego pliku.
+
+### 4.23 Zmiana nazw z EXIF i tagów (L W) · P2
+
+`[CI]` sprawdza maski i odczyt danych z pliku; tu oceniasz okno.
+
+- [ ] W `zdjecia`: zaznacz wszystko, Ctrl+F2, maska `[EXIF:YMD]_[N]` (przyciski wstawiania mają EXIF i TAG): `IMG_0001.jpg` dostaje `20250714_IMG_0001`, `IMG_0002.jpg` dostaje `20241224_IMG_0002`, a `IMG_0003.jpg` (bez EXIF) dostaje **pusty fragment**, czyli `_IMG_0003` (przy kilku takich plikach podgląd pokaże konflikt zamiast po cichu nadpisać). Start zmienia nazwy, Ctrl+Z (`mrundo`) cofa.
+- [ ] Maska `[EXIF:Make]` daje `Aparat Żółć` i `Inny Aparat` (znaki niedozwolone w nazwie pliku są zastępowane), `[EXIF:Model]` model.
+- [ ] W `muzyka`: maska `[TAG:artist] - [TAG:title]` daje `Zespół Żółć - Gęślą jaźń.wav` i `Beta Kwartet - Łódź nocą.wav`; `[TAG:track]`, `[TAG:album]`, `[TAG:year]` też działają.
+- [ ] Przy zaznaczeniu wielu plików okno nie zawiesza się podczas odczytu (dane czytane są tylko dla masek, które o nie proszą).
+
+### 4.24 Skaner: Wake-on-LAN, udział w panelu, witryna, historia (L W) · **P1** `[Z]`
+
+Potrzebna sieć domowa z kilkoma urządzeniami; do Wake-on-LAN urządzenie wyłączone, ze włączonym WoL w BIOS/UEFI.
+
+- [ ] **Historia:** pierwszy skan zapisuje stan wyjściowy (nic nie jest „NOWE”). Podłącz do sieci nowe urządzenie (telefon z Wi-Fi), skanuj ponownie: nowy host ma znacznik **NOWE**, filtr `nowe` pokazuje tylko takie; karta „Historia” wymienia skany (czas, zakres, liczba hostów, nowe). `scanhistory off` wyłącza zapisywanie.
+- [ ] **Witryna jednym kliknięciem:** na hoście z portem 22 przycisk „Witryna SFTP” zapisuje witrynę z jego adresem (do uzupełnienia o użytkownika); to samo dla FTP.
+- [ ] **Udział w panelu:** na hoście z udziałem „W panelu” otwiera udział w aktywnym panelu (**L:** przez `gio mount`, trzeba mieć `gvfs`; **W:** `\\host\udział`). Udział wymagający logowania daje zrozumiały komunikat z podpowiedzią, co zrobić.
+- [ ] **Wake-on-LAN:** wyłącz urządzenie, w skanerze wybierz je (adres MAC musi być znany z wcześniejszego skanu) i „Obudź (Wake-on-LAN)": urządzenie się uruchamia. Bez znanego MAC przycisk mówi, czemu nie działa.
+- [ ] Akcje z 4.13 nadal działają (HTTP, SSH, RDP, ulubione).
+
+### 4.25 Udziały SMB jako katalog (L W) · **P1** `[Z]`
+
+Potrzebny serwer SMB (NAS, Windows z udostępnionym katalogiem, Samba). **L:** `sudo apt install smbclient`.
+
+- [ ] `go smb://serwer` (bez udziału): **L** z `smbclient` panel pokazuje listę udziałów (bez `C$`, `IPC$`, drukarek); wejście w udział pokazuje jego pliki **bez montowania** w systemie.
+- [ ] `go smb://użytkownik@serwer/udział/podkatalog`: pyta o hasło (pole ukryte), zapisuje witrynę `użytkownik@serwer (smb)` (Ctrl+S ją pokazuje), otwiera podkatalog. Zły login daje czytelny komunikat, a nie surowy `NT_STATUS_…`. Logowanie jako gość: `go smb://serwer` bez użytkownika.
+- [ ] Na udziale: F5 pobiera i wysyła pliki (także katalogi; nazwy z polskimi znakami i spacjami), F7 nowy katalog, F2 zmiana nazwy, F8 usuwa **trwale** (pytanie to mówi). Nazwa ze średnikiem lub cudzysłowem daje komunikat, że smbclient jej nie przyjmie.
+- [ ] Duży plik: postęp rośnie w trakcie pobierania; „Anuluj” przerywa i nie zostawia `.bpart` pod prawdziwą nazwą.
+- [ ] **Bez `smbclient`** (Linux: odinstaluj albo zmień nazwę programu): `go smb://serwer/udział` otwiera udział starą drogą (GVFS) albo mówi, co doinstalować. **W:** bez smbclienta działa ścieżka UNC (`\\serwer\udział`).
+
+### 4.26 Chmury przez rclone (L W) · **P1** `[Z]`
+
+Potrzebny zainstalowany `rclone` (rclone.org) i skonfigurowana chmura (`rclone config`: Google Drive, OneDrive, WebDAV lub inna).
+
+- [ ] Bez rclone: `cloud` daje komunikat, co zainstalować (a nie błąd systemowy).
+- [ ] `cloud` wymienia skonfigurowane chmury; `cloud nazwa` otwiera chmurę w panelu i zapisuje witrynę `nazwa (rclone)` (Ctrl+S); `go rclone://nazwa/katalog` otwiera od razu katalog. Nie pyta o hasło (loginy trzyma rclone).
+- [ ] Wejście w katalogi, Backspace, F9. F5 pobiera i wysyła pliki (także katalogi; polskie znaki w nazwach); wysłany plik widać w chmurze (np. w przeglądarce); F7, F2 (nie nadpisuje istniejącego), F8 usuwa **trwale** i pytanie to mówi.
+- [ ] Duży plik: pobieranie pokazuje rosnący postęp, „Anuluj” zatrzymuje proces `rclone` (sprawdź w menedżerze zadań, że nie został) i nie zostawia pół pliku pod prawdziwą nazwą.
+- [ ] Nieistniejąca chmura (`cloud nie-ma`) daje komunikat z listą znanych chmur.
+
+### 4.27 Samoodświeżanie list (L W) · **P1**
+
+`[CI]` sprawdza reakcję silnika na zdarzenia systemu na obu systemach; tu oceniasz to w oknie i na prawdziwych zmianach.
+
+- [ ] Otwórz w panelu `kod`. W terminalu: `touch nowy.txt` (**W:** `ni nowy.txt`): plik pojawia się na liście w ułamku sekundy, **bez F9**, a kursor zostaje na swoim pliku i zaznaczenie się nie gubi.
+- [ ] Usuń plik w terminalu (`rm`, **W:** `del`): znika z listy. Zmień zawartość pliku (`echo x >> kod/skrypt.py`): zmienia się rozmiar i data.
+- [ ] Pobierz coś większego do otwartego katalogu (przeglądarka, `curl`): lista nie „drga” i nie zwalnia okna.
+- [ ] Zmiany w **drugim** panelu też są widoczne; zmiany w podkatalogu **nie** odświeżają listy nadrzędnej (tak ma być).
+- [ ] `watch` pokazuje stan, `watch off` wyłącza (zmiana poza programem nie jest już widoczna bez F9), `watch on` włącza; ustawienie zostaje po restarcie.
+- [ ] Katalog na dysku sieciowym lub montowaniu sieciowym: wpisz, czy odświeża się samo (może nie; wtedy F9).
+- [ ] Okno bezczynne nie obciąża procesora zauważalnie (sprawdź w menedżerze zadań: poniżej ok. 1–2%).
+
+### 4.28 Git: gałąź, status, akcje (L W) · **P1**
+
+Potrzebny zainstalowany `git`. Dane: `repozytorium-git` (jeden commit i zmiany: M, D, ?, A).
+
+- [ ] Wejdź do `repozytorium-git`, `columns git`: przy ścieżce `git: main`; `README.md` ma **M**, `stale.txt` **D**, `Zażółć nowy.txt` **?**, `src` (zawiera `dodany.rs`) **A**; w `src` tylko `dodany.rs` ma **A**.
+- [ ] Zaznacz `README.md`, `git add`: litera zmienia się; `git unstage` cofa; `git commit "Zmiana opisu: zażółć"` zatwierdza **tylko** to, co było w poczekalni (pozostałe zmiany zostają); `git commit` bez niczego w poczekalni daje komunikat gita, a nie zawieszenie.
+- [ ] `git diff` na pliku pod kursorem i na katalogu (puste miejsce): zmiany w podglądzie, Esc zamyka; `git log`: historia z commitami, w tym polskim opisem.
+- [ ] Zmień plik w edytorze lub terminalu: bez F9 litera i gałąź aktualizują się (samoodświeżanie, 4.27).
+- [ ] `git checkout -b inna` w terminalu: po chwili `git: inna`. W katalogu bez repozytorium nic się nie pokazuje (kolumna pusta, brak etykiety).
+- [ ] **W:** nazwy z polskimi znakami i spacjami w statusie (`Zażółć nowy.txt`) pokazują się poprawnie; repozytorium na innym dysku (D:) też działa.
+- [ ] Bez zainstalowanego `git` (zmień nazwę programu): komenda `git add` mówi, co zainstalować.
+
+### 4.29 Indeks do szukania (L W) · **P1**
+
+`[CI]` sprawdza wyniki, aktualizację i zapisane wyszukiwania na małych danych; tu liczy się czas i pamięć na prawdziwych danych.
+
+- [ ] **Zgoda:** po starcie programu `index` mówi „Indeks jest pusty”, a w menedżerze zadań nic nie mieli: nic nie jest indeksowane samo.
+- [ ] `index add here` w `bluepane-test` (to dużo plików i dwa duże binarne): budowanie idzie w tle, okno działa, `index` pokazuje przejrzane pliki, `index stop` przerywa (poprzedni indeks zostaje). Zapisz **czas budowania** i zużycie pamięci (menedżer zadań).
+- [ ] `index find zolw` znajduje `umowa.txt` (słowo „żółw” w treści) i dokumenty z `dokumenty` (jeśli mają to słowo); wyniki wpadają do panelu jako lista, Backspace wraca. `index find dzie` (początek słowa „dzieło”) też. `index find name:zazolc` znajduje `Zażółć gęślą.txt`; `index find ext:pdf` pliki PDF; `index find text:mleko` `notatki.md`.
+- [ ] **Treść dokumentów:** `index find` ze słowem z `dokumenty/raport.docx`, `raport.pdf` i `arkusz.xlsx` znajduje te pliki (zapisz, które słowa i które formaty zadziałały).
+- [ ] **Kodowania:** `index find lodz` znajduje `stary-cp1250.txt` (Łódź w Windows-1250) i `Zażółć gęślą.txt`.
+- [ ] `index update` po zmianie jednego pliku jest **szybki** i czyta tylko zmieniony (komunikat „przeczytano 1”); nowy plik pojawia się w wynikach, usunięty znika.
+- [ ] **Zapisane wyszukiwania:** `index save Umowy umowa`, `index list`, `index open Umowy`: lista jak z `find`, ale to „katalog” pytany o indeks na nowo; po restarcie wyszukiwanie zostaje.
+- [ ] Restart programu: `index` pokazuje wcześniej zbudowany indeks (plik `index.dat`), bez ponownego budowania. `index clear` go usuwa.
+
+### 4.30 Podgląd (F3): kolory, Markdown, edytor hex, szczegóły (L W) · P2, edytor hex **P1**
+
+`[CI]` sprawdza kolorowanie, renderowanie i zapis; tu oceniasz **wygląd i wygodę**.
+
+**Kolory składni** (pliki w `kod`)
+
+- [ ] `przyklad.rs`, `skrypt.py`, `dane.json`, `ustawienia.toml`, `zapytanie.sql`, `strona.html`: słowa kluczowe, napisy, liczby i komentarze mają różne kolory, w nagłówku jest nazwa języka (`tekst, Rust`). Komentarz blokowy `/* … */` przez kilka linii jest cały w kolorze komentarza także po przewinięciu.
+- [ ] Kolory są czytelne w **obu** motywach (`theme light` i `theme dark`): nic nie ginie (np. żółty na białym).
+- [ ] `C` wyłącza i włącza kolory; `Zażółć` w napisach i komentarzach nie psuje kolorów; poziome przewijanie (strzałki) nie przekłamuje kolorów.
+- [ ] Plik bez rozpoznanego języka (`teksty/utf8-polskie.txt`) jest bez kolorów, a `C` mówi, że nie ma kolorowania.
+
+**Markdown** (`kod/README.md`)
+
+- [ ] Otwiera się wyrenderowany: nagłówek z podkreśleniem, **mocne**, *kursywa*, `kod`, link jako `tekst (adres)`, lista z kropkami i zagnieżdżona, lista numerowana, cytat z kreską, linia pozioma, blok kodu; tabela zostaje tak, jak napisana. W nagłówku `[Markdown]` i `wiersz N z M`.
+- [ ] Zmień szerokość okna: akapity zawijają się do szerokości (bez ucinania słów), kolory są zachowane. `M` przełącza na zwykły tekst i z powrotem; `/` (szukanie) przełącza na tekst.
+- [ ] Plik `.md` ponad 4 MB otwiera się jako tekst (opcjonalnie: sprawdź większym plikiem).
+
+**Edytor hex** (`hex/maly.bin`; używaj kopii, gdy chcesz ćwiczyć na własnych plikach)
+
+- [ ] `E` włącza edycję: żółty kursor na bajcie; strzałki, PgUp/PgDn go przesuwają, widok za nim podąża; cyfry `0-9 a-f` (dwie = bajt) zmieniają bajt, kursor idzie dalej, zmienione bajty są podświetlone **w kolumnie hex i w kolumnie znaków**. Plik na dysku **nie zmienia się** (sprawdź w drugim programie).
+- [ ] `Ctrl+Z` odrzuca zmiany; `Esc` kończy edycję; zamknięcie (`Esc`/`Q`) z niezapisanymi zmianami **ostrzega** (pasek stanu), dopiero drugie zamyka.
+- [ ] `Ctrl+S`: powstaje `maly.bin.bpedit` i pasek pyta; `Esc` usuwa kopię (zmiany zostają w edytorze). Ponownie `Ctrl+S`, **Enter**: plik zostaje podmieniony, a oryginał jest w `maly.bin.bak`; widok pokazuje nową zawartość. Kolejny zapis daje `maly.bin.bak2` (pierwsza kopia nie jest nadpisana). **W:** podmiana działa mimo otwartego pliku w podglądzie i bez błędu o zajętym pliku.
+- [ ] `viewer poke 0x10 ff 00` ustawia bajty z wiersza poleceń; poza końcem pliku daje błąd. Edycja z F3 na pliku **z archiwum** albo **dokumentu** jest odrzucona (tylko do odczytu).
+
+**Szczegóły pliku**
+
+- [ ] Kursor na `media/zdjecie-exif.jpg`, `details` (albo `I` w podglądzie): rozmiar, daty, oraz pola EXIF: aparat **Aparat Żółć**, model `Model gęślą 5`, data 2025:07:14 18:30:05 (polskie znaki bez ucieczek). Na `zdjecie-bez-exif.jpg` komunikat o braku danych EXIF.
+- [ ] Na `media/utwor-tagi.wav`: czas trwania 0:00:01, 8000 Hz, wykonawca `Zespół Żółć`, tytuł `Gęślą jaźń`, album `Płyta testowa`, gatunek, ścieżka 7, rok 1999. Na katalogu: komunikat „to katalog”.
+
 ## 5. Wyniki
 
 Wypełnij po teście (skopiuj wiersze do wiadomości, jeśli wolisz).
 
 | Obszar | Linux | Windows | Uwagi / numery błędów |
 | --- | --- | --- | --- |
-| 4.1 Start i wygląd | | | |
-| 4.2 Nawigacja i zaznaczanie | | | |
-| 4.3 Operacje na plikach | | | |
-| 4.4 Kolejka i limit | | | |
-| 4.5 Archiwa | | | |
-| 4.6 Szukanie | | | |
-| 4.7 Zmiana nazw | | | |
-| 4.8 Synchronizacja | | | |
-| 4.9 Podgląd F3 i strony | | | |
-| 4.10 Quick View | | | |
-| 4.11 Schowek | | | |
-| 4.12 Dok i układ | | | |
-| 4.13 Skaner sieci | | | |
-| 4.14 Serwery | | | |
-| 4.15 Tylko Windows | — | | |
-| 4.16 Tylko Linux | | — | |
+| 4.0 Dym |  |  | |
+| 4.1 Start i wygląd |  |  | |
+| 4.2 Nawigacja i zaznaczanie |  |  | |
+| 4.3 Operacje na plikach |  |  | |
+| 4.4 Kolejka i limit |  |  | |
+| 4.5 Archiwa |  |  | |
+| 4.6 Szukanie |  |  | |
+| 4.7 Zmiana nazw |  |  | |
+| 4.8 Synchronizacja |  |  | |
+| 4.9 Podgląd F3 i strony |  |  | |
+| 4.10 Quick View |  |  | |
+| 4.11 Schowek |  |  | |
+| 4.12 Dok i układ |  |  | |
+| 4.13 Skaner sieci |  |  | |
+| 4.14 Serwery |  |  | |
+| 4.15 Tylko Windows | — |  | |
+| 4.16 Tylko Linux |  | — | |
+| 4.17 Paleta, Skocz do, Ctrl+K, Miejsca, omnibox |  |  | |
+| 4.18 Menu, przeciąganie, F2 w wierszu, powiadomienia |  |  | |
+| 4.19 Wygląd, kolumny, filtr, siatka |  |  | |
+| 4.20 Obszary robocze i sesja |  |  | |
+| **4.21 Makra, przyciski, harmonogram (P1)** |  |  | |
+| 4.22 Mapa, duplikaty, porównanie, sumy |  |  | |
+| 4.23 Zmiana nazw z EXIF i tagów |  |  | |
+| **4.24 Skaner: WoL, udział, historia (P1, Z)** |  |  | |
+| **4.25 SMB (P1, Z)** |  |  | |
+| **4.26 rclone (P1, Z)** |  |  | |
+| **4.27 Samoodświeżanie list (P1)** |  |  | |
+| **4.28 Git (P1)** |  |  | |
+| **4.29 Indeks (P1)** |  |  | |
+| **4.30 Podgląd: kolory, Markdown, hex, szczegóły (P1 hex)** |  |  | |
+
+Wpisuj `OK`, `część` (z `→` co nie działa), `brak` (nie sprawdzano, np. nie ma sprzętu) albo numer błędu. Wyniki możesz
+wysyłać **partiami**, po jednej sekcji.
 
 Skróty, które chcesz zmienić, i pomysły zapisuj osobno (lista „na później"): skróty są w
 `crates/engine/src/keymap.rs` i da się je zmienić bez przebudowy logiki.

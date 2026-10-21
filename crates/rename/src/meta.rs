@@ -375,4 +375,63 @@ mod tests {
         std::fs::write(&broken, [0xFF, 0xD8, 0xFF]).unwrap();
         assert!(describe(&broken).is_empty());
     }
+
+    /// The files in `testdata/media` are what `docs/TESTOWANIE.md` tells the tester to expect.
+    #[test]
+    fn the_shipped_media_test_data_has_the_exif_and_tags_the_manual_tests_expect() {
+        let media = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/media");
+        let photo = read_meta(&media.join("zdjecie-exif.jpg"));
+        assert_eq!(photo.make.as_deref(), Some("Aparat Żółć"));
+        assert_eq!(photo.model.as_deref(), Some("Model gęślą 5"));
+        assert_eq!(
+            photo.taken,
+            Some(Stamp {
+                year: 2025,
+                month: 7,
+                day: 14,
+                hour: 18,
+                minute: 30,
+                second: 5
+            })
+        );
+        let second = read_meta(&media.join("zdjecie-exif-2.jpg"));
+        assert_eq!(second.make.as_deref(), Some("Inny Aparat"));
+        assert_eq!(
+            second.taken,
+            Some(Stamp {
+                year: 2024,
+                month: 12,
+                day: 24,
+                hour: 22,
+                minute: 10,
+                second: 0
+            })
+        );
+        assert_eq!(
+            read_meta(&media.join("zdjecie-bez-exif.jpg")),
+            Meta::default()
+        );
+
+        let first = read_meta(&media.join("utwor-tagi.wav"));
+        assert_eq!(first.artist.as_deref(), Some("Zespół Żółć"));
+        assert_eq!(first.title.as_deref(), Some("Gęślą jaźń"));
+        assert_eq!(first.album.as_deref(), Some("Płyta testowa"));
+        assert_eq!(first.genre.as_deref(), Some("Rock"));
+        let other = read_meta(&media.join("utwor-2.wav"));
+        assert_eq!(other.artist.as_deref(), Some("Beta Kwartet"));
+        assert_eq!(other.title.as_deref(), Some("Łódź nocą"));
+        assert_eq!((first.track, first.year), (Some(7), Some(1999)));
+        assert_eq!((other.track, other.year), (Some(2), Some(2012)));
+        let lines = describe(&media.join("utwor-tagi.wav"));
+        assert!(
+            lines
+                .iter()
+                .any(|(l, v)| l == "Czas trwania" && v == "0:00:01"),
+            "{lines:?}"
+        );
+        assert!(lines.iter().any(|(_, v)| v == "8000 Hz"), "{lines:?}");
+        assert!(describe(&media.join("zdjecie-exif.jpg"))
+            .iter()
+            .any(|(_, v)| v == "Aparat Żółć"));
+    }
 }
