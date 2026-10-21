@@ -92,6 +92,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "macro",
     "button",
     "terminal",
+    "about",
     "run",
     "runstop",
     "map",
@@ -384,6 +385,8 @@ pub enum Command {
     Macro(crate::MacroAction),
     /// Own tool buttons: external programs with parameters.
     Button(crate::ButtonAction),
+    /// Show the version, licence and where the settings live.
+    About,
     /// Open the system terminal in the folder of the active panel.
     Terminal,
     /// Run a program in the folder of the active panel and show its output (`run`, `!`).
@@ -781,6 +784,7 @@ impl Command {
             "cloud" | "chmura" => crate::cloud::parse_cloud(rest).map(Command::Cloud),
             "map" => crate::diskmap::parse_map(rest).map(Command::Map),
             "terminal" => Ok(Command::Terminal),
+            "about" => Ok(Command::About),
             "run" => need_arg("program i argumenty").map(Command::Run),
             "runstop" => Ok(Command::RunStop),
             "button" | "btn" => crate::buttons::parse_button(rest).map(Command::Button),

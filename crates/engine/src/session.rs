@@ -709,6 +709,7 @@ impl Session {
             Command::Workspace(action) => self.workspace_action(action)?,
             Command::Macro(action) => self.macro_action(action)?,
             Command::Button(action) => self.button_action(action)?,
+            Command::About => self.show_about()?,
             Command::Terminal => self.open_terminal_here()?,
             Command::Run(line) => self.run_command(&line)?,
             Command::RunStop => self.stop_run()?,
