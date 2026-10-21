@@ -194,6 +194,7 @@ impl BluepaneUi {
                                 Protocol::FtpsImplicit,
                                 Protocol::Ftp,
                                 Protocol::Rclone,
+                                Protocol::Smb,
                             ] {
                                 ui.selectable_value(&mut form.protocol, protocol, protocol.label());
                             }
@@ -207,7 +208,11 @@ impl BluepaneUi {
                     } else {
                         field(ui, "Serwer:", &mut form.host, "adres lub nazwa, np. 192.168.1.10");
                         field(ui, "Port:", &mut form.port, "22");
-                        field(ui, "Użytkownik:", &mut form.user, "np. root");
+                        if form.protocol == Protocol::Smb {
+                            field(ui, "Użytkownik:", &mut form.user, "puste = gość");
+                        } else {
+                            field(ui, "Użytkownik:", &mut form.user, "np. root");
+                        }
                     }
                     if form.protocol == Protocol::Sftp {
                         field(ui, "Plik klucza:", &mut form.key, "puste = logowanie hasłem");
@@ -223,7 +228,15 @@ impl BluepaneUi {
                         .weak(),
                     );
                 }
-                if !matches!(form.protocol, Protocol::Sftp | Protocol::Rclone) {
+                if form.protocol == Protocol::Smb {
+                    ui.label(
+                        RichText::new(
+                            "Udziały SMB działają przez program smbclient (Linux: pakiet smbclient), bez montowania. Katalog główny serwera to lista udziałów; katalog startowy np. /dane/zdjęcia.",
+                        )
+                        .weak(),
+                    );
+                }
+                if !matches!(form.protocol, Protocol::Sftp | Protocol::Rclone | Protocol::Smb) {
                     ui.checkbox(
                         &mut form.active,
                         "Tryb aktywny (serwer łączy się do Ciebie; domyślnie pasywny)",

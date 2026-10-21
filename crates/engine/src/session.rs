@@ -272,6 +272,8 @@ pub struct Session {
     pub secrets: std::sync::Arc<dyn bluepane_remote::SecretServices>,
     /// How the `rclone` program is started (clouds); tests put a fake one here.
     pub rclone: std::sync::Arc<dyn bluepane_remote::RcloneRunner>,
+    /// How the `smbclient` program is started (SMB shares); tests put a fake one here.
+    pub smb: std::sync::Arc<dyn bluepane_remote::SmbRunner>,
     /// How a file is opened for editing (tests replace it).
     pub editor: Editor,
     pub(crate) remote_edit: Option<RemoteEdit>,
@@ -467,6 +469,7 @@ impl Session {
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
             rclone: std::sync::Arc::new(bluepane_remote::SystemRclone::new()),
+            smb: std::sync::Arc::new(bluepane_remote::SystemSmb),
             editor: Editor(std::sync::Arc::new(open_in_editor)),
             remote_edit: None,
             paused: false,

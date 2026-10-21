@@ -29,7 +29,7 @@ use crate::ftp::FtpConnection;
 use crate::secrets::{bitwarden_create, bitwarden_secret, SecretServices, KEYRING_SERVICE};
 use crate::{
     Auth, ConnectParams, KnownHosts, Protocol, RcloneFs, RcloneRunner, RemoteError, RemoteFs,
-    SftpConnection, SystemRclone,
+    SftpConnection, SmbFs, SmbRunner, SystemRclone, SystemSmb,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -92,7 +92,8 @@ impl Site {
         if self.host.trim().is_empty() || self.host.contains(char::is_whitespace) {
             return Some("podaj adres serwera (bez spacji)".into());
         }
-        if self.user.trim().is_empty() {
+        // An SMB share may be opened as a guest, with no user.
+        if self.user.trim().is_empty() && self.protocol != Protocol::Smb {
             return Some("podaj nazwę użytkownika".into());
         }
         if self.port == 0 {
@@ -112,6 +113,7 @@ impl Site {
     ) -> Result<Arc<dyn RemoteFs>, RemoteError> {
         match self.protocol {
             Protocol::Rclone => self.connect_cloud(Arc::new(SystemRclone::new())),
+            Protocol::Smb => self.connect_smb(Arc::new(SystemSmb), secret),
             Protocol::Sftp => {
                 let conn = SftpConnection::connect(&self.params(secret), known, trust)?;
                 Ok(Arc::new(conn))
@@ -147,6 +149,17 @@ impl Site {
         runner: Arc<dyn RcloneRunner>,
     ) -> Result<Arc<dyn RemoteFs>, RemoteError> {
         Ok(Arc::new(RcloneFs::connect(runner, &self.host)?))
+    }
+
+    /// Connects to the SMB server this site names, with the given way of starting `smbclient`.
+    pub fn connect_smb(
+        &self,
+        runner: Arc<dyn SmbRunner>,
+        password: Option<String>,
+    ) -> Result<Arc<dyn RemoteFs>, RemoteError> {
+        Ok(Arc::new(SmbFs::connect(
+            runner, &self.host, self.port, &self.user, password,
+        )?))
     }
 
     /// Connection parameters for SFTP; `secret` is the password or the key's passphrase.
@@ -222,6 +235,13 @@ impl Site {
     pub fn label(&self) -> String {
         if self.protocol == Protocol::Rclone {
             return format!("{} (chmura {})", self.name, self.host);
+        }
+        if self.protocol == Protocol::Smb {
+            return if self.user.is_empty() {
+                format!("{} (SMB {})", self.name, self.host)
+            } else {
+                format!("{} (SMB {}@{})", self.name, self.user, self.host)
+            };
         }
         format!("{} ({}@{}:{})", self.name, self.user, self.host, self.port)
     }
@@ -548,6 +568,34 @@ mod tests {
             services.bitwarden.password_of("old").as_deref(),
             Some("from vault")
         );
+    }
+
+    #[test]
+    fn an_smb_site_may_be_a_guest_and_survives_the_sites_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut guest = Site::new("nas (smb)", "nas", "");
+        guest.protocol = Protocol::Smb;
+        guest.port = Protocol::Smb.default_port();
+        assert_eq!(guest.problem(), None, "no user means a guest");
+        assert_eq!(guest.label(), "nas (smb) (SMB nas)");
+        let mut named = Site::new("ala@nas (smb)", "nas", "ala");
+        named.protocol = Protocol::Smb;
+        named.port = 445;
+        assert_eq!(named.label(), "ala@nas (smb) (SMB ala@nas)");
+        let mut ftp = Site::new("f", "h", "");
+        ftp.protocol = Protocol::Ftp;
+        assert!(ftp.problem().is_some(), "other protocols still need a user");
+        let path = dir.path().join("sites.conf");
+        let mut sites = Sites::load(&path).unwrap();
+        sites.upsert(guest).unwrap();
+        sites.upsert(named).unwrap();
+        let loaded = Sites::load(&path).unwrap();
+        assert_eq!(loaded.sites.len(), 2);
+        assert!(loaded
+            .sites
+            .iter()
+            .all(|s| s.protocol == Protocol::Smb && s.port == 445));
+        assert_eq!(Protocol::from_word("SMB"), Some(Protocol::Smb));
     }
 
     #[test]

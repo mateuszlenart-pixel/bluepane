@@ -40,6 +40,8 @@ pub enum Protocol {
     FtpsImplicit,
     /// A cloud through the `rclone` program; the site's host is the name of the remote.
     Rclone,
+    /// Windows / Samba shares through the `smbclient` program, without mounting them.
+    Smb,
 }
 
 impl Protocol {
@@ -50,6 +52,7 @@ impl Protocol {
             Protocol::FtpsImplicit => 990,
             // No port: rclone has its own configuration.
             Protocol::Rclone => 0,
+            Protocol::Smb => 445,
         }
     }
 
@@ -61,6 +64,7 @@ impl Protocol {
             Protocol::FtpsExplicit => "ftps",
             Protocol::FtpsImplicit => "ftps-implicit",
             Protocol::Rclone => "rclone",
+            Protocol::Smb => "smb",
         }
     }
 
@@ -71,6 +75,7 @@ impl Protocol {
             "ftps" | "ftps-explicit" => Some(Protocol::FtpsExplicit),
             "ftps-implicit" => Some(Protocol::FtpsImplicit),
             "rclone" | "cloud" | "chmura" => Some(Protocol::Rclone),
+            "smb" | "cifs" => Some(Protocol::Smb),
             _ => None,
         }
     }
@@ -82,6 +87,7 @@ impl Protocol {
             Protocol::FtpsExplicit => "FTPS (jawny, AUTH TLS)",
             Protocol::FtpsImplicit => "FTPS (niejawny, port 990)",
             Protocol::Rclone => "Chmura (rclone)",
+            Protocol::Smb => "Udziały SMB (smbclient)",
         }
     }
 }

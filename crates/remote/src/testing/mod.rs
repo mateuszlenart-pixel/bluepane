@@ -6,6 +6,7 @@ mod ftp_server;
 mod memory;
 mod rclone;
 mod sftp_server;
+mod smb;
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -46,3 +47,4 @@ pub use ftp_server::{start_ftp, FtpServer, FtpSettings, Tls};
 pub use memory::{FakeBitwarden, MemoryKeys, MemoryServices};
 pub use rclone::FakeRclone;
 pub use sftp_server::{start, write_file, Settings, TestServer};
+pub use smb::FakeSmb;

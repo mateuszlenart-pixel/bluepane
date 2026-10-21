@@ -16,9 +16,21 @@ pub fn run_cancellable(
     args: &[String],
     cancelled: &dyn Fn() -> bool,
 ) -> io::Result<Option<Output>> {
+    run_cancellable_env(program, args, &[], cancelled)
+}
+
+/// Like [`run_cancellable`], with extra environment variables for the program (a way to hand
+/// it a password that must not show up in the list of processes).
+pub fn run_cancellable_env(
+    program: &str,
+    args: &[String],
+    env: &[(String, String)],
+    cancelled: &dyn Fn() -> bool,
+) -> io::Result<Option<Output>> {
     let mut command = Command::new(program);
     command
         .args(args)
+        .envs(env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

@@ -54,6 +54,7 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
         known,
         services,
         rclone,
+        smb,
     } = &job.op
     {
         let secret = match secret {
@@ -68,6 +69,8 @@ pub(crate) fn run_remote(spec: &JobSpec, progress: &Progress, tx: &Sender<Event>
         };
         let connected = if site.protocol == bluepane_remote::Protocol::Rclone {
             site.connect_cloud(rclone.clone())
+        } else if site.protocol == bluepane_remote::Protocol::Smb {
+            site.connect_smb(smb.clone(), secret.clone())
         } else {
             site.connect(secret.clone(), known, trust.as_deref())
         };
