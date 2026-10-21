@@ -80,13 +80,15 @@ jobs:
       - name: Debian package and AppImage (Linux)
         if: runner.os == 'Linux'
         run: |
+          # appimagetool sprawdza plik .desktop programem desktop-file-validate.
+          sudo apt-get install -y desktop-file-utils
           tools/pakiet-deb.sh "$VERSION" target/release .
           tools/pakiet-appimage.sh "$VERSION" target/release .
           ls -la bluepane-*
       - name: "Package test (Linux, install .deb, run, remove, run AppImage)"
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y desktop-file-utils ./bluepane-"$VERSION"-linux-amd64.deb
+          sudo apt-get install -y ./bluepane-"$VERSION"-linux-amd64.deb
           desktop-file-validate /usr/share/applications/bluepane.desktop
           test -f /usr/share/icons/hicolor/256x256/apps/bluepane.png
           test "$(bluepane-cli --version)" = "bluepane-cli $VERSION"

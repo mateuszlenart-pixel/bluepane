@@ -14,6 +14,11 @@ TOOL_VERSION="1.9.0"
 TOOL_URL="https://github.com/AppImage/appimagetool/releases/download/$TOOL_VERSION/appimagetool-x86_64.AppImage"
 TOOL_SHA256="46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1"
 
+command -v desktop-file-validate >/dev/null || {
+  echo "appimagetool potrzebuje programu desktop-file-validate (pakiet desktop-file-utils)" >&2
+  exit 1
+}
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
