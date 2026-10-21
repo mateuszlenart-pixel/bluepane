@@ -1,0 +1,125 @@
+name: Wydanie
+
+# Buduje paczki wydania (Linux i Windows) i, po wypchnięciu tagu `vX.Y.Z`, wystawia je na stronie
+# Releases razem z sumami SHA-256 i notatkami z CHANGELOG.md. Tag musi zgadzać się z wersją
+# w Cargo.toml. Uruchomienie ręczne (workflow_dispatch) i zmiana tego pliku budują same paczki
+# jako artefakty, bez wydania: to próba generalna.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "tools/wersja.sh"
+      - "tools/wydanie-notatki.sh"
+      - "CHANGELOG.md"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  meta:
+    name: wersja i notatki
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version (and tag check)
+        id: version
+        run: |
+          tag=""
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then tag="${GITHUB_REF_NAME}"; fi
+          echo "version=$(tools/wersja.sh $tag)" >> "$GITHUB_OUTPUT"
+      - name: Release notes
+        run: tools/wydanie-notatki.sh "${{ steps.version.outputs.version }}" | tee notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notes
+          path: notes.md
+          retention-days: 14
+
+  build:
+    name: ${{ matrix.name }}
+    needs: meta
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Starszy Ubuntu: plik działa też na starszych dystrybucjach (nowsza biblioteka libc).
+          - { os: ubuntu-22.04, name: linux }
+          - { os: windows-latest, name: windows }
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libgtk-3-dev
+      # Wersja dla użytkownika: na Windows bez okna konsoli (bez funkcji `console`).
+      - name: Build (release)
+        run: cargo build --release -p bluepane -p bluepane-cli
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          name="bluepane-${VERSION}-linux-x86_64"
+          mkdir -p "dist/$name"
+          cp target/release/bluepane target/release/bluepane-cli "dist/$name/"
+          cp LICENSE-MIT LICENSE-APACHE README.md CHANGELOG.md "dist/$name/"
+          cp -r docs "dist/$name/"
+          tar -czf "$name.tar.gz" -C dist "$name"
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "bluepane-$env:VERSION-windows-x86_64"
+          New-Item -ItemType Directory -Force "dist/$name" | Out-Null
+          Copy-Item target/release/bluepane.exe, target/release/bluepane-cli.exe "dist/$name/"
+          Copy-Item LICENSE-MIT, LICENSE-APACHE, README.md, CHANGELOG.md "dist/$name/"
+          Copy-Item -Recurse docs "dist/$name/"
+          Compress-Archive -Path "dist/$name" -DestinationPath "$name.zip"
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: paczka-linux
+          path: bluepane-*.tar.gz
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: paczka-windows
+          path: bluepane-*.zip
+          retention-days: 14
+
+  release:
+    name: wydanie na GitHubie
+    # Tylko po tagu; ręczne uruchomienie i pull request kończą się na paczkach.
+    if: github.ref_type == 'tag'
+    needs: [meta, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Checksums
+        working-directory: files
+        run: |
+          sha256sum bluepane-* | tee SHA256SUMS.txt
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" files/bluepane-* files/SHA256SUMS.txt \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "bluepane ${{ needs.meta.outputs.version }}" \
+            --notes-file files/notes.md
