@@ -98,32 +98,36 @@ impl DirWatcher {
         let Some(watcher) = self.watcher.as_mut() else {
             return;
         };
-        let Ok(mut shared) = self.shared.lock() else {
-            return;
-        };
         let mut next: Vec<PathBuf> = Vec::new();
         for path in wanted {
             if !next.contains(path) {
                 next.push(path.clone());
             }
         }
-        // A directory that was wanted but could not be watched is tried again each time, so
-        // it starts being watched once it exists.
-        for old in shared.watched.clone() {
-            if !next.contains(&old) {
-                let _ = watcher.unwatch(&old);
+        let current = match self.shared.lock() {
+            Ok(shared) => shared.watched.clone(),
+            Err(_) => return,
+        };
+        // The lock is not held while the system is asked to watch or stop watching: its event
+        // thread takes the same lock to report changes, and `watch` waits for that thread.
+        for old in &current {
+            if !next.contains(old) {
+                let _ = watcher.unwatch(old);
             }
         }
+        // A directory that was wanted but could not be watched is tried again each time, so
+        // it starts being watched once it exists.
         let mut watched = Vec::new();
         for path in next {
-            if shared.watched.contains(&path)
-                || watcher.watch(&path, RecursiveMode::NonRecursive).is_ok()
+            if current.contains(&path) || watcher.watch(&path, RecursiveMode::NonRecursive).is_ok()
             {
                 watched.push(path);
             }
         }
-        shared.dirty.retain(|d| watched.contains(d));
-        shared.watched = watched;
+        if let Ok(mut shared) = self.shared.lock() {
+            shared.dirty.retain(|d| watched.contains(d));
+            shared.watched = watched;
+        }
     }
 
     /// The watched directories that changed since the last call.
@@ -208,5 +212,43 @@ mod tests {
         std::fs::create_dir_all(&gone).unwrap();
         watcher.set_paths(std::slice::from_ref(&gone));
         assert!(watcher.watches(&gone));
+    }
+
+    #[test]
+    fn changing_the_watched_set_during_a_storm_of_events_does_not_deadlock() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (a, b) = (tmp.path().join("a"), tmp.path().join("b"));
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        let (done, finished) = std::sync::mpsc::channel();
+        let (writer_a, writer_b) = (a.clone(), b.clone());
+        std::thread::spawn(move || {
+            let mut watcher = DirWatcher::new();
+            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let flag = Arc::clone(&stop);
+            let writer = std::thread::spawn(move || {
+                let mut n = 0u32;
+                while !flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = std::fs::write(writer_a.join(format!("f{}", n % 20)), "x");
+                    let _ = std::fs::write(writer_b.join(format!("f{}", n % 20)), "x");
+                    n += 1;
+                }
+            });
+            for round in 0..300 {
+                match round % 3 {
+                    0 => watcher.set_paths(&[a.clone(), b.clone()]),
+                    1 => watcher.set_paths(std::slice::from_ref(&a)),
+                    _ => watcher.set_paths(std::slice::from_ref(&b)),
+                }
+                let _ = watcher.take_changed();
+            }
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+            writer.join().unwrap();
+            let _ = done.send(());
+        });
+        assert!(
+            finished.recv_timeout(Duration::from_secs(60)).is_ok(),
+            "set_paths hung while events were coming in"
+        );
     }
 }
