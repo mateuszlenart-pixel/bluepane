@@ -732,6 +732,7 @@ impl Session {
             Command::DirSize => self.count_dir_sizes()?,
             Command::Hash(action) => self.hash_action(action)?,
             Command::GitStatus => self.refresh_git_status()?,
+            Command::Git(action) => self.git_action(action)?,
             Command::Quick(action) => self.quick_action(action)?,
             Command::Bind(args) => self.bind_key(args)?,
             Command::Unbind(key) => self.unbind_key(&key)?,
