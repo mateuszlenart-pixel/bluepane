@@ -1,6 +1,7 @@
 //! Headless front end. The same commands as the GUI, no window.
 //!
 //! ```text
+//! bluepane-cli --version
 //! bluepane-cli commands
 //! bluepane-cli ls <dir>
 //! bluepane-cli run <left_dir> <right_dir> "select a.txt" "copy" ...
@@ -13,11 +14,18 @@ use std::process::ExitCode;
 
 use bluepane_engine::{command_help, Resolution, Session, COMMAND_NAMES};
 
-const USAGE: &str = "użycie:\n  bluepane-cli commands\n  bluepane-cli ls <katalog>\n  bluepane-cli run <lewy> <prawy> <komenda>...\n  bluepane-cli run-script <lewy> <prawy> <skrypt.bp> [argument]...";
+const USAGE: &str = "użycie:\n  bluepane-cli --version\n  bluepane-cli commands\n  bluepane-cli ls <katalog>\n  bluepane-cli run <lewy> <prawy> <komenda>...\n  bluepane-cli run-script <lewy> <prawy> <skrypt.bp> [argument]...";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("--version" | "-V" | "version") => {
+            println!(
+                "{}",
+                bluepane_engine::version_line().replacen("bluepane", "bluepane-cli", 1)
+            );
+            ExitCode::SUCCESS
+        }
         Some("commands") => {
             for name in COMMAND_NAMES {
                 match command_help(name) {

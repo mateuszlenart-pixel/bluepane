@@ -48,6 +48,17 @@ fn icon() -> eframe::egui::IconData {
 fn main() -> eframe::Result {
     let mut args = std::env::args().skip(1);
     let first = args.next();
+    if matches!(first.as_deref(), Some("--version" | "-V")) {
+        // The Windows release build has no console, so there the same text is in `about`.
+        println!("{}", bluepane_engine::version_line());
+        return Ok(());
+    }
+    if matches!(first.as_deref(), Some("--help" | "-h")) {
+        println!(
+            "użycie: bluepane [lewy_katalog [prawy_katalog]]\n  --version  pokazuje wersję\n  --help     ta pomoc"
+        );
+        return Ok(());
+    }
     let given = first.is_some();
     let left = start_dir(first);
     let right = start_dir(args.next());

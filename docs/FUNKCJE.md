@@ -192,6 +192,10 @@ Własny przycisk uruchamia zewnętrzny program z parametrami. Zastępuje wtyczki
 - Program startuje w katalogu aktywnego panelu, bez powłoki: nazwy plików ze spacjami, średnikami czy `&` trafiają do programu bez zmian i nic się nie interpretuje. Przycisk działa na katalogu na dysku (nie w archiwum ani na serwerze).
 - Błąd uruchomienia (np. brak programu) pokazuje pasek stanu z nazwą programu.
 
+## Wersja i „O programie”
+
+`about` pokazuje w podglądzie wersję, licencję (`MIT OR Apache-2.0`), system i katalog ustawień. `bluepane --version` (oraz `bluepane-cli --version`) wypisuje samą wersję; wersja release na Windows nie ma okna konsoli, więc tam użyj `about` albo `bluepane-cli --version`. Numer wersji jest w jednym miejscu (`Cargo.toml`), historia zmian w `CHANGELOG.md`.
+
 ## Terminal tutaj i polecenie z wynikiem
 
 Bluepane nie ma własnego terminala: terminal systemu zawsze będzie lepszy. Zamiast tego pomaga tam, gdzie jesteś.

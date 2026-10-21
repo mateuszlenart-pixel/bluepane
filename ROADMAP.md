@@ -247,11 +247,11 @@ Sieć:
 - [x] 14m **Szukanie z indeksem** (`index`): wyniki natychmiast, także po treści PDF/Word/Excel (tekst z crate'a `docs`), tylko na polecenie użytkownika; zapisane wyszukiwania jako wirtualne katalogi
 - [x] 14n **Podgląd**: kolorowanie składni kodu, renderowany Markdown, edytor hex (z zapisem przez kopię i potwierdzenie), metadane plików multimedialnych (bez nowych zależności: własny tokenizer i renderer, `lofty` i `kamadak-exif` z 14d)
 
-### Etap 9: dystrybucja (rozpisany 2026-10-21, jeszcze nie zaczęty)
+### Etap 9: dystrybucja (rozpisany 2026-10-21; decyzje właściciela: wersja 0.1, paczki Windows zip + instalator i Linux AppImage + .deb, bez podpisywania kodu)
 
 Cel: instalacja z gotowych paczek na czystej maszynie, bez Rusta i bez kompilacji. Zasady jak dotąd: jeden podetap = jedna gałąź = jeden PR, scalanie po „scalaj” i zielonym CI na obu systemach. Narzędzia do budowania paczek (np. `cargo-deb`, `cargo-wix`) są zależnościami budowania, nie programu, i **każde wymaga zgody właściciela**. Decyzje do podjęcia przed startem: formaty (propozycja: Windows zip i instalator, Linux AppImage i `.deb`), podpisywanie kodu (bez certyfikatu Windows SmartScreen ostrzega o nieznanym wydawcy) i brak samodzielnego sprawdzania aktualizacji (zasada: nic w tle bez zgody).
 
-- [ ] 9a **Wersja i tożsamość programu**: numer wersji w jednym miejscu (workspace), `bluepane --version`, okno „O programie” (wersja, licencje zależności), ikona aplikacji, plik `CHANGELOG.md`
+- [x] 9a **Wersja i tożsamość programu**: numer wersji w jednym miejscu (workspace, 0.1.0), `bluepane --version`, komenda `about` (wersja, licencja, system, ustawienia; zestawienie bibliotek zostaje w `Cargo.lock`), ikona okna już była, plik `CHANGELOG.md`
 - [ ] 9b **Wydania na GitHubie**: workflow budujący na tag `vX.Y.Z` pliki release na obu systemach, dołączanie ich do Releases z sumami SHA-256 i notatkami zmian (rozwinięcie dzisiejszego „Builda testowego”)
 - [ ] 9c **Windows**: wersja przenośna (zip) oraz instalator (MSI albo setup.exe) ze skrótem w menu Start i odinstalowaniem; opcjonalnie wpis do `winget`
 - [ ] 9d **Linux**: AppImage i paczka `.deb` z plikiem `.desktop`, ikoną i zależnościami systemowymi (`git`, `smbclient`, `rclone` jako opcjonalne)
