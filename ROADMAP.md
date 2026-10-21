@@ -18,7 +18,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 7c | Grupowa zmiana nazw | ✅ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
 | 8 | Sieć | 🟡 | SFTP i FTP działają jak katalog lokalny |
 | 8f | Skaner sieci | ✅ | lista urządzeń z usługami, udziałami i akcjami (jak Advanced IP Scanner) |
-| 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie (rozpisane na 9a–9e) |
+| 9 | Dystrybucja | 🟡 | instalacja z gotowych paczek na czystej maszynie (9a–9e zrobione; czeka na test ręczny 4.32 i tag `v0.1.0`) |
 | 10 | Nowoczesne GUI | ✅ | okno wygląda jak dopracowane narzędzie, a nie prototyp; logika w `engine` bez zmian |
 | T | Poprawki po testach ręcznych | ⬜ | błędy z `docs/TESTOWANIE.md` (Linux i Windows) naprawione, każdy z testem |
 | 11 | Fundamenty pod dalszy rozwój | ⬜ | nowe narzędzie to jeden moduł; 100 tys. plików bez zacinania; jedna konfiguracja; testy GUI w CI |
@@ -255,7 +255,7 @@ Cel: instalacja z gotowych paczek na czystej maszynie, bez Rusta i bez kompilacj
 - [x] 9b **Wydania na GitHubie**: workflow `Wydanie` (tag `vX.Y.Z`, sprawdza zgodność z `Cargo.toml`) buduje paczki tar.gz i zip na obu systemach i dołącza je do Releases z `SHA256SUMS.txt` i notatkami z `CHANGELOG.md`; ręczne uruchomienie to próba generalna bez wydania; instrukcja w `docs/WYDANIA.md`
 - [x] 9c **Windows**: wersja przenośna (zip, z 9b) oraz instalator Inno Setup (`installer/bluepane.iss`): skrót w menu Start, opcjonalnie na pulpicie, odinstalowanie, instalacja bez praw administratora; ikona `.ico` z istniejącej ikony okna; workflow testuje cichą instalację i odinstalowanie. Wpis do `winget` odłożony (wymaga publicznego wydania i zgłoszenia do cudzego repozytorium)
 - [x] 9d **Linux**: AppImage (`tools/pakiet-appimage.sh`, `appimagetool 1.9.0` przypięty sumą SHA-256) i paczka `.deb` (`tools/pakiet-deb.sh`, samo `dpkg-deb`) z plikiem `.desktop`, ikoną i zależnościami (`git`, `xdg-utils` zalecane; `smbclient`, `rclone` sugerowane); workflow testuje instalację `.deb` przez `apt`, `desktop-file-validate`, usunięcie i uruchomienie AppImage
-- [ ] 9e **Test na czystej maszynie**: instalacja, uruchomienie, aktualizacja i odinstalowanie na świeżym Windows i Linuksie (maszyna wirtualna), lista kontrolna w `docs/TESTOWANIE.md`, instrukcja instalacji w `README.md`
+- [x] 9e **Test na czystej maszynie**: sekcja 4.32 w `docs/TESTOWANIE.md` (Windows i Linux, P1) i instrukcja instalacji w `README.md` (tabela paczek, SmartScreen, sumy, ustawienia). Automatycznie na czystych runnerach sprawdzane są już: cicha instalacja i odinstalowanie na Windows, `.deb` przez `apt`, AppImage; zostaje wygląd, ikony i pierwsze uruchomienie, które sprawdza właściciel. Po pomyślnym teście: tag `v0.1.0` według `docs/WYDANIA.md`
 
 ### Testy ręczne (przygotowane 2026-10-15)
 
