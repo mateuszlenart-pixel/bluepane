@@ -4,6 +4,7 @@
 //! through [`Session::execute`] / [`Session::run_line`], so everything is testable
 //! without a window.
 
+mod about;
 mod buttons;
 mod cloud;
 mod command;
@@ -57,6 +58,7 @@ mod viewer;
 mod watch;
 mod workspace;
 
+pub use about::{about_text, version_line, LICENSE, REPOSITORY, VERSION};
 pub use bluepane_archive::{Format as ArchiveFormat, Level as CompressionLevel};
 pub use bluepane_docs::PageImage;
 pub use bluepane_netscan::{local_range, Host as ScanHost, ScanSummary, Service as ScanService};
