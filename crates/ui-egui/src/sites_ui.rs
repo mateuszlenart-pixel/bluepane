@@ -193,6 +193,7 @@ impl BluepaneUi {
                                 Protocol::FtpsExplicit,
                                 Protocol::FtpsImplicit,
                                 Protocol::Ftp,
+                                Protocol::Rclone,
                             ] {
                                 ui.selectable_value(&mut form.protocol, protocol, protocol.label());
                             }
@@ -201,16 +202,28 @@ impl BluepaneUi {
                         form.port = form.protocol.default_port().to_string();
                     }
                     ui.end_row();
-                    field(ui, "Serwer:", &mut form.host, "adres lub nazwa, np. 192.168.1.10");
-                    field(ui, "Port:", &mut form.port, "22");
-                    field(ui, "Użytkownik:", &mut form.user, "np. root");
+                    if form.protocol == Protocol::Rclone {
+                        field(ui, "Chmura (nazwa z rclone):", &mut form.host, "np. gdrive; lista: rclone listremotes");
+                    } else {
+                        field(ui, "Serwer:", &mut form.host, "adres lub nazwa, np. 192.168.1.10");
+                        field(ui, "Port:", &mut form.port, "22");
+                        field(ui, "Użytkownik:", &mut form.user, "np. root");
+                    }
                     if form.protocol == Protocol::Sftp {
                         field(ui, "Plik klucza:", &mut form.key, "puste = logowanie hasłem");
                     }
                     field(ui, "Katalog startowy:", &mut form.start, "puste = katalog domowy");
                 });
                 ui.add_space(6.0);
-                if form.protocol != Protocol::Sftp {
+                if form.protocol == Protocol::Rclone {
+                    ui.label(
+                        RichText::new(
+                            "Chmura działa przez program rclone: loginy i klucze trzyma rclone (rclone config), bluepane nie pyta o hasło. Wymaga zainstalowanego rclone (rclone.org).",
+                        )
+                        .weak(),
+                    );
+                }
+                if !matches!(form.protocol, Protocol::Sftp | Protocol::Rclone) {
                     ui.checkbox(
                         &mut form.active,
                         "Tryb aktywny (serwer łączy się do Ciebie; domyślnie pasywny)",
@@ -231,11 +244,19 @@ impl BluepaneUi {
                             .weak(),
                     );
                 }
-                ui.label(if form.protocol != Protocol::Sftp || form.key.trim().is_empty() {
-                    "Hasło:"
-                } else {
-                    "Hasło klucza (frazy):"
-                });
+                // A cloud keeps its login in rclone: no password here.
+                if form.protocol == Protocol::Rclone {
+                    form.secret_kind = 0;
+                }
+                let cloud = form.protocol == Protocol::Rclone;
+                if !cloud {
+                    ui.label(if form.protocol != Protocol::Sftp || form.key.trim().is_empty() {
+                        "Hasło:"
+                    } else {
+                        "Hasło klucza (frazy):"
+                    });
+                }
+                if !cloud {
                 ui.horizontal_wrapped(|ui| {
                     ui.selectable_value(&mut form.secret_kind, 0, "pytaj przy łączeniu");
                     ui.selectable_value(&mut form.secret_kind, 1, "w pliku witryn");
@@ -292,6 +313,7 @@ impl BluepaneUi {
                     _ => {
                         ui.label(RichText::new("Hasło nie jest nigdzie zapisywane.").weak());
                     }
+                }
                 }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {

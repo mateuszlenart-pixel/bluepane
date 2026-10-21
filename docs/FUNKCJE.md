@@ -348,6 +348,15 @@ tylko nawiązuje i zrywa połączenia TCP, więc nie potrzeba uprawnień adminis
 
 Komendy: `scan`, `scanset <pole> <wartość>` (pola: `range`, `ports`, `names`, `arp`, `filter`, `timeout`, `reset`), `scanrun`, `scanstop`, `scanclose`, `scanselect <ip>`, `scanopen <ip> <port>`, `scanshares <ip>`, `scanshare <ip> <udział>`, `scansite <ip> sftp|ftp|ftps`, `scanfav <ip>`, `scanfavorites [off]`, `scancopy <ip>`, `scanwake <ip|MAC>`, `scanpanel <ip> <udział>`, `scanhistory [off]`.
 
+## Chmury przez rclone
+
+Google Drive, OneDrive, S3, WebDAV i reszta chmur, które zna program **rclone**, mogą być katalogiem w panelu, jak serwer. bluepane nie mówi tymi protokołami i **nie trzyma loginów chmur**: konfiguruje je rclone (`rclone config`), a program tylko prosi go o listę, kopiowanie i usuwanie. Wymaga zainstalowanego rclone (rclone.org); bez niego komunikat mówi, co zrobić.
+
+- `cloud` wypisuje chmury skonfigurowane w rclone (nazwa i rodzaj). `cloud <nazwa>` (alias `chmura`) otwiera chmurę w aktywnym panelu i zapisuje ją jako witrynę `<nazwa> (rclone)` (menedżer serwerów, Ctrl+S, ma protokół „Chmura (rclone)”: w polu serwera jest nazwa chmury, o hasło nie pyta). Z pola ścieżki: `rclone://nazwa/katalog`.
+- Panel działa jak przy SFTP: Enter / Backspace, F5 pobiera i wysyła (także całe katalogi), F7 nowy katalog, F2 zmiana nazwy (nigdy nie zastępuje istniejącego), F8 usuwa **trwale** (kosz chmury jest sprawą rclone i samej chmury; pytanie mówi to wprost). Pobieranie idzie przez plik `.bpart`, więc przerwane nie zostawia pół pliku pod prawdziwą nazwą; postęp pobierania rośnie razem z plikiem, wysyłanie zalicza się na końcu.
+- Czego nie ma: uprawnień (`chmod`), wznawiania przerwanego pobierania i śledzenia postępu wysyłania w trakcie (to wymagałoby parsowania wyjścia rclone). Chmury bez znanego rozmiaru plików (np. dokumenty Google) pokazują 0 B.
+- Prawdziwy rclone nie jest uruchamiany w testach: sprawdzają one komendy `lsjson`, `mkdir`, `deletefile`, `rmdir`, `moveto`, `copyto` na atrapie, więc pierwszy prawdziwy test na koncie chmury jest Twój.
+
 ## Kolejka zadań (Ctrl+J)
 
 Kopiowanie, przenoszenie, pakowanie, transfery z serwerów i inne długie zadania idą jedno po drugim. Okno kolejki pokazuje bieżące zadanie z postępem,

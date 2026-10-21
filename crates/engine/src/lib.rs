@@ -5,6 +5,7 @@
 //! without a window.
 
 mod buttons;
+mod cloud;
 mod command;
 mod command_help;
 mod compare;
@@ -72,6 +73,7 @@ pub use bluepane_sync::{
 };
 pub use bluepane_vfs::{Share, ShareKind};
 pub use buttons::{Button, ButtonAction, ButtonLaunch};
+pub use cloud::CloudAction;
 pub use command::{
     parse_size, Command, NameFormat, PackArgs, PaletteAction, QueueMove, QuickAction, SpeedLimit,
     SyncArgs, TabAction, UnpackArgs, ViewerAction, COMMAND_NAMES,

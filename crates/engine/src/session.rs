@@ -270,6 +270,8 @@ pub struct Session {
     /// Where passwords of saved sites are read from and saved to besides the sites file
     /// (the system password store, Bitwarden). Tests put fakes here.
     pub secrets: std::sync::Arc<dyn bluepane_remote::SecretServices>,
+    /// How the `rclone` program is started (clouds); tests put a fake one here.
+    pub rclone: std::sync::Arc<dyn bluepane_remote::RcloneRunner>,
     /// How a file is opened for editing (tests replace it).
     pub editor: Editor,
     pub(crate) remote_edit: Option<RemoteEdit>,
@@ -464,6 +466,7 @@ impl Session {
             sites: bluepane_remote::Sites::in_memory(),
             known_hosts: bluepane_remote::KnownHosts::in_memory(),
             secrets: std::sync::Arc::new(bluepane_remote::SystemServices::default()),
+            rclone: std::sync::Arc::new(bluepane_remote::SystemRclone::new()),
             editor: Editor(std::sync::Arc::new(open_in_editor)),
             remote_edit: None,
             paused: false,
@@ -683,6 +686,7 @@ impl Session {
             Command::Macro(action) => self.macro_action(action)?,
             Command::Button(action) => self.button_action(action)?,
             Command::Map(action) => self.map_action(action)?,
+            Command::Cloud(action) => self.cloud_action(action)?,
             Command::Compare(action) => self.compare_action(action)?,
             Command::Checksum(action) => self.checksum_action(action)?,
             Command::Dupes(action) => self.dup_action(action)?,
