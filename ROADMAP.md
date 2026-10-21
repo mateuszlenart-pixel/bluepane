@@ -18,7 +18,7 @@ Etapy 1–4 dają użyteczny menedżer plików do codziennej pracy.
 | 7c | Grupowa zmiana nazw | ✅ | zmiana nazw wielu plików z podglądem wyniku przed wykonaniem |
 | 8 | Sieć | 🟡 | SFTP i FTP działają jak katalog lokalny |
 | 8f | Skaner sieci | ✅ | lista urządzeń z usługami, udziałami i akcjami (jak Advanced IP Scanner) |
-| 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie |
+| 9 | Dystrybucja | ⬜ | instalacja z gotowych paczek na czystej maszynie (rozpisane na 9a–9e) |
 | 10 | Nowoczesne GUI | ✅ | okno wygląda jak dopracowane narzędzie, a nie prototyp; logika w `engine` bez zmian |
 | T | Poprawki po testach ręcznych | ⬜ | błędy z `docs/TESTOWANIE.md` (Linux i Windows) naprawione, każdy z testem |
 | 11 | Fundamenty pod dalszy rozwój | ⬜ | nowe narzędzie to jeden moduł; 100 tys. plików bez zacinania; jedna konfiguracja; testy GUI w CI |
@@ -246,6 +246,16 @@ Sieć:
 - [x] 14l **Git**: status plików w kolumnie (był w 12l), gałąź przy ścieżce, podstawowe akcje `git add|unstage|commit|diff|log` (`git` jako proces, bez nowej zależności)
 - [x] 14m **Szukanie z indeksem** (`index`): wyniki natychmiast, także po treści PDF/Word/Excel (tekst z crate'a `docs`), tylko na polecenie użytkownika; zapisane wyszukiwania jako wirtualne katalogi
 - [x] 14n **Podgląd**: kolorowanie składni kodu, renderowany Markdown, edytor hex (z zapisem przez kopię i potwierdzenie), metadane plików multimedialnych (bez nowych zależności: własny tokenizer i renderer, `lofty` i `kamadak-exif` z 14d)
+
+### Etap 9: dystrybucja (rozpisany 2026-10-21, jeszcze nie zaczęty)
+
+Cel: instalacja z gotowych paczek na czystej maszynie, bez Rusta i bez kompilacji. Zasady jak dotąd: jeden podetap = jedna gałąź = jeden PR, scalanie po „scalaj” i zielonym CI na obu systemach. Narzędzia do budowania paczek (np. `cargo-deb`, `cargo-wix`) są zależnościami budowania, nie programu, i **każde wymaga zgody właściciela**. Decyzje do podjęcia przed startem: formaty (propozycja: Windows zip i instalator, Linux AppImage i `.deb`), podpisywanie kodu (bez certyfikatu Windows SmartScreen ostrzega o nieznanym wydawcy) i brak samodzielnego sprawdzania aktualizacji (zasada: nic w tle bez zgody).
+
+- [ ] 9a **Wersja i tożsamość programu**: numer wersji w jednym miejscu (workspace), `bluepane --version`, okno „O programie” (wersja, licencje zależności), ikona aplikacji, plik `CHANGELOG.md`
+- [ ] 9b **Wydania na GitHubie**: workflow budujący na tag `vX.Y.Z` pliki release na obu systemach, dołączanie ich do Releases z sumami SHA-256 i notatkami zmian (rozwinięcie dzisiejszego „Builda testowego”)
+- [ ] 9c **Windows**: wersja przenośna (zip) oraz instalator (MSI albo setup.exe) ze skrótem w menu Start i odinstalowaniem; opcjonalnie wpis do `winget`
+- [ ] 9d **Linux**: AppImage i paczka `.deb` z plikiem `.desktop`, ikoną i zależnościami systemowymi (`git`, `smbclient`, `rclone` jako opcjonalne)
+- [ ] 9e **Test na czystej maszynie**: instalacja, uruchomienie, aktualizacja i odinstalowanie na świeżym Windows i Linuksie (maszyna wirtualna), lista kontrolna w `docs/TESTOWANIE.md`, instrukcja instalacji w `README.md`
 
 ### Testy ręczne (przygotowane 2026-10-15)
 
