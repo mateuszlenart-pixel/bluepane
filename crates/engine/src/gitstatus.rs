@@ -367,7 +367,7 @@ impl Session {
     }
 
     /// Shows git's output in the viewer, through a file in a scratch folder.
-    fn show_git_text(&mut self, name: &str, text: &str) -> Result<(), EngineError> {
+    pub(crate) fn show_git_text(&mut self, name: &str, text: &str) -> Result<(), EngineError> {
         let scratch = std::env::temp_dir().join(format!(
             "bluepane-view-{}-{}",
             std::process::id(),

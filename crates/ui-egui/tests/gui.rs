@@ -835,3 +835,57 @@ fn bluepane_vfs_run(dir: &std::path::Path, args: &[&str]) -> bool {
         .output()
         .is_ok_and(|o| o.status.success())
 }
+
+#[test]
+fn the_viewer_names_the_language_and_draws_markdown_and_the_hex_editor() {
+    let (tmp, mut harness) = window();
+    let left = tmp.path().join("left");
+    std::fs::write(left.join("kod.rs"), "fn main() { let x = 1; } // zażółć\n").unwrap();
+    std::fs::write(
+        left.join("README.md"),
+        "# Tytuł\n\nTo jest **mocne** zdanie.\n",
+    )
+    .unwrap();
+    std::fs::write(left.join("dane.bin"), [0u8, 1, 2, 3, 4, 5, 6, 7]).unwrap();
+    harness.run_steps(2);
+    command(&mut harness, "refresh");
+
+    command(&mut harness, "select kod.rs");
+    command(&mut harness, "view");
+    harness.run_steps(6);
+    harness.get_by_label_contains("tekst, Rust");
+    command(&mut harness, "viewer close");
+
+    command(&mut harness, "select README.md");
+    command(&mut harness, "view");
+    harness.run_steps(6);
+    harness.get_by_label_contains("[Markdown]");
+    harness.get_by_label_contains("wiersz 1 z");
+    command(&mut harness, "viewer render");
+    harness.run_steps(4);
+    harness.get_by_label_contains("[tekst");
+    command(&mut harness, "viewer close");
+
+    command(&mut harness, "select dane.bin");
+    command(&mut harness, "view");
+    harness.run_steps(6);
+    harness.get_by_label_contains("[hex]");
+    command(&mut harness, "viewer edit");
+    command(&mut harness, "viewer digit a");
+    command(&mut harness, "viewer digit b");
+    harness.run_steps(4);
+    {
+        let viewer = harness.state_mut().session_mut().viewer.as_ref().unwrap();
+        assert!(viewer.editing() && viewer.edit_count() == 1);
+    }
+    // Closing with an unsaved change only warns the first time.
+    command(&mut harness, "viewer close");
+    assert!(harness.state_mut().session_mut().viewer.is_some());
+    command(&mut harness, "viewer close");
+    assert!(harness.state_mut().session_mut().viewer.is_none());
+    assert_eq!(
+        std::fs::read(left.join("dane.bin")).unwrap()[0],
+        0,
+        "nothing was saved"
+    );
+}

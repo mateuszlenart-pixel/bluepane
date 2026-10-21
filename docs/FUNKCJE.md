@@ -254,6 +254,14 @@ ikonę. Kliknięcia, zaznaczanie, Enter, menu kontekstowe i przeciąganie dział
 strzałki w lewo / w prawo przesuwają o kafelek, w górę / w dół o cały rząd. Na serwerach i w
 archiwach kafelki mają tylko ikony (miniatura wymagałaby pobrania pliku).
 
+**Kolorowanie składni:** pliki kodu (Rust, Python, JavaScript/TypeScript, C/C++/C#/Java/Kotlin/PHP, Go, JSON, TOML/INI/YAML, skrypty powłoki, SQL, HTML/XML, CSS) są kolorowane w podglądzie: słowa kluczowe, napisy, komentarze (także blokowe, przez wiele linii) i liczby. To lekki tokenizer, nie parser: dla typowego kodu wystarcza, a nieznane pliki zostają bez kolorów. Nagłówek podglądu podaje język (`tekst, Rust`); klawisz **C** (`viewer highlight`) włącza i wyłącza kolory. Kolor bloku komentarza w oknie odczytuje się od początku pliku do 8 MB wstecz.
+
+**Markdown:** plik `.md` (do 4 MB) otwiera się **wyrenderowany**: nagłówki z podkreśleniem, **grube**, *kursywa*, `kod`, odnośniki (`tekst (adres)`), obrazy jako `[obraz: opis]`, listy punktowane i numerowane, cytaty, linie poziome i bloki kodu, zawinięte do szerokości okna. Tabele i HTML zostają tak, jak napisano. Klawisz **M** (`viewer render`) przełącza na zwykły tekst i z powrotem; szukanie (`/`, `F7`) działa na tekście, więc samo przełącza widok na tekst.
+
+**Edytor hex:** klawisz **E** (`viewer edit`) włącza edycję w widoku hex: strzałki przesuwają kursor (żółty), cyfry `0-9 a-f` zmieniają bajt (dwie cyfry = jeden bajt, kursor idzie dalej), zmienione bajty są podświetlone, a plik na dysku **nie zmienia się**. `Ctrl+Z` (`viewer revert`) odrzuca zmiany, `Esc` kończy edycję. `Ctrl+S` (`viewer save`) zapisuje kopię ze zmianami obok pliku (`nazwa.bpedit`) i **pyta**: `Enter` (`viewer save confirm`) podmienia plik, a oryginał zostaje jako `nazwa.bak` (kolejne zapisy: `.bak2`, `.bak3`...), `Esc` odrzuca kopię (zmiany zostają w edytorze). Zamknięcie podglądu z niezapisanymi zmianami ostrzega i dopiero drugie zamknięcie je porzuca. `viewer poke <offset> <bajty>` ustawia bajty z linii poleceń (np. `viewer poke 0x10 ff 00`); plik nie rośnie ani nie maleje. Edytować można tylko pliki z dysku, nie podgląd z archiwum ani dokumentu (to kopie robocze).
+
+**Szczegóły pliku:** komenda `details` (alias `meta`; w podglądzie klawisz **I**) pokazuje w podglądzie wszystko, co da się odczytać o pliku: rozmiar, daty, prawa, a dla zdjęć pola **EXIF** (aparat, ekspozycja, data, GPS), dla dźwięku czas trwania, przepływność, częstotliwość i tagi (wykonawca, tytuł, album).
+
 **Obrazy** (PNG, JPEG, GIF, BMP, WebP, ICO) F3 pokazuje jako obraz w zakładce „Strony”, z tym samym
 powiększaniem co strony PDF (`pagezoom fit|in|out|<procent>`; 100% = piksel w piksel). To samo
 działa w Quick View (Ctrl+Q), dla obrazu w archiwum i na serwerze. Plik z rozszerzeniem obrazu,

@@ -538,23 +538,31 @@ impl BluepaneUi {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let mode = match viewer.mode() {
-            ViewMode::Text => "tekst",
-            ViewMode::Hex => "hex",
+        let mode = match (viewer.mode(), viewer.language()) {
+            (ViewMode::Text, Some(lang)) => format!("tekst, {lang}"),
+            (ViewMode::Text, None) => "tekst".to_string(),
+            (ViewMode::Hex, _) => "hex".to_string(),
+            (ViewMode::Rendered, _) => "Markdown".to_string(),
+        };
+        let position = match viewer.rendered_rows() {
+            Some(total) => format!("wiersz {} z {total}", viewer.offset() + 1),
+            None => format!(
+                "bajt {} z {} ({})",
+                viewer.offset(),
+                viewer.size(),
+                human_size(viewer.size())
+            ),
         };
         ui.label(
             RichText::new(format!(
-                "{name}   [{mode}]   bajt {} z {} ({})   {}%",
-                viewer.offset(),
-                viewer.size(),
-                human_size(viewer.size()),
+                "{name}   [{mode}]   {position}   {}%",
                 viewer.percent()
             ))
             .strong(),
         );
         ui.label(RichText::new(viewer.message.clone()).weak());
         ui.label(
-            RichText::new("Esc/Q zamknij · strzałki, PgUp, PgDn, Spacja, Home, End · H hex/tekst · / lub F7 szukaj · N dalej, Shift+N wstecz")
+            RichText::new("Esc/Q zamknij · strzałki, PgUp, PgDn, Spacja, Home, End · H hex/tekst · C kolory · M Markdown · / lub F7 szukaj · N dalej, Shift+N wstecz")
                 .weak(),
         );
         ui.separator();
@@ -581,11 +589,16 @@ impl BluepaneUi {
                 );
                 painter.rect_filled(band, 0.0, ui.visuals().selection.bg_fill);
             }
-            painter.text(
-                egui::pos2(rect.left() + 2.0, top),
-                Align2::LEFT_TOP,
+            let galley = painter.layout_job(row_job(
                 &row.text,
-                font.clone(),
+                &row.spans,
+                &font,
+                ui.visuals().text_color(),
+                ui.visuals().dark_mode,
+            ));
+            painter.galley(
+                egui::pos2(rect.left() + 2.0, top),
+                galley,
                 ui.visuals().text_color(),
             );
         }
@@ -1783,6 +1796,87 @@ fn key_name(key: egui::Key, modifiers: egui::Modifiers) -> String {
     }
     name.push_str(&format!("{key:?}"));
     name
+}
+
+/// The colour of a stretch of the viewer's text.
+fn span_color(kind: bluepane_engine::SpanKind, dark: bool) -> Color32 {
+    use bluepane_engine::SpanKind::*;
+    let (d, l) = match kind {
+        Keyword => ((0xc5, 0x86, 0xc0), (0xaf, 0x00, 0xdb)),
+        String => ((0xce, 0x91, 0x78), (0xa3, 0x15, 0x15)),
+        Comment => ((0x6a, 0x99, 0x55), (0x00, 0x80, 0x00)),
+        Number => ((0xb5, 0xce, 0xa8), (0x09, 0x86, 0x58)),
+        Heading => ((0x56, 0x9c, 0xd6), (0x00, 0x4a, 0x9f)),
+        Strong => ((0xff, 0xff, 0xff), (0x00, 0x00, 0x00)),
+        Emphasis => ((0xdc, 0xdc, 0xaa), (0x79, 0x5e, 0x26)),
+        Code => ((0xce, 0x91, 0x78), (0xa3, 0x15, 0x15)),
+        Link => ((0x4f, 0xc1, 0xff), (0x06, 0x45, 0xad)),
+        Quote => ((0x9c, 0xa3, 0xaf), (0x57, 0x60, 0x6a)),
+        Bullet => ((0xd7, 0xba, 0x7d), (0xb5, 0x89, 0x00)),
+        Modified => ((0xf4, 0x87, 0x71), (0xc0, 0x39, 0x2b)),
+        Cursor => ((0xff, 0xff, 0xff), (0xff, 0xff, 0xff)),
+    };
+    let (r, g, b) = if dark { d } else { l };
+    Color32::from_rgb(r, g, b)
+}
+
+/// One row of the viewer as coloured text: plain between the spans, a colour inside them.
+fn row_job(
+    text: &str,
+    spans: &[bluepane_engine::Span],
+    font: &FontId,
+    plain: Color32,
+    dark: bool,
+) -> egui::text::LayoutJob {
+    use bluepane_engine::SpanKind;
+    let mut job = egui::text::LayoutJob::default();
+    // Byte offset of each character, so spans (in characters) cut the text on boundaries.
+    let mut at: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
+    at.push(text.len());
+    let chars = at.len() - 1;
+    let mut push = |from: usize, to: usize, kind: Option<SpanKind>| {
+        if from >= to || to > chars {
+            return;
+        }
+        let mut format = egui::TextFormat::simple(font.clone(), plain);
+        match kind {
+            Some(SpanKind::Cursor) => {
+                format.color = Color32::BLACK;
+                format.background = Color32::from_rgb(0xff, 0xd5, 0x4a);
+            }
+            Some(SpanKind::Modified) => {
+                format.color = span_color(SpanKind::Modified, dark);
+                format.background = Color32::from_rgba_unmultiplied(0xf4, 0x87, 0x71, 40);
+            }
+            Some(SpanKind::Emphasis) => {
+                format.color = span_color(SpanKind::Emphasis, dark);
+                format.italics = true;
+            }
+            Some(SpanKind::Link) => {
+                format.color = span_color(SpanKind::Link, dark);
+                format.underline = egui::Stroke::new(1.0, span_color(SpanKind::Link, dark));
+            }
+            Some(kind) => format.color = span_color(kind, dark),
+            None => {}
+        }
+        job.append(&text[at[from]..at[to]], 0.0, format);
+    };
+    let mut done = 0;
+    let mut sorted: Vec<&bluepane_engine::Span> = spans.iter().collect();
+    sorted.sort_by_key(|s| s.start);
+    for span in sorted {
+        let start = span.start.max(done).min(chars);
+        let end = span.end.min(chars);
+        push(done, start, None);
+        push(start, end, Some(span.kind));
+        done = done.max(end);
+    }
+    push(done, chars, None);
+    if job.text.is_empty() {
+        // An empty row still has the height of a line.
+        job.append(" ", 0.0, egui::TextFormat::simple(font.clone(), plain));
+    }
+    job
 }
 
 #[cfg(test)]

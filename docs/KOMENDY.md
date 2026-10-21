@@ -93,6 +93,12 @@ Ta lista jest **generowana z kodu** (`crates/engine/src/command_help.rs`); test 
 | `queueretry <numer>` | ustawia zakończone zadanie w kolejce jeszcze raz (1 = najnowsze) |
 | `queueclear` | czyści historię zakończonych zadań |
 
+## Podgląd i dokumenty
+
+| Komenda | Opis |
+| --- | --- |
+| `details` | pokazuje w podglądzie wszystko, co da się odczytać o pliku: rozmiar, daty, prawa oraz dla zdjęć pola EXIF (aparat, ekspozycja, data, GPS), a dla dźwięku czas trwania, przepływność i tagi (wykonawca, tytuł, album); w podglądzie klawisz I (alias: meta) |
+
 ## Szukanie
 
 | Komenda | Opis |
