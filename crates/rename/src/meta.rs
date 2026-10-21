@@ -31,6 +31,112 @@ pub fn read_meta(path: &Path) -> Meta {
     meta
 }
 
+/// Everything readable about the inside of a media file, as (label, value) lines for a
+/// reader: the EXIF fields of a photo, the properties and tags of an audio file. A file that
+/// is neither gives nothing. Never fails.
+pub fn describe(path: &Path) -> Vec<(String, String)> {
+    let mut lines = Vec::new();
+    describe_exif(path, &mut lines);
+    describe_audio(path, &mut lines);
+    lines
+}
+
+/// A long value (a maker note, say) is cut.
+fn short(text: String) -> String {
+    let text = text.trim().to_string();
+    if text.chars().count() > 160 {
+        let cut: String = text.chars().take(160).collect();
+        format!("{cut}…")
+    } else {
+        text
+    }
+}
+
+fn describe_exif(path: &Path, lines: &mut Vec<(String, String)>) {
+    let Ok(file) = std::fs::File::open(path) else {
+        return;
+    };
+    let Ok(exif) = exif::Reader::new().read_from_container(&mut BufReader::new(file)) else {
+        return;
+    };
+    for field in exif
+        .fields()
+        .filter(|f| f.ifd_num == exif::In::PRIMARY)
+        .take(80)
+    {
+        let is_date = matches!(
+            field.tag,
+            exif::Tag::DateTime | exif::Tag::DateTimeOriginal | exif::Tag::DateTimeDigitized
+        );
+        let value = match &field.value {
+            // Text such as the camera's name is UTF-8 more often than not: read it as such
+            // (the library's own display would escape every non-ASCII byte).
+            exif::Value::Ascii(parts) if !is_date => parts
+                .iter()
+                .map(|p| {
+                    String::from_utf8_lossy(p)
+                        .trim_matches(|c: char| c == '\0' || c.is_whitespace())
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+            _ => field.display_value().with_unit(&exif).to_string(),
+        };
+        let value = short(value);
+        if !value.is_empty() && !value.starts_with("[") {
+            lines.push((format!("EXIF {}", field.tag), value));
+        }
+    }
+}
+
+fn describe_audio(path: &Path, lines: &mut Vec<(String, String)>) {
+    use lofty::prelude::*;
+    let Ok(file) = lofty::read_from_path(path) else {
+        return;
+    };
+    let props = file.properties();
+    let secs = props.duration().as_secs();
+    if secs > 0 {
+        lines.push((
+            "Czas trwania".into(),
+            format!("{}:{:02}:{:02}", secs / 3600, secs / 60 % 60, secs % 60),
+        ));
+    }
+    let fact = |label: &str, value: Option<u32>, unit: &str, lines: &mut Vec<(String, String)>| {
+        if let Some(v) = value.filter(|v| *v > 0) {
+            lines.push((label.to_string(), format!("{v} {unit}")));
+        }
+    };
+    fact("Przepływność", props.audio_bitrate(), "kb/s", lines);
+    fact("Częstotliwość", props.sample_rate(), "Hz", lines);
+    fact("Kanały", props.channels().map(u32::from), "", lines);
+    fact("Głębia", props.bit_depth().map(u32::from), "bitów", lines);
+    lines.push(("Format".into(), format!("{:?}", file.file_type())));
+    if let Some(tag) = file.primary_tag().or_else(|| file.first_tag()) {
+        let text = |label: &str,
+                    value: Option<std::borrow::Cow<'_, str>>,
+                    lines: &mut Vec<(String, String)>| {
+            if let Some(v) = value
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+            {
+                lines.push((label.to_string(), short(v)));
+            }
+        };
+        text("Wykonawca", tag.artist(), lines);
+        text("Tytuł", tag.title(), lines);
+        text("Album", tag.album(), lines);
+        text("Gatunek", tag.genre(), lines);
+        text("Komentarz", tag.comment(), lines);
+        if let Some(track) = tag.track() {
+            lines.push(("Ścieżka".into(), track.to_string()));
+        }
+        if let Some(year) = tag.year() {
+            lines.push(("Rok".into(), year.to_string()));
+        }
+    }
+}
+
 fn ascii_field(exif: &exif::Exif, tag: exif::Tag) -> Option<String> {
     let field = exif.get_field(tag, exif::In::PRIMARY)?;
     match &field.value {
@@ -219,5 +325,54 @@ mod tests {
         assert_eq!(meta.genre.as_deref(), Some("Rock"));
         assert_eq!(meta.track, Some(7));
         assert_eq!(meta.taken, None);
+    }
+
+    #[test]
+    fn describe_lists_exif_fields_and_audio_properties_with_tags() {
+        use lofty::config::WriteOptions;
+        use lofty::prelude::*;
+        use lofty::tag::{Tag, TagType};
+        let dir = tempfile::tempdir().unwrap();
+        let photo = dir.path().join("zdjęcie.jpg");
+        std::fs::write(&photo, jpeg_with_exif("Aparat Żółć", "2026:10:04 07:05:09")).unwrap();
+        let lines = describe(&photo);
+        assert!(
+            lines
+                .iter()
+                .any(|(label, value)| label.starts_with("EXIF") && value.contains("Aparat Żółć")),
+            "{lines:?}"
+        );
+        assert!(
+            lines.iter().any(|(_, v)| v.contains("2026-10-04")),
+            "{lines:?}"
+        );
+
+        let audio = dir.path().join("utwór.wav");
+        std::fs::write(&audio, silent_wav()).unwrap();
+        let mut tag = Tag::new(TagType::RiffInfo);
+        tag.set_artist("Zespół".into());
+        tag.set_title("Gęślą jaźń".into());
+        tag.set_year(1999);
+        tag.save_to_path(&audio, WriteOptions::default()).unwrap();
+        let lines = describe(&audio);
+        let get = |label: &str| {
+            lines
+                .iter()
+                .find(|(l, _)| l == label)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(get("Częstotliwość"), Some("8000 Hz"), "{lines:?}");
+        assert_eq!(get("Wykonawca"), Some("Zespół"));
+        assert_eq!(get("Tytuł"), Some("Gęślą jaźń"));
+        assert!(get("Format").is_some());
+
+        // Not a media file, missing, broken: nothing, and no panic.
+        let text = dir.path().join("a.txt");
+        std::fs::write(&text, "zwykły tekst").unwrap();
+        assert!(describe(&text).is_empty());
+        assert!(describe(&dir.path().join("brak.mp3")).is_empty());
+        let broken = dir.path().join("zepsute.jpg");
+        std::fs::write(&broken, [0xFF, 0xD8, 0xFF]).unwrap();
+        assert!(describe(&broken).is_empty());
     }
 }

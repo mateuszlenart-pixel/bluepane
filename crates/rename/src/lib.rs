@@ -13,5 +13,5 @@ mod plan;
 
 pub use apply::{apply, undo, Renamed};
 pub use diff::{changed_spans, Span};
-pub use meta::{read_meta, Meta};
+pub use meta::{describe, read_meta, Meta};
 pub use plan::{needs_meta, plan, CaseMode, Item, Plan, Row, Settings, Stamp, Status};

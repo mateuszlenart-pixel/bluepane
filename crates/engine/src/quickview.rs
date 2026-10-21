@@ -23,7 +23,7 @@ const MAX_LINES: usize = 3000;
 #[derive(Debug)]
 pub enum QuickContent {
     /// Any file, read piece by piece (hex for binary files).
-    Text(Viewer),
+    Text(Box<Viewer>),
     /// The text of a document, already extracted; `top` is the first visible line.
     Lines { lines: Vec<String>, top: usize },
     /// A PDF as pictures of its pages.
@@ -250,7 +250,7 @@ fn build_file(key: &QuickKey, path: &Path) -> QuickView {
         Ok(viewer) => QuickView {
             key: key.clone(),
             title,
-            content: QuickContent::Text(viewer),
+            content: QuickContent::Text(Box::new(viewer)),
         },
         Err(error) => note(key, title, error.0),
     }

@@ -245,7 +245,7 @@ Sieć:
 - [x] 14k **Obserwacja katalogów**: lista odświeża się sama po zmianach na dysku (`notify`, za zgodą; `watch on|off`)
 - [x] 14l **Git**: status plików w kolumnie (był w 12l), gałąź przy ścieżce, podstawowe akcje `git add|unstage|commit|diff|log` (`git` jako proces, bez nowej zależności)
 - [x] 14m **Szukanie z indeksem** (`index`): wyniki natychmiast, także po treści PDF/Word/Excel (tekst z crate'a `docs`), tylko na polecenie użytkownika; zapisane wyszukiwania jako wirtualne katalogi
-- [ ] 14n **Podgląd**: kolorowanie składni kodu, renderowany Markdown, edytor hex (z zapisem przez kopię i potwierdzenie), metadane plików multimedialnych
+- [x] 14n **Podgląd**: kolorowanie składni kodu, renderowany Markdown, edytor hex (z zapisem przez kopię i potwierdzenie), metadane plików multimedialnych (bez nowych zależności: własny tokenizer i renderer, `lofty` i `kamadak-exif` z 14d)
 
 ### Testy ręczne (przygotowane 2026-10-15)
 

@@ -119,6 +119,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "limit",
     "watch",
     "index",
+    "details",
     "queueretry",
     "queueclear",
     "sitepassword",
@@ -177,6 +178,24 @@ pub enum ViewerAction {
     Bottom,
     /// Switch between text and hex.
     Mode,
+    /// Turn the syntax colouring on or off.
+    Highlight,
+    /// Show a Markdown file rendered or as plain text.
+    Render,
+    /// The hex editor: switch it on or off.
+    Edit,
+    /// Set bytes at an offset.
+    Poke(u64, Vec<u8>),
+    /// One hex digit typed into the editor.
+    Digit(char),
+    /// Move the editor's cursor by bytes.
+    Cursor(i64),
+    /// Throw the unsaved changes away.
+    Revert,
+    /// Write a copy with the changes (to be confirmed), confirm it, or drop it.
+    Save,
+    SaveConfirm,
+    SaveCancel,
     /// Jump to a byte offset or a percentage such as `50%`.
     Goto(String),
     /// Search forward; without text a dialog asks for it.
@@ -466,6 +485,8 @@ pub enum Command {
     Watch(crate::WatchAction),
     /// The search index: add folders, update, search, saved searches.
     Index(crate::IndexAction),
+    /// Everything readable about the file: basics, EXIF, audio properties and tags.
+    Details,
     /// Move queued job n (1-based, in the order shown) up, down or to the front.
     QueueMove(usize, QueueMove),
     /// Queue a finished job (n = 1 is the newest) once more.
@@ -681,6 +702,7 @@ impl Command {
             "queuemove" => parse_queue_move(rest),
             "limit" => parse_limit(rest).map(Command::Limit),
             "watch" => crate::watch::parse_watch(rest).map(Command::Watch),
+            "details" | "meta" => Ok(Command::Details),
             "index" | "idx" => crate::searchindex::parse_index(rest).map(Command::Index),
             "queueretry" => parse_row("queueretry", rest).map(Command::QueueRetry),
             "queueclear" => Ok(Command::QueueClear),
@@ -1004,7 +1026,7 @@ fn parse_palette(rest: &str) -> Result<PaletteAction, EngineError> {
 fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {
     let usage = || {
         EngineError(
-            "viewer: użycie: viewer <scroll n|page n|hscroll n|top|bottom|mode|goto x|find [tekst]|next|prev|close>"
+            "viewer: użycie: viewer <scroll n|page n|hscroll n|top|bottom|mode|highlight|render|edit|poke n bajty|cursor n|revert|save [confirm|cancel]|goto x|find [tekst]|next|prev|close>"
                 .into(),
         )
     };
@@ -1023,6 +1045,21 @@ fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {
         "top" => ViewerAction::Top,
         "bottom" => ViewerAction::Bottom,
         "mode" => ViewerAction::Mode,
+        "highlight" | "colors" => ViewerAction::Highlight,
+        "render" => ViewerAction::Render,
+        "edit" => ViewerAction::Edit,
+        "poke" => parse_poke(rest)?,
+        "digit" if rest.chars().count() == 1 => {
+            ViewerAction::Digit(rest.chars().next().unwrap_or('0'))
+        }
+        "cursor" => ViewerAction::Cursor(number(None)?),
+        "revert" => ViewerAction::Revert,
+        "save" => match rest.to_ascii_lowercase().as_str() {
+            "" => ViewerAction::Save,
+            "confirm" => ViewerAction::SaveConfirm,
+            "cancel" => ViewerAction::SaveCancel,
+            _ => return Err(usage()),
+        },
         "goto" if !rest.is_empty() => ViewerAction::Goto(rest.to_string()),
         "find" => ViewerAction::Find(optional(rest)),
         "next" => ViewerAction::Next,
@@ -1030,6 +1067,41 @@ fn parse_viewer(args: &str) -> Result<ViewerAction, EngineError> {
         "close" => ViewerAction::Close,
         _ => return Err(usage()),
     })
+}
+
+/// `viewer poke 0x10 ff 00 41`: an offset (decimal or `0x`) and bytes in hex.
+fn parse_poke(rest: &str) -> Result<ViewerAction, EngineError> {
+    let usage = || {
+        EngineError("viewer poke: użycie: viewer poke <offset> <bajty szesnastkowo>, np. viewer poke 0x10 ff 00".into())
+    };
+    let mut words = rest.split_whitespace();
+    let offset = words.next().ok_or_else(usage)?;
+    let offset = match offset
+        .strip_prefix("0x")
+        .or_else(|| offset.strip_prefix("0X"))
+    {
+        Some(hex) => u64::from_str_radix(hex, 16),
+        None => offset.parse::<u64>(),
+    }
+    .map_err(|_| usage())?;
+    let mut bytes = Vec::new();
+    for word in words {
+        let digits = word.trim_start_matches("0x").trim_start_matches("0X");
+        if digits.is_empty()
+            || digits.len() % 2 != 0
+            || !digits.chars().all(|c| c.is_ascii_hexdigit())
+        {
+            return Err(usage());
+        }
+        for pair in digits.as_bytes().chunks(2) {
+            let text = std::str::from_utf8(pair).map_err(|_| usage())?;
+            bytes.push(u8::from_str_radix(text, 16).map_err(|_| usage())?);
+        }
+    }
+    if bytes.is_empty() {
+        return Err(usage());
+    }
+    Ok(ViewerAction::Poke(offset, bytes))
 }
 
 fn parse_chmod(text: &str) -> Result<u32, EngineError> {

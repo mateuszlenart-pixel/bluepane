@@ -10,6 +10,7 @@ mod command;
 mod command_help;
 mod compare;
 mod context_menu;
+mod details;
 mod dirsize;
 mod diskmap;
 mod documents;
@@ -21,12 +22,14 @@ mod find;
 mod format;
 mod gitstatus;
 mod hashes;
+mod highlight;
 mod job;
 mod jump;
 mod keymap;
 mod keysheet;
 mod layouts;
 mod macros;
+mod markdown;
 mod mask;
 mod multirename;
 mod navbar;
@@ -96,6 +99,7 @@ pub use find::{FindForm, FindView, SearchData};
 pub use format::{format_mode, format_modified, human_size, name_parts};
 pub use gitstatus::{GitAction, GitStatus};
 pub use hashes::{HashAction, Hashes};
+pub use highlight::{Span, SpanKind};
 pub use job::{
     Answer, ArchiveJob, Event, HostPrompt, JobKind, JobSpec, PackOptions, PasswordProblem,
     RemoteJob, RemoteOp, Report, RunningJob, SyncJob,

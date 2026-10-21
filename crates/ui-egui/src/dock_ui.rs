@@ -352,10 +352,41 @@ impl BluepaneUi {
         match tool {
             Tool::Pages => self.pages_keys(pressed),
             Tool::Viewer => {
+                let (editing, awaiting) = self
+                    .session
+                    .viewer
+                    .as_ref()
+                    .map_or((false, false), |v| (v.editing(), v.awaiting_save()));
                 for key in pressed {
-                    if let Some(line) = self.session.keymap.lookup_viewer(key).map(str::to_owned) {
-                        self.dispatch(&line);
-                    }
+                    let line = if awaiting {
+                        // A copy with the changes waits for yes or no.
+                        match key.as_str() {
+                            "Enter" => "viewer save confirm".to_string(),
+                            "Escape" => "viewer save cancel".to_string(),
+                            _ => continue,
+                        }
+                    } else if editing {
+                        match key.as_str() {
+                            "ArrowLeft" => "viewer cursor -1".to_string(),
+                            "ArrowRight" => "viewer cursor 1".to_string(),
+                            "ArrowUp" => "viewer cursor -16".to_string(),
+                            "ArrowDown" => "viewer cursor 16".to_string(),
+                            "PageUp" => "viewer cursor -256".to_string(),
+                            "PageDown" => "viewer cursor 256".to_string(),
+                            "Ctrl+S" => "viewer save".to_string(),
+                            "Ctrl+Z" => "viewer revert".to_string(),
+                            "Escape" => "viewer edit".to_string(),
+                            other => match hex_digit_key(other) {
+                                Some(digit) => format!("viewer digit {digit}"),
+                                None => continue,
+                            },
+                        }
+                    } else if let Some(line) = self.session.keymap.lookup_viewer(key) {
+                        line.to_owned()
+                    } else {
+                        continue;
+                    };
+                    self.dispatch(&line);
                 }
             }
             Tool::Scan => self.scan_keys(pressed),
@@ -413,6 +444,16 @@ impl BluepaneUi {
             self.layout_saved = text;
         }
     }
+}
+
+/// `Num7` is `7`, `C` is `c`: the hex digit a key stands for.
+fn hex_digit_key(key: &str) -> Option<char> {
+    let digit = match key.strip_prefix("Num") {
+        Some(d) if d.len() == 1 => d.chars().next()?,
+        _ if key.len() == 1 => key.chars().next()?.to_ascii_lowercase(),
+        _ => return None,
+    };
+    digit.is_ascii_hexdigit().then_some(digit)
 }
 
 #[cfg(test)]

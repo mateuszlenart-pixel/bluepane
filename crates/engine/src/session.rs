@@ -738,6 +738,7 @@ impl Session {
             Command::Limit(limit) => self.set_speed_limit(limit),
             Command::Watch(action) => self.watch_action(action)?,
             Command::Index(action) => self.index_action(action)?,
+            Command::Details => self.file_details()?,
             Command::Theme(name) => self.set_theme(name)?,
             Command::DirSize => self.count_dir_sizes()?,
             Command::Hash(action) => self.hash_action(action)?,
@@ -1944,16 +1945,68 @@ impl Session {
     }
 
     fn viewer_action(&mut self, action: ViewerAction) -> Result<(), EngineError> {
+        // A preview of an archive entry or a document is a scratch copy: editing it is pointless.
+        let editable = self.preview_dir.is_none();
         let Some(viewer) = self.viewer.as_mut() else {
             return Err(EngineError("podgląd nie jest otwarty (F3)".into()));
         };
+        let changes = matches!(
+            action,
+            ViewerAction::Edit
+                | ViewerAction::Poke(..)
+                | ViewerAction::Digit(_)
+                | ViewerAction::Save
+                | ViewerAction::SaveConfirm
+        );
+        if changes && !editable && !viewer.editing() {
+            return Err(EngineError(
+                "ten podgląd (archiwum albo dokument) jest tylko do odczytu: edytować można plik z dysku".into(),
+            ));
+        }
         match action {
+            ViewerAction::Edit => {
+                viewer.toggle_edit()?;
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::Poke(offset, bytes) => {
+                viewer.poke(offset, &bytes)?;
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::Digit(c) => {
+                viewer.edit_type(c)?;
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::Cursor(delta) => viewer.edit_move(delta)?,
+            ViewerAction::Revert => {
+                viewer.edit_revert();
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::Save => {
+                viewer.save_copy()?;
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::SaveConfirm => {
+                viewer.save_confirm()?;
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::SaveCancel => {
+                viewer.save_cancel();
+                self.status = viewer.message.clone();
+            }
             ViewerAction::Scroll(rows) => viewer.scroll(rows),
             ViewerAction::Page(pages) => viewer.page(pages),
             ViewerAction::HScroll(columns) => viewer.scroll_columns(columns),
             ViewerAction::Top => viewer.top(),
             ViewerAction::Bottom => viewer.bottom(),
             ViewerAction::Mode => viewer.toggle_mode(),
+            ViewerAction::Render => {
+                viewer.toggle_render();
+                self.status = viewer.message.clone();
+            }
+            ViewerAction::Highlight => {
+                viewer.toggle_highlight();
+                self.status = viewer.message.clone();
+            }
             ViewerAction::Goto(spec) => viewer.goto(&spec)?,
             ViewerAction::Find(Some(text)) => {
                 viewer.find(&text, true);
@@ -1972,6 +2025,12 @@ impl Session {
                 self.status = viewer.message.clone();
             }
             ViewerAction::Close => {
+                if !viewer.confirm_close() {
+                    self.status = viewer.message.clone();
+                    return Ok(());
+                }
+                // A copy that was never confirmed is not left lying around.
+                viewer.save_cancel();
                 self.viewer = None;
                 self.remove_preview_dir();
             }
