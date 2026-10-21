@@ -77,6 +77,106 @@ if ($deep.Length -gt 270) {
     [System.IO.File]::WriteAllText("$long\plik-w-bardzo-dlugiej-sciezce.txt", 'ok')
 }
 
+# --- kod i Markdown: kolorowanie składni, renderowany Markdown (F3) ---
+$kod = Join-Path $Dest 'kod'
+Put "$kod\przyklad.rs" "//! Przykład do kolorowania składni.`n/* komentarz blokowy`n   przez kilka linii */`nfn main() {`n    let tekst = `"Zażółć gęślą jaźń`"; // komentarz`n    let liczba = 42;`n    println!(`"{tekst} {liczba}`");`n}`n"
+Put "$kod\skrypt.py" "# komentarz`ndef powitanie(imie):`n    if imie:`n        return `"Cześć, `" + imie  # zażółć`n    return None`n"
+Put "$kod\dane.json" "{`"nazwa`": `"Zażółć`", `"liczby`": [1, 2.5], `"aktywny`": true, `"brak`": null}`n"
+Put "$kod\ustawienia.toml" "# ustawienia`n[sekcja]`nklucz = `"wartość`"`nliczba = 7`nflaga = true`n"
+Put "$kod\zapytanie.sql" "-- zapytanie`nSELECT imie, COUNT(*) FROM osoby WHERE wiek > 18 GROUP BY imie;`n"
+Put "$kod\strona.html" "<!-- strona -->`n<html><body><p class=`"a`">Zażółć gęślą</p></body></html>`n"
+$readme = @'
+# Nagłówek pierwszego poziomu
+
+Akapit ze **zdaniem mocnym**, *kursywą*, `kodem w tekście` i [odnośnikiem](https://example.org).
+Drugi wiersz tego samego akapitu zawija się do szerokości okna, jeśli jest dostatecznie długi, żeby sprawdzić zawijanie.
+
+## Lista
+
+- pierwszy punkt
+- drugi punkt z **mocnym** słowem
+  - zagnieżdżony punkt
+
+1. numer jeden
+2. numer dwa
+
+> Cytat o zażółć gęślą jaźń
+> w dwóch liniach.
+
+---
+
+```rust
+let x = 1;
+```
+
+| tabela | zostaje | tak jak napisano |
+| --- | --- | --- |
+'@
+Put "$kod\README.md" $readme
+
+# --- hex: edytor hex w podglądzie ---
+New-Item -ItemType Directory -Force -Path (Join-Path $Dest 'hex') | Out-Null
+[System.IO.File]::WriteAllBytes((Join-Path $Dest 'hex\maly.bin'), [byte[]](0..255))
+Put (Join-Path $Dest 'hex\tekst.txt') "zwykły tekst do przełączenia na hex`n"
+
+# --- duplikaty: te same treści w różnych katalogach ---
+$dup = Join-Path $Dest 'duplikaty'
+Put "$dup\a\zdjecie.txt" "ta sama treść pliku, powtórzona trzy razy`n"
+Put "$dup\b\zdjecie-kopia.txt" "ta sama treść pliku, powtórzona trzy razy`n"
+Put "$dup\c\Zażółć kopia.txt" "ta sama treść pliku, powtórzona trzy razy`n"
+Stamp "$dup\a\zdjecie.txt" '2026-01-10 10:00'
+Stamp "$dup\b\zdjecie-kopia.txt" '2026-05-20 10:00'
+Stamp "$dup\c\Zażółć kopia.txt" '2026-09-30 10:00'
+Put "$dup\a\unikalny.txt" "unikalny plik`n"
+Put "$dup\a\ten-sam-rozmiar.txt" "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1`n"
+Put "$dup\b\ten-sam-rozmiar.txt" "ABCDEFGHIJKLMNOPQRSTUVWXYZ-2`n"
+
+# --- porównanie plików i sumy kontrolne ---
+$cmp = Join-Path $Dest 'porownanie'
+Put "$cmp\lewy.txt" "pierwszy wiersz`ndrugi wiersz`ntrzeci wiersz zażółć`nczwarty wiersz`npiąty wiersz`n"
+Put "$cmp\prawy.txt" "pierwszy wiersz`ndrugi wiersz zmieniony`ntrzeci wiersz zażółć`nnowy wiersz`nczwarty wiersz`npiąty wiersz`n"
+[System.IO.File]::WriteAllBytes("$cmp\bin1.bin", (New-Object byte[] 4096))
+$bin2 = New-Object byte[] 4096; $bin2[2000] = 255
+[System.IO.File]::WriteAllBytes("$cmp\bin2.bin", $bin2)
+
+# --- indeks do szukania: teksty z polskimi znakami i różne kodowania ---
+$idx = Join-Path $Dest 'indeks'
+Put "$idx\umowa.txt" "Umowa o dzieło: żółw, gęś i jaźń. Termin płatności: 30 dni.`n"
+Put "$idx\notatki.md" "# Notatki`n`nZakupy: mleko, chleb, masło.`n"
+Put "$idx\głęboko\Zażółć gęślą.txt" "Plik w głębokim katalogu o słowie wyjątkowe.`n"
+[System.IO.File]::WriteAllBytes("$idx\stary-cp1250.txt", [byte[]](0xA3, 0xF3, 0x64, 0x9F, 0x20, 0x6E, 0x6F, 0x63, 0xB9, 0x0A))
+
+# --- zdjęcia i utwory: zmiana nazw z EXIF i tagów (kopie z media) ---
+$media = Join-Path $Dest 'media'
+New-Item -ItemType Directory -Force -Path (Join-Path $Dest 'zdjecia'), (Join-Path $Dest 'muzyka') | Out-Null
+Copy-Item "$media\zdjecie-exif.jpg" (Join-Path $Dest 'zdjecia\IMG_0001.jpg')
+Copy-Item "$media\zdjecie-exif-2.jpg" (Join-Path $Dest 'zdjecia\IMG_0002.jpg')
+Copy-Item "$media\zdjecie-bez-exif.jpg" (Join-Path $Dest 'zdjecia\IMG_0003.jpg')
+Copy-Item "$media\utwor-tagi.wav" (Join-Path $Dest 'muzyka\01.wav')
+Copy-Item "$media\utwor-2.wav" (Join-Path $Dest 'muzyka\02.wav')
+
+# --- repozytorium git: kolumna git, gałąź, git add/commit/diff/log ---
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $g = Join-Path $Dest 'repozytorium-git'
+    New-Item -ItemType Directory -Force -Path "$g\src" | Out-Null
+    git -C $g init -q -b main
+    git -C $g config user.email 'test@example.com'
+    git -C $g config user.name 'Tester'
+    git -C $g config commit.gpgsign false
+    Put "$g\README.md" "Projekt testowy`n"
+    Put "$g\src\main.rs" "fn main() { println!(`"cześć`"); }`n"
+    Put "$g\stale.txt" "stały plik`n"
+    git -C $g add .
+    git -C $g commit -q -m 'Pierwszy commit'
+    [System.IO.File]::AppendAllText("$g\README.md", "dopisek`n")      # zmieniony (M)
+    Put "$g\Zażółć nowy.txt" "nowy plik`n"                           # nieśledzony (?)
+    Remove-Item "$g\stale.txt"                                        # usunięty (D)
+    Put "$g\src\dodany.rs" "kolejny`n"                               # dodany (A)
+    git -C $g add "$g\src\dodany.rs"
+} else {
+    Write-Host 'Brak programu git: pomijam repozytorium-git (testy gita pominąć).'
+}
+
 Write-Host ''
 Write-Host "Gotowe: $Dest"
 Write-Host "Uruchom:  bluepane.exe `"$Dest`" `"$Dest\synchronizacja`""
