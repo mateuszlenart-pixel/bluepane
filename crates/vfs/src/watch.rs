@@ -169,7 +169,7 @@ mod tests {
         std::fs::create_dir_all(&b).unwrap();
         let mut watcher = DirWatcher::new();
         assert!(watcher.is_active(), "{:?}", watcher.error());
-        watcher.set_paths(&[a.clone()]);
+        watcher.set_paths(std::slice::from_ref(&a));
         assert!(watcher.watches(&a) && !watcher.watches(&b));
 
         // Listing the directory is only reading: no change.
@@ -180,11 +180,11 @@ mod tests {
         // Something in the other directory is not our business.
         std::fs::write(b.join("x.txt"), "x").unwrap();
         std::fs::write(a.join("zażółć gęślą.txt"), "treść").unwrap();
-        assert_eq!(changed(&watcher), [a.clone()]);
+        assert_eq!(changed(&watcher), std::slice::from_ref(&a));
 
         // Removing a file counts too.
         std::fs::remove_file(a.join("zażółć gęślą.txt")).unwrap();
-        assert_eq!(changed(&watcher), [a]);
+        assert_eq!(changed(&watcher), std::slice::from_ref(&a));
     }
 
     #[test]
@@ -197,7 +197,7 @@ mod tests {
         let gone = tmp.path().join("nie ma");
         watcher.set_paths(&[a.clone(), gone.clone(), a.clone()]);
         assert!(watcher.watches(&a) && !watcher.watches(&gone));
-        watcher.set_paths(&[b.clone()]);
+        watcher.set_paths(std::slice::from_ref(&b));
         assert!(!watcher.watches(&a) && watcher.watches(&b));
         std::fs::write(a.join("x"), "x").unwrap();
         std::thread::sleep(Duration::from_millis(300));
@@ -206,7 +206,7 @@ mod tests {
         assert!(!watcher.watches(&b));
         // Once the missing directory exists it can be watched.
         std::fs::create_dir_all(&gone).unwrap();
-        watcher.set_paths(&[gone.clone()]);
+        watcher.set_paths(std::slice::from_ref(&gone));
         assert!(watcher.watches(&gone));
     }
 }
