@@ -239,10 +239,8 @@ mod tests {
         let mut s = session(tmp.path());
         s.run_line("cursor 1").unwrap();
         let launch = s.expand_line("prog -f %f -n %n").unwrap();
-        assert_eq!(
-            launch.args[1],
-            tmp.path().join("l/Zażółć gęślą.txt").display().to_string()
-        );
+        let file = tmp.path().join("l").join("Zażółć gęślą.txt");
+        assert_eq!(launch.args[1], file.display().to_string());
         assert_eq!(launch.args[3], "Zażółć gęślą.txt");
         assert_eq!(launch.dir, tmp.path().join("l"));
     }
