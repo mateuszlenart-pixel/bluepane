@@ -114,8 +114,10 @@ w Windows-1250), `media` (zdjęcia z EXIF i bez, utwory `.wav` z tagami), `zdjec
 (kopie do zmiany nazw z EXIF i tagów) oraz `repozytorium-git` (repozytorium z jednym commitem i
 zmianami M, D, ?, A; tworzone tylko, gdy jest program `git`).
 
-Przykładowe uruchomienie: `bluepane ~/bluepane-test ~/bluepane-test/synchronizacja`; do dymu
-(4.0): `bluepane ~/bluepane-test ~/bluepane-test/kod`.
+Przykładowe uruchomienie (Linux): `./bluepane ~/bluepane-test ~/bluepane-test/synchronizacja`; do dymu
+(4.0): `./bluepane ~/bluepane-test ~/bluepane-test/kod`. **Windows (PowerShell, z katalogu `bluepane`):**
+`.\bluepane.exe "$env:USERPROFILE\bluepane-test" "$env:USERPROFILE\bluepane-test\kod"`. Kropka i ukośnik
+na początku są obowiązkowe: PowerShell nie uruchamia programów z bieżącego katalogu bez ścieżki.
 
 **Ćwicz na kopiach.** Skrypt nigdy nie nadpisuje, ale testy zmieniają dane (kosz, edytor hex,
 profile synchronizacji): jeśli coś zepsujesz, usuń `bluepane-test` i uruchom skrypt od nowa.
@@ -159,7 +161,7 @@ Lista jest długa (ok. 32 sekcje), więc nie przechodź jej w całości naraz. P
 
 ### 4.0 Dym (L W, ok. 20 minut)
 
-Przygotuj dane (`tools/dane-testowe`, patrz 2) i uruchom `bluepane ~/bluepane-test ~/bluepane-test/kod`. Jeśli punkt się nie powiedzie, dopisz `→` co się stało i **idź dalej** (zgłosisz po całości).
+Przygotuj dane (`tools/dane-testowe`, patrz 2) i uruchom program z dwoma katalogami (polecenie dla Linuksa i Windows w sekcji 2). Jeśli punkt się nie powiedzie, dopisz `→` co się stało i **idź dalej** (zgłosisz po całości).
 
 - [ ] **Start:** okno się otwiera, dwa panele, ikony i polskie znaki w nazwach (`indeks/głęboko`) wyświetlają się poprawnie. (4.1)
 - [ ] **Motywy:** `theme light`, potem `theme dark`: oba czytelne (listy, okna, kolory nazw). (4.19)
