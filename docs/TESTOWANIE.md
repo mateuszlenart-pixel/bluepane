@@ -16,8 +16,8 @@ stało (patrz „Jak zgłaszać błędy").
 1. Wejdź na repozytorium w GitHubie, zakładka **Actions**, wpis **Build testowy** (najnowszy
    udany przebieg na gałęzi `main`; można też uruchomić go ręcznie: *Run workflow*).
 2. Na dole strony przebiegu, w sekcji **Artifacts**, pobierz:
-   - Linux: `bluepane-linux` (w środku `bluepane-linux.tar.gz`),
-   - Windows: `bluepane-windows` (w środku `bluepane-windows.zip`).
+   - Linux: `bluepane-linux` (pobrany `.zip` z `bluepane-linux.tar.gz` w środku),
+   - Windows: `bluepane-windows` (pobrany `.zip` z `bluepane-windows.zip` w środku).
 3. Rozpakuj. W środku jest katalog `bluepane` z programem, danymi testowymi (`testdata`),
    skryptami (`tools`), README i tym plikiem. Plik `WERSJA.txt` mówi, z którego commita
    pochodzi build; zapisz go przy zgłoszeniu błędu.
@@ -36,11 +36,21 @@ Jeśli program odmawia startu, uruchom go z terminala i skopiuj komunikat.
 
 **Windows** (PowerShell albo Eksplorator):
 
+GitHub pakuje artefakt jeszcze raz, więc pobrany plik `bluepane-windows.zip` (zewnętrzny) zawiera
+drugi `bluepane-windows.zip` (wewnętrzny) o **tej samej nazwie**. Rozpakowanie obu w jednym
+katalogu kończy się błędem „file already exists”. Rozpakuj więc w dwóch krokach, do osobnych katalogów:
+
 ```
-Expand-Archive bluepane-windows.zip -DestinationPath .
+Expand-Archive bluepane-windows.zip -DestinationPath .\pobrane
+Expand-Archive .\pobrane\bluepane-windows.zip -DestinationPath .
 cd bluepane
 .\bluepane.exe             # albo:  .\bluepane.exe C:\Users\ja\a D:\
 ```
+
+(W Eksploratorze: rozpakuj pobrany plik do nowego folderu, w środku jest drugi zip, rozpakuj i jego.)
+Na Linuksie jest tak samo: pobrane `bluepane-linux.zip` zawiera `bluepane-linux.tar.gz`
+(`unzip bluepane-linux.zip`, potem `tar -xzf bluepane-linux.tar.gz`). Wydania (zakładka
+Releases, patrz README) nie mają tego dodatkowego opakowania.
 
 Windows może pokazać ekran „System Windows chronił ten komputer" (SmartScreen), bo plik nie
 jest podpisany: *Więcej informacji* → *Uruchom mimo to*. Za oknem programu otwiera się
@@ -78,6 +88,8 @@ $env:BLUEPANE_CONFIG_DIR="$env:TEMP\bp-profil"; .\bluepane.exe # Windows (PowerS
 zamknięty).
 
 ## 2. Dane testowe
+
+Skrypty leżą w katalogu `tools` **wewnątrz rozpakowanego folderu `bluepane`**: najpierw `cd bluepane` (inaczej ścieżka `tools\...` nie istnieje), potem polecenia poniżej.
 
 Skrypt kopiuje gotowe pliki (`testdata`: dokumenty, archiwa, teksty) i tworzy resztę (pary do
 synchronizacji z różnymi datami, 1500 małych plików, pliki 40 MB i 300 MB, ukryty plik, plik
