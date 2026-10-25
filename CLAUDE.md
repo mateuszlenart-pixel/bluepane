@@ -84,3 +84,11 @@ dopóki obie platformy są zielone.
   Windows) naprawiaj od razu, nie scalaj kolejnych zmian na czerwonym `main`.
 - Raport końcowy etapu (opis PR): zmienione pliki i zachowanie przed/po, testy i ich wynik,
   znane ograniczenia, następny krok z `ROADMAP.md`.
+
+## Skill `master-project-lifecycle`
+
+Skill w `.claude/skills/master-project-lifecycle/` służy w tym repozytorium do `/handoff` (stan sesji przed
+`/compact`, plik `tasks/SESSION_HANDOFF.md` jest lokalny, poza Git) i `/feature` (ocena wpływu zmiany).
+Stan prac prowadzi `ROADMAP.md`, nie `PLAN.md`/`SPEC.md`; `/lifecycle` nie zakłada równoległego planu.
+Zasady skilla o autonomii nie zastępują reguł z tego pliku: merge tylko po „scalaj”, nowe zależności
+tylko za zgodą, push dopiero po przeczytaniu wyniku `cargo xtask ci`.

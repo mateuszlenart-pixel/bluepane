@@ -1,3 +1,7 @@
 /target
 **/*.rs.bk
 .DS_Store
+
+# Lokalne: uprawnienia Claude Code i żywy stan sesji (skill master-project-lifecycle)
+/.claude/settings.local.json
+/tasks/
