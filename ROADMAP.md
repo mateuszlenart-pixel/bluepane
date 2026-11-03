@@ -257,6 +257,86 @@ Cel: instalacja z gotowych paczek na czystej maszynie, bez Rusta i bez kompilacj
 - [x] 9d **Linux**: AppImage (`tools/pakiet-appimage.sh`, `appimagetool 1.9.0` przypięty sumą SHA-256) i paczka `.deb` (`tools/pakiet-deb.sh`, samo `dpkg-deb`) z plikiem `.desktop`, ikoną i zależnościami (`git`, `xdg-utils` zalecane; `smbclient`, `rclone` sugerowane); workflow testuje instalację `.deb` przez `apt`, `desktop-file-validate`, usunięcie i uruchomienie AppImage
 - [x] 9e **Test na czystej maszynie**: sekcja 4.32 w `docs/TESTOWANIE.md` (Windows i Linux, P1) i instrukcja instalacji w `README.md` (tabela paczek, SmartScreen, sumy, ustawienia). Automatycznie na czystych runnerach sprawdzane są już: cicha instalacja i odinstalowanie na Windows, `.deb` przez `apt`, AppImage; zostaje wygląd, ikony i pierwsze uruchomienie, które sprawdza właściciel. Po pomyślnym teście: tag `v0.1.0` według `docs/WYDANIA.md`
 
+### CR-BP-OPT: bezpieczeństwo transferów i wydajność (zatwierdzony plan 2026-11-02; implementacja tylko na osobne polecenie, etap po etapie)
+
+Zakres: zapis bez utraty poprzedniej wersji (lokalnie, SFTP, FTP), asynchroniczne listowanie, selektywne odświeżanie, kontrolowana współbieżność zadań. Poza zakresem: dziennik operacji z ogólnym undo (13c, odrzucone), wtyczki, nowe zależności, nowe automatyczne skany. Domyślne zachowanie (jedno aktywne zadanie, skróty, CLI, makra) bez zmian.
+
+**Decyzje właściciela (2026-11-02, „akceptuję w pełni”: warianty rekomendowane):**
+- D1: najpierw hotfix OPT-01a (po osobnym poleceniu), potem reszta; nie czekamy z nim na etap T.
+- D2: nadpisanie zdalne przez zmianę nazwy starego celu na `.bpold`, usunięcie dopiero po sukcesie; bez możliwości rollbacku: odmowa z czytelnym komunikatem.
+- D3: OPT-04 tylko wewnętrzny automat stanów z limitem 1; współbieżność 2–4 (opt-in) wymaga osobnej zgody i zmiany decyzji z 2026-10-15.
+- D4: OPT-02 jako prosty asynchroniczny `list_dir`; dwufazowe listowanie (szkielet + metadane) dopiero po pomiarach OPT-00 i osobnej zgodzie.
+- D5: fsync poza zakresem do wyniku pomiaru kosztu w OPT-00 (obecnie atomowość bez trwałości).
+- D6: OPT-05 (P2) i OPT-06 (P3) zostają w CR, bez blokowania pozostałych; start po osobnej decyzji.
+
+**Potwierdzone w kodzie (HEAD 21deead):** `SftpConnection::upload`/`download` i `ftp.rs` usuwają cel przed `rename` z `.bpart`; stała nazwa `.bluepane-tmp` (`ops::temp_sibling`) blokuje kolejne nadpisanie po zabiciu procesu; kontrola długości tylko dla `Finish::Stream`; brak `sync_all` poza `viewer.rs`; wznawianie `.bpart` oparte na mtime z dokładnością do sekundy; `Panel::reload` listuje i sortuje w wątku UI, `vfs::list_dir` sortuje, a `Panel::sort_listing` sortuje ponownie; `Session::finish_job` przeładowuje oba panele; jedno `Session::current`.
+**Do sprawdzenia (hipotezy):** semantyka `fs::rename` z istniejącym celem na Windows; czy `russh-sftp` udostępnia `posix-rename@openssh.com`; zysk z `DirEntry::metadata()`; zewnętrzni konsumenci `bluepane_vfs::list_dir` poza `bluepane-cli` (skrypty `.bp`, harmonogram 13d); `rclone.rs` (usuwanie `local` w ścieżce błędu).
+
+**Szablon metryczki:** ID, status (`[ ]` `[-]` `[x]` `[!]` `[R]`), layer, gate_level, depends_on (BLOKUJĄCE / INFORMACYJNE / INTERFEJSOWE), context_refs, invariants, acceptance_criteria, verification, dowód. Nowe zadania `[ ]`; zamknięcie tylko po PASS i dowodzie, `[MANUAL]` nie zastępuje się kompilacją.
+
+- [ ] **OPT-00 Benchmark i testy bazowe** (gałąź `feature/bp-opt-00-baseline`)
+  - layer: Core / I/O / UI; gate_level: strict (pomiary poza CI); depends_on: BLOKUJĄCE brak, INFORMACYJNE etap 3, 11b
+  - context_refs: `Panel::reload`, `vfs::list_dir`, `Session::poll`, `Session::finish_job`, `ops::pump`, `RunningJob`, `RemoteFs`, `docs/TESTOWANIE.md`
+  - zadania: generatory danych w katalogach tymczasowych (10k, 100k plików, 10k małych, 1 duży, SFTP z opóźnieniem i przerwaniem), pomiar zimny/ciepły, mediana i p95 z ≥5 powtórzeń po rozgrzewce, `--release`, opis sprzętu; koszt fsync (D5); punkty pomiarowe bez kosztu w gorącej ścieżce
+  - invariants: żadnych zmian zachowania aplikacji, żadnego dotykania danych poza tmp, brak ukrytego skanowania dysków
+  - acceptance_criteria: [AUTO] generator i testy nie usuwają danych poza tmp; [AUTO] powtarzalne dane i metryki; [MANUAL] zapis warunków i wartości bazowych (bez zmyślonych czasów); [INSPECTION] brak zmiany zachowania
+  - verification: `cargo xtask ci`, `verify-gate.sh --level=strict`, raport z danymi surowymi
+- [ ] **OPT-01a Hotfix: nie usuwać celu przed zamianą** (P0; gałąź `feature/bp-opt-01a-no-delete-before-rename`)
+  - layer: I/O; gate_level: strict + release; depends_on: brak (wyjątek z CR: hotfix przed OPT-00)
+  - context_refs: `sftp_transfer.rs` -> `upload()`, `download()`; `ftp.rs` (pobieranie i wysyłanie); `rclone.rs` (ścieżka błędu); `remote::RemoteFs`
+  - zadania: lokalnie rename zamienia cel bez wcześniejszego `remove_file` (jeśli test Windows pokaże inaczej: rename do kopii zapasowej i przywrócenie); zdalnie `posix-rename` gdy serwer go ma, inaczej stary cel -> `.bpold`, rename nowego, usunięcie `.bpold` po sukcesie, przy błędzie przywrócenie; gdy się nie da: odmowa (D2)
+  - invariants: brak utraty starej wersji po zwykłym błędzie; brak SUCCESS dla niepełnego pliku; nie nadpisywać bez decyzji; bez nowych zależności
+  - acceptance_criteria: [AUTO] błąd rename/zerwanie sesji między krokami zostawia starą wersję (serwer SFTP w procesie, FTP w testach), bajt po bajcie; [AUTO] Linux i Windows w CI; [MANUAL] prawdziwy SFTP/FTP testowy, nie produkcyjny NAS; [INSPECTION] udokumentowane ograniczenia serwerów
+  - verification: testy crate'ów `remote`/`engine`, `cargo xtask ci`, `verify-gate.sh --level=release`
+- [ ] **OPT-01b Bezpieczny zapis lokalny i wznawianie**
+  - layer: Core + I/O; gate_level: strict + release; depends_on: BLOKUJĄCE OPT-01a, OPT-00; gałąź `feature/bp-opt-01b-safe-transfer`
+  - context_refs: `ops::store_file`, `temp_sibling`, `write_stream`, `pump`; `remote_job.rs`
+  - zadania: unikalne nazwy tmp (bez automatycznego usuwania starych resztek bez walidacji), kontrola długości także dla `Finish::Copy`, wznawianie `.bpart` tylko przy zgodności źródła (rozmiar + mtime zapisane obok części), fsync wg wyniku z OPT-00 (D5)
+  - invariants: jak OPT-01a; symlinki i ścieżki nie omijają reguł; bez buforowania całego pliku w RAM
+  - acceptance_criteria: [AUTO] awaria przed/po każdym etapie zamiany; 0 B / 1 B / >256 KiB / duży plik strumieniem, polskie nazwy, konflikt, brak miejsca, cancel; [AUTO] resztka po zabiciu nie blokuje następnego nadpisania; [INSPECTION] jawne ograniczenia
+  - verification: `cargo xtask ci`, `verify-gate.sh --level=release`, CI Ubuntu + Windows
+- [ ] **OPT-02 Asynchroniczne listowanie katalogów** (gałąź `feature/bp-opt-02-async-listing`)
+  - layer: Engine + I/O + UI; gate_level: strict + release; depends_on: BLOKUJĄCE OPT-00; INFORMACYJNE OPT-01b; INTERFEJSOWE `Panel`, `Session`, `Command`, `bluepane_vfs::list_dir` (używane przez `bluepane-cli`)
+  - context_refs: `vfs::list_dir`, `Panel::reload`, `Panel::rebuild`, `Session::poll`, `ui-egui/src/lib.rs`, `ui-egui/tests/gui.rs`
+  - zadania: `reload()` zostaje synchroniczne (testy, CLI); obok zamówienie listy i odbiór wyniku w `poll`, numer generacji per panel, ograniczona liczba wątków, stan „Ładowanie”, czytelny błąd, ponowienie; jedno sortowanie zamiast dwóch przy zachowaniu kolejności; kursor, filtr i zaznaczenie zachowane
+  - invariants: żadnych starych wyników w nowym katalogu; brak zmian na dysku i rekurencyjnego skanowania; F9 i watcher kompatybilne; bez nowej publicznej `Command`
+  - acceptance_criteria: [AUTO] blokujący mock listowania nie zatrzymuje `poll` ani drugiego panelu; [AUTO] najnowsza generacja wygrywa (cd A→B→A, szybkie F9, cancel); [AUTO] uprawnienia i zniknięcie katalogu bez paniki; [AUTO] 100k; [MANUAL] Linux i Windows: płynne przewijanie, „Ładowanie”, zaznaczenia nietknięte; [INSPECTION] brak blokującego I/O w rysowaniu
+  - verification: testy engine/vfs/ui, `cargo xtask ci`, release, porównanie z OPT-00 (>10% pogorszenia mediany bez zgody = FAIL)
+- [ ] **OPT-03 Selektywne odświeżanie i cache** (gałąź `feature/bp-opt-03-refresh-cache`)
+  - layer: Core + UI; gate_level: strict + release; depends_on: BLOKUJĄCE OPT-02; INTERFEJSOWE `Session::finish_job`, `Panel::reload`, `watch::poll_watch`
+  - context_refs: `finish_job`, `poll_watch`, `DirSizes`, `PanelStats`, `Thumbnails`
+  - zadania: raport zadania zawiera dotknięte katalogi, odświeżane tylko trafione panele; unieważnianie tylko trafionych kluczy cache (statystyki, miniatury, rozmiary, git) z limitem rozmiaru
+  - invariants: brak starych danych po operacji; widoczna lista i kursor stabilne; archiwa, serwery i wyniki wirtualne jak dotąd
+  - acceptance_criteria: [AUTO] kopiowanie lewy→prawy nie odświeża niepowiązanego panelu; [AUTO] lawina zdarzeń watch = jedno odświeżenie; [AUTO] sortowanie/zaznaczenia identyczne; [AUTO] 10k/100k, Unicode, symlink, konflikt, wirtualne katalogi; [MANUAL] dwa panele + Quick View + zadanie bez migotania; [INSPECTION] limit cache i jawna inwalidacja
+  - verification: `cargo xtask ci`, release, benchmark; opis kiedy cache bywa nieaktualny
+- [ ] **OPT-04 Menedżer zadań** (wymaga ADR przed kodem; gałąź `feature/bp-opt-04-job-manager`)
+  - layer: Engine + I/O + UI; gate_level: strict + release + test w GUI; depends_on: BLOKUJĄCE OPT-01b, OPT-03; INTERFEJSOWE `Session::current`, `JobSpec`, `RunningJob`, `Pending::Conflict`, `Progress`, `queue::QueueLine`, `Command`
+  - zakres wg D3: automat stanów (queued/running/waiting_user/paused/finished/failed/cancelled, `job_id`) przy limicie 1; opt-in współbieżność i `IoDomainId` (detekcja w `vfs`, planowanie w `engine`) tylko po osobnej zgodzie
+  - invariants: nigdy dwa niezależne zapisy do tej samej ścieżki; brak deadlocka; anulowanie jednego zadania nie anuluje innych; F5/F6/F8 i CLI bez zmian
+  - acceptance_criteria: [AUTO] testy automatu stanów (TDD), konflikty/cancel/pauza/wznowienie/awaria workera; [AUTO] brak regresji `queuepause`, `queueresume`, `queueretry`, postępu, limitu prędkości; [MANUAL] czytelny Ctrl+J; [INSPECTION] timeouty i rozliczenie wątków
+  - verification: `cargo xtask ci`, release, CI Ubuntu + Windows; ewentualny podział na dwa PR (automat przy limicie 1 / opt-in)
+- [ ] **OPT-05 Profile kopiowania i synchronizacja** (P2, osobna decyzja produktowa; gałąź `feature/bp-opt-05-copy-profiles`): depends_on BLOKUJĄCE OPT-01b, OPT-04; domyślnie semantyka F5/F6/Alt+S bez zmian; przed kodem prototyp UX; synchronizacja zdalna wymaga ADR i testów kontraktowych `RemoteFs`; weryfikacja sum nie jest deklarowana, jeśli nie została wykonana
+- [ ] **OPT-06 Refaktoryzacja `Session` i projekt rozszerzeń** (P3; gałąź `feature/bp-opt-06-architecture`): bez zmiany funkcji; dokument projektowy rozszerzeń bez ładowania kodu i bez nowego edytora F4; osobna akceptacja zakresu
+
+**Tabela `[R]` (wpisy ✅ pozostają; `[R]` dostają dopiero w PR, który je dotyka; każdy rozliczany osobno):**
+
+| Istniejący wpis | Etap CR | `[R]` | Zakres re-weryfikacji |
+|---|---|---|---|
+| Etap 3: lista 100k, sortowanie | OPT-02, 03 | tak | test 100k w CI i `--ignored` z prawdziwymi plikami; czas nie gorszy o >10% od OPT-00; kolejność (Unicode, katalogi pierwsze) identyczna |
+| Etap 4: kopiowanie, nadpisywanie przez plik tymczasowy | OPT-01b | tak | testy `store_file`: przerwanie, cancel, brak miejsca, resztka tmp, 0 B/1 B/>256 KiB, polskie nazwy, symlinki; Linux + Windows |
+| Etap 4: dialog konfliktów, postęp, anulowanie | OPT-04 | tak | wiele konfliktów bez pomylenia odpowiedzi; istniejące testy postępu i anulowania bez zmian |
+| Etap 7: synchronizacja | OPT-01b, 05 | tak | testy `sync::execute` (kosz, katalog wersji, zachowanie mtime) bez zmian na obu platformach |
+| Etap 8: SFTP/FTP/rclone | OPT-01a, 01b | tak | testy na serwerze w procesie plus wstrzykiwanie błędów rename/zerwania; test ręczny na prawdziwym serwerze |
+| Etap 8: kolejka Ctrl+J, `queue*` | OPT-04 | tak | testy silnika kolejki: pauza, wznowienie, ponowienie, zmiana kolejności |
+| Etap 10: GUI | OPT-02, 03 | tak | `ui-egui/tests/gui.rs` plus ręczny przegląd Linux i Windows |
+| 11b: statystyki panelu | OPT-02, 03 | tak | testy 100k `panel_stats` i liczników zmian |
+| 12k: miniatury | OPT-03 | tak | testy `thumbs.rs`, inwalidacja tylko trafionych kluczy |
+| 12s: sesje | OPT-02 | tak | przywracanie sesji z listowaniem asynchronicznym, niedostępny katalog = czytelne zastępstwo |
+| 14k: obserwacja katalogów | OPT-02, 03 | tak | 4 testy `watch.rs` bez zmian plus lawina zdarzeń = jedno odświeżenie |
+| 14m: indeks | brak | nie | bez zmian |
+
+**Bramki CR:** każdy PR: `cargo xtask ci`, `verify-gate.sh --level=release`, zielone CI Ubuntu i Windows, dowody [AUTO]/[MANUAL]/[INSPECTION], `[R]` rozliczane indywidualnie; commit, push i merge tylko na osobne polecenie („scalaj” dla konkretnego PR). Benchmarki: ≥5 pomiarów, mediana i p95, bez pogorszenia >10% mediany bez zgody.
+
 ### Testy ręczne (przygotowane 2026-10-15)
 
 `docs/TESTOWANIE.md` (uruchomienie na Linuksie i Windows, lista kontrolna z oczekiwanymi wynikami), `testdata/` (gotowe pliki), `tools/dane-testowe.sh` i `.ps1` (reszta danych), workflow `Build testowy` (gotowe pliki release do pobrania, nie jest to dystrybucja).
