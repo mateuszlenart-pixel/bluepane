@@ -196,6 +196,28 @@ fn transfers(fx: &Fixture) {
         fs::read_to_string(fx.server.root.join("up.txt")).unwrap(),
         "second"
     );
+    assert!(!fx.server.root.join("up.txt.bpold").exists());
+    // A backup left by an interrupted replacement is never deleted silently.
+    write_file(fx.server.root.join("up.txt.bpold"), "older still");
+    fs::write(&source, "third").unwrap();
+    let blocked = conn.upload(
+        &source,
+        "/up.txt",
+        &Progress::new(),
+        TransferOptions {
+            overwrite: true,
+            ..TransferOptions::default()
+        },
+    );
+    assert!(blocked.is_err());
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("up.txt")).unwrap(),
+        "second"
+    );
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("up.txt.bpold")).unwrap(),
+        "older still"
+    );
 }
 
 #[test]

@@ -515,10 +515,7 @@ impl RemoteFs for SmbFs {
             )));
         }
         progress.add(written.saturating_sub(counted.get()));
-        if options.overwrite {
-            let _ = std::fs::remove_file(local);
-        }
-        std::fs::rename(&part, local)?;
+        crate::swap::replace_file(&part, local)?;
         Ok(())
     }
 
@@ -544,9 +541,36 @@ impl RemoteFs for SmbFs {
             return Err(e);
         }
         if exists {
-            self.script(&share, &format!("del {inside_q}"), None, &|| {})?;
+            // Moved aside, not deleted: put back if the new file cannot be moved in.
+            let backup_q = quoted(&format!("{inside}{}", crate::swap::BACKUP))?;
+            self.script(
+                &share,
+                &format!("rename {inside_q} {backup_q}"),
+                None,
+                &|| {},
+            )?;
+            if let Err(e) =
+                self.script(&share, &format!("rename {part_q} {inside_q}"), None, &|| {})
+            {
+                let restored = self.script(
+                    &share,
+                    &format!("rename {backup_q} {inside_q}"),
+                    None,
+                    &|| {},
+                );
+                return Err(RemoteError::Remote(match restored {
+                    Ok(_) => format!("zamiana pliku nie powiodła się, stara wersja zachowana: {e}"),
+                    Err(_) => format!(
+                        "zamiana pliku nie powiodła się ({e}); poprzednia wersja pozostała jako {}{}",
+                        inside,
+                        crate::swap::BACKUP
+                    ),
+                }));
+            }
+            let _ = self.script(&share, &format!("del {backup_q}"), None, &|| {});
+        } else {
+            self.script(&share, &format!("rename {part_q} {inside_q}"), None, &|| {})?;
         }
-        self.script(&share, &format!("rename {part_q} {inside_q}"), None, &|| {})?;
         progress.add(size);
         Ok(())
     }

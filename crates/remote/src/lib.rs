@@ -25,6 +25,7 @@ mod sites;
 mod smb;
 mod tls;
 
+mod swap;
 #[doc(hidden)]
 pub mod testing;
 

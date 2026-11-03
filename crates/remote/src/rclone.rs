@@ -382,10 +382,7 @@ impl RemoteFs for RcloneFs {
             )));
         }
         progress.add(written.saturating_sub(counted.get()));
-        if options.overwrite {
-            let _ = std::fs::remove_file(local);
-        }
-        std::fs::rename(&part, local)?;
+        crate::swap::replace_file(&part, local)?;
         Ok(())
     }
 

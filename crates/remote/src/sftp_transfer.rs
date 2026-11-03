@@ -86,10 +86,7 @@ impl SftpConnection {
                     "pobrano {written} z {size} bajtów (połączenie przerwane?)"
                 )));
             }
-            if options.overwrite && fs::symlink_metadata(local).is_ok() {
-                fs::remove_file(local)?;
-            }
-            fs::rename(&part, local)?;
+            crate::swap::replace_file(&part, local)?;
             if let Ok(time) = meta.modified() {
                 if let Ok(file) = fs::OpenOptions::new().write(true).open(local) {
                     let _ = file.set_modified(time);
@@ -113,7 +110,15 @@ impl SftpConnection {
             return Err(RemoteError::Exists(remote.to_string()));
         }
         let part = format!("{remote}{PART}");
+        let backup = format!("{remote}{}", crate::swap::BACKUP);
         self.run(async {
+            // A backup left by an interrupted replacement may be the only copy of an older
+            // version: do not transfer anything until the user has looked at it.
+            if options.overwrite && self.stat_async(&backup).await?.is_some() {
+                return Err(RemoteError::Remote(format!(
+                    "na serwerze została kopia {backup} po przerwanej zamianie; sprawdź ją i usuń lub przywróć ręcznie"
+                )));
+            }
             let mut offset = 0;
             if options.resume {
                 if let Some(existing) = self.stat_async(&part).await? {
@@ -165,10 +170,7 @@ impl SftpConnection {
                     "wysłano {written} z {size} bajtów"
                 )));
             }
-            if options.overwrite && self.stat_async(remote).await?.is_some() {
-                self.sftp.remove_file(remote).await?;
-            }
-            self.sftp.rename(part.as_str(), remote).await?;
+            self.swap_in(&part, remote, options.overwrite).await?;
             if let Ok(time) = meta.modified() {
                 if let Ok(secs) = time.duration_since(UNIX_EPOCH) {
                     let mut attrs = russh_sftp::protocol::FileAttributes::empty();
@@ -179,5 +181,30 @@ impl SftpConnection {
             }
             Ok(())
         })
+    }
+}
+
+impl SftpConnection {
+    /// Moves the finished `part` to `remote`. SFTP's rename does not replace an existing
+    /// file (OpenSSH refuses), so an existing target is first renamed to `remote.bpold`;
+    /// it is deleted only after the new file is in place and restored if that fails.
+    async fn swap_in(&self, part: &str, remote: &str, overwrite: bool) -> Result<(), RemoteError> {
+        let exists = overwrite && self.stat_async(remote).await?.is_some();
+        if !exists {
+            self.sftp.rename(part, remote).await?;
+            return Ok(());
+        }
+        let backup = format!("{remote}{}", crate::swap::BACKUP);
+        self.sftp.rename(remote, backup.as_str()).await?;
+        if let Err(e) = self.sftp.rename(part, remote).await {
+            return Err(match self.sftp.rename(backup.as_str(), remote).await {
+                Ok(()) => RemoteError::Remote(format!("zamiana pliku nie powiodła się, stara wersja zachowana: {e}")),
+                Err(_) => RemoteError::Remote(format!(
+                    "zamiana pliku nie powiodła się ({e}); poprzednia wersja pozostała jako {backup}"
+                )),
+            });
+        }
+        let _ = self.sftp.remove_file(backup.as_str()).await;
+        Ok(())
     }
 }
