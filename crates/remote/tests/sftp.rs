@@ -3,7 +3,7 @@
 use std::fs;
 
 use bluepane_ops::Progress;
-use bluepane_remote::testing::{start, write_file, Settings, TestServer};
+use bluepane_remote::testing::{fail_renames_into, start, write_file, Settings, TestServer};
 use bluepane_remote::{
     Auth, ConnectParams, HostKeyStatus, KnownHosts, RemoteError, SftpConnection, TransferOptions,
 };
@@ -429,5 +429,117 @@ fn chmod_sets_the_permission_bits() {
     assert_eq!(
         bluepane_remote::testing::last_chmod(fx.server.root.join("hello.txt")),
         Some(0o600)
+    );
+}
+
+#[test]
+fn a_failed_final_rename_keeps_the_old_remote_file() {
+    let fx = fixture();
+    let conn = connect(&fx);
+    let local = tempfile::tempdir().unwrap();
+    let source = local.path().join("hello.txt");
+    fs::write(&source, "new version").unwrap();
+    // The last step of the upload (`hello.txt.bpart` -> `hello.txt`) is refused.
+    fail_renames_into(fx.server.root.join("hello.txt"));
+    let result = conn.upload(
+        &source,
+        "/hello.txt",
+        &Progress::new(),
+        TransferOptions {
+            overwrite: true,
+            ..TransferOptions::default()
+        },
+    );
+    assert!(
+        result.is_err(),
+        "a failed replacement must not be reported as done"
+    );
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("hello.txt")).unwrap(),
+        "hello world",
+        "the old version must survive"
+    );
+    assert!(!fx.server.root.join("hello.txt.bpold").exists());
+}
+
+#[test]
+fn an_overwriting_upload_replaces_the_file_and_leaves_no_backup() {
+    let fx = fixture();
+    let conn = connect(&fx);
+    let local = tempfile::tempdir().unwrap();
+    let source = local.path().join("hello.txt");
+    fs::write(&source, "new version").unwrap();
+    conn.upload(
+        &source,
+        "/hello.txt",
+        &Progress::new(),
+        TransferOptions {
+            overwrite: true,
+            ..TransferOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("hello.txt")).unwrap(),
+        "new version"
+    );
+    assert!(!fx.server.root.join("hello.txt.bpold").exists());
+    assert!(!fx.server.root.join("hello.txt.bpart").exists());
+}
+
+#[test]
+fn a_leftover_backup_blocks_an_overwrite_instead_of_being_deleted() {
+    let fx = fixture();
+    let conn = connect(&fx);
+    write_file(fx.server.root.join("hello.txt.bpold"), "older still");
+    let local = tempfile::tempdir().unwrap();
+    let source = local.path().join("hello.txt");
+    fs::write(&source, "new version").unwrap();
+    let result = conn.upload(
+        &source,
+        "/hello.txt",
+        &Progress::new(),
+        TransferOptions {
+            overwrite: true,
+            ..TransferOptions::default()
+        },
+    );
+    assert!(result.is_err());
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("hello.txt")).unwrap(),
+        "hello world"
+    );
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("hello.txt.bpold")).unwrap(),
+        "older still"
+    );
+}
+
+#[test]
+fn when_even_the_restore_fails_the_error_says_where_the_old_version_is() {
+    let fx = fixture();
+    let conn = connect(&fx);
+    let local = tempfile::tempdir().unwrap();
+    let source = local.path().join("hello.txt");
+    fs::write(&source, "new version").unwrap();
+    // Armed twice: the move into place fails, and so does putting the old file back.
+    fail_renames_into(fx.server.root.join("hello.txt"));
+    fail_renames_into(fx.server.root.join("hello.txt"));
+    let error = conn
+        .upload(
+            &source,
+            "/hello.txt",
+            &Progress::new(),
+            TransferOptions {
+                overwrite: true,
+                ..TransferOptions::default()
+            },
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("hello.txt.bpold"), "{error}");
+    assert_eq!(
+        fs::read_to_string(fx.server.root.join("hello.txt.bpold")).unwrap(),
+        "hello world"
     );
 }

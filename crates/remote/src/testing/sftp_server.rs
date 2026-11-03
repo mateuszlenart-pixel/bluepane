@@ -423,7 +423,13 @@ impl russh_sftp::server::Handler for Files {
         oldpath: String,
         newpath: String,
     ) -> Result<Status, StatusCode> {
-        fs::rename(self.local(&oldpath), self.local(&newpath)).map_err(|e| code(&e))?;
+        let (from, to) = (self.local(&oldpath), self.local(&newpath));
+        // Like OpenSSH (SFTP v3): a rename never replaces an existing target. A client that
+        // wants a replacement has to move the old file out of the way first.
+        if super::rename_fails(&to) || fs::symlink_metadata(&to).is_ok() {
+            return Err(StatusCode::Failure);
+        }
+        fs::rename(from, to).map_err(|e| code(&e))?;
         Ok(status(id))
     }
 }

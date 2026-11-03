@@ -373,10 +373,7 @@ fn download_file<T: TlsStream>(
             "pobrano {written} z {size} bajtów (połączenie przerwane?)"
         )));
     }
-    if options.overwrite && fs::symlink_metadata(local).is_ok() {
-        fs::remove_file(local)?;
-    }
-    fs::rename(&part, local)?;
+    crate::swap::replace_file(&part, local)?;
     if let Some(time) = modified {
         if let Ok(file) = fs::OpenOptions::new().write(true).open(local) {
             let _ = file.set_modified(time);
@@ -398,6 +395,14 @@ fn upload_file<T: TlsStream>(
         return Err(RemoteError::Exists(remote_path.to_string()));
     }
     let part = format!("{remote_path}{PART}");
+    if options.overwrite {
+        let backup = format!("{remote_path}{}", crate::swap::BACKUP);
+        if stat_path(s, &backup)?.is_some() {
+            return Err(RemoteError::Remote(format!(
+                "na serwerze została kopia {backup} po przerwanej zamianie; sprawdź ją i usuń lub przywróć ręcznie"
+            )));
+        }
+    }
     let mut offset = 0;
     if options.resume {
         if let Some(existing) = stat_path(s, &part)? {
@@ -439,7 +444,22 @@ fn upload_file<T: TlsStream>(
         )));
     }
     if options.overwrite && stat_path(s, remote_path)?.is_some() {
-        s.rm(remote_path).map_err(remote)?;
+        // The old file is moved aside, not deleted: if the new one cannot be moved in, the
+        // old one is put back (see `swap`).
+        let backup = format!("{remote_path}{}", crate::swap::BACKUP);
+        s.rename(remote_path, backup.as_str()).map_err(remote)?;
+        if let Err(e) = s.rename(part.as_str(), remote_path) {
+            return Err(match s.rename(backup.as_str(), remote_path) {
+                Ok(()) => RemoteError::Remote(format!(
+                    "zamiana pliku nie powiodła się, stara wersja zachowana: {e}"
+                )),
+                Err(_) => RemoteError::Remote(format!(
+                    "zamiana pliku nie powiodła się ({e}); poprzednia wersja pozostała jako {backup}"
+                )),
+            });
+        }
+        let _ = s.rm(backup.as_str());
+        return Ok(());
     }
     s.rename(part.as_str(), remote_path).map_err(remote)?;
     Ok(())

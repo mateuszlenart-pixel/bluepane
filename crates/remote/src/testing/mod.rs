@@ -26,6 +26,28 @@ pub fn last_chmod(path: impl AsRef<Path>) -> Option<u32> {
     list.iter().rev().find(|(p, _)| p == path).map(|(_, m)| *m)
 }
 
+/// Local paths a test server must refuse to rename something *into*, to test what a transfer
+/// does when the final step fails. Keyed by the full local path, so parallel tests do not
+/// disturb each other.
+static RENAME_FAULTS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+/// Makes the SFTP test server fail the next rename whose new name is `path` (a local path).
+/// Each call arms one failure; call it twice to also break the step that would undo it.
+pub fn fail_renames_into(path: impl Into<PathBuf>) {
+    RENAME_FAULTS.lock().unwrap().push(path.into());
+}
+
+pub(crate) fn rename_fails(path: &Path) -> bool {
+    let mut faults = RENAME_FAULTS.lock().unwrap();
+    match faults.iter().position(|p| p == path) {
+        Some(index) => {
+            faults.remove(index);
+            true
+        }
+        None => false,
+    }
+}
+
 static ACTIVE_TRANSFERS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 pub(crate) fn record_active_transfer(root: PathBuf) {
