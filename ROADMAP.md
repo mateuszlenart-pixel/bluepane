@@ -274,14 +274,14 @@ Zakres: zapis bez utraty poprzedniej wersji (lokalnie, SFTP, FTP), asynchroniczn
 
 **Szablon metryczki:** ID, status (`[ ]` `[-]` `[x]` `[!]` `[R]`), layer, gate_level, depends_on (BLOKUJĄCE / INFORMACYJNE / INTERFEJSOWE), context_refs, invariants, acceptance_criteria, verification, dowód. Nowe zadania `[ ]`; zamknięcie tylko po PASS i dowodzie, `[MANUAL]` nie zastępuje się kompilacją.
 
-- [ ] **OPT-00 Benchmark i testy bazowe** (gałąź `feature/bp-opt-00-baseline`)
+- [-] **OPT-00 Benchmark i testy bazowe** (gałąź `feature/bp-opt-00-baseline`; zrobione: `crates/engine/tests/bench.rs` (wszystko `#[ignore]`), `docs/BENCHMARKS.md` ze stanem bazowym z Linuksa 2026-11-03; zostaje [MANUAL]: Windows, wolny nośnik, zimny cache, SFTP z opóźnieniem i prawdziwy serwer)
   - layer: Core / I/O / UI; gate_level: strict (pomiary poza CI); depends_on: BLOKUJĄCE brak, INFORMACYJNE etap 3, 11b
   - context_refs: `Panel::reload`, `vfs::list_dir`, `Session::poll`, `Session::finish_job`, `ops::pump`, `RunningJob`, `RemoteFs`, `docs/TESTOWANIE.md`
   - zadania: generatory danych w katalogach tymczasowych (10k, 100k plików, 10k małych, 1 duży, SFTP z opóźnieniem i przerwaniem), pomiar zimny/ciepły, mediana i p95 z ≥5 powtórzeń po rozgrzewce, `--release`, opis sprzętu; koszt fsync (D5); punkty pomiarowe bez kosztu w gorącej ścieżce
   - invariants: żadnych zmian zachowania aplikacji, żadnego dotykania danych poza tmp, brak ukrytego skanowania dysków
   - acceptance_criteria: [AUTO] generator i testy nie usuwają danych poza tmp; [AUTO] powtarzalne dane i metryki; [MANUAL] zapis warunków i wartości bazowych (bez zmyślonych czasów); [INSPECTION] brak zmiany zachowania
   - verification: `cargo xtask ci`, `verify-gate.sh --level=strict`, raport z danymi surowymi
-- [ ] **OPT-01a Hotfix: nie usuwać celu przed zamianą** (P0; gałąź `feature/bp-opt-01a-no-delete-before-rename`)
+- [-] **OPT-01a Hotfix: nie usuwać celu przed zamianą** (P0; scalone w #98, 0042f5b; testy [AUTO] zielone na Ubuntu i Windows; zostaje [MANUAL]: prawdziwy serwer testowy SFTP/FTP/SMB)
   - layer: I/O; gate_level: strict + release; depends_on: brak (wyjątek z CR: hotfix przed OPT-00)
   - context_refs: `sftp_transfer.rs` -> `upload()`, `download()`; `ftp.rs` (pobieranie i wysyłanie); `rclone.rs` (ścieżka błędu); `remote::RemoteFs`
   - zadania: lokalnie rename zamienia cel bez wcześniejszego `remove_file` (jeśli test Windows pokaże inaczej: rename do kopii zapasowej i przywrócenie); zdalnie `posix-rename` gdy serwer go ma, inaczej stary cel -> `.bpold`, rename nowego, usunięcie `.bpold` po sukcesie, przy błędzie przywrócenie; gdy się nie da: odmowa (D2)
